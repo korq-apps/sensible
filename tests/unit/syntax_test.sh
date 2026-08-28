@@ -3,7 +3,17 @@
 TEST_NAME="syntax_test"
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/harness.sh"
 
-t_section "bash -n over all shell scripts"
+t_section "syntax sweep (sh -n for #!/bin/sh, bash -n otherwise)"
+# Pick the checker from the shebang: a #!/bin/sh script must parse under the
+# POSIX shell (dash on Debian) so bashisms are caught, not silently accepted
+# by bash -n. Everything else is validated with bash -n.
+syntax_checker_for() {
+    case "$(head -n 1 "$1")" in
+        *bash*) echo "bash -n" ;;
+        *sh*)   echo "sh -n" ;;
+        *)      echo "bash -n" ;;
+    esac
+}
 sh_files=(
     installer/sensible-install.sh
     installer/lib/common.sh
@@ -32,10 +42,11 @@ sh_files=(
     tests/integration/installer_flow_test.sh
 )
 for f in "${sh_files[@]}"; do
-    if bash -n "${REPO_ROOT}/${f}" 2>/dev/null; then
+    checker="$(syntax_checker_for "${REPO_ROOT}/${f}")"
+    if ${checker} "${REPO_ROOT}/${f}" 2>/dev/null; then
         t_ok
     else
-        t_fail "bash -n ${f}" "$(bash -n "${REPO_ROOT}/${f}" 2>&1 | head -3)"
+        t_fail "${checker} ${f}" "$(${checker} "${REPO_ROOT}/${f}" 2>&1 | head -3)"
     fi
 done
 
