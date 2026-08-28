@@ -28,10 +28,25 @@ if [ ! -f "$EFI_IMG" ]; then
     exit 1
 fi
 
-# El Torito / ESP image: shim as the removable-media loader, signed GRUB next
-# to it (shim's default fallthrough target).
-mcopy -i "$EFI_IMG" -o "$SHIM" ::/EFI/boot/bootx64.efi
-mcopy -i "$EFI_IMG" -o "$GRUB_SIGNED" ::/EFI/boot/grubx64.efi
+# The stock efi.img is sized exactly for the standalone GRUB it ships, so it
+# has no room for shim + signed GRUB. Rebuild it larger: extract everything,
+# create a bigger FAT image (+8 MiB), copy back, then inject the chain.
+WORK_DIR="$(mktemp -d)"
+NEW_IMG="${WORK_DIR}/efi.img"
+
+mcopy -i "$EFI_IMG" -/ -n :: "${WORK_DIR}/root"
+
+OLD_KB=$(( ( $(stat -c%s "$EFI_IMG") + 1023) / 1024 ))
+NEW_KB=$(( (OLD_KB + 8192 + 63) / 32 * 32 ))
+VOLID="$(printf '%08x' $(( ${SOURCE_DATE_EPOCH:-0} % 4294967296 )))"
+mkfs.msdos -C "$NEW_IMG" "$NEW_KB" -i "$VOLID" >/dev/null
+mmd -i "$NEW_IMG" ::EFI ::EFI/boot ::boot ::boot/grub
+mcopy -i "$NEW_IMG" -s -o "${WORK_DIR}/root/EFI" ::EFI
+mcopy -i "$NEW_IMG" -s -o "${WORK_DIR}/root/boot" ::boot
+
+mcopy -i "$NEW_IMG" -o "$SHIM" ::/EFI/boot/bootx64.efi
+mcopy -i "$NEW_IMG" -o "$GRUB_SIGNED" ::/EFI/boot/grubx64.efi
+mv "$NEW_IMG" "$EFI_IMG"
 
 # Same files on the ISO9660 filesystem (UEFI removable-media fallback path).
 if [ -d EFI/boot ]; then
@@ -43,4 +58,4 @@ fi
 sbverify --list "$SHIM" 2>/dev/null | grep -q "Microsoft Corporation"
 sbverify --list "$GRUB_SIGNED" 2>/dev/null | grep -q "Debian"
 
-echo "secure-boot hook: shim + Debian-signed GRUB installed into ${EFI_IMG}"
+echo "secure-boot hook: shim + Debian-signed GRUB installed into ${EFI_IMG} (${OLD_KB}KiB -> ${NEW_KB}KiB)"
