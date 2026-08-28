@@ -18,11 +18,12 @@ Blueprint for `installer/sensible-install.sh`. On the live ISO the command is `s
 
 ```
 Pre-flight (UEFI, disks, RAM, size check)
-    → Prompts
+    → Prompts (--config answers file: planned — Phase 6)
     → Type-the-disk-name confirmation
     → Partition, format, mount
     → Deploy base (squashfs rsync, or debootstrap)
-    → Chroot: packages, user, fstab/crypttab, Plymouth, GRUB, keyd
+    → Chroot: fstab/crypttab, identity + user, packages, locale-gen,
+      keyboard, desktop + Plymouth + login, apps, GRUB + initramfs
     → Unmount, close mappings, “remove USB and reboot”
 ```
 
@@ -52,6 +53,42 @@ suite (`tests/`) can run the full flow unprivileged against a temp directory.
 | Skip login password (autologin) | On (only offered with LUKS) | GDM/SDDM autologin; the LUKS passphrase stays the single authentication and the idle screen lock is always enforced |
 
 Firefox, VLC, Neovim, Flatpak, firmware, and the CLI set are always installed — not checkboxes.
+
+**Planned prompts (Phase 6, not implemented):**
+
+| Field | Default | Notes |
+| :--- | :--- | :--- |
+| Full name | empty | **Optional.** GECOS field + git `user.name` |
+| Email | empty | **Optional.** git `user.email` only — written to the user's `~/.gitconfig`, sent nowhere |
+| BioPass face login | Off | Pinned `.deb` + SHA256; IR camera recommended. Fingerprint (`fprintd`) is not a prompt — always installed |
+| Developer tools | Off | `docker.io` + `docker-compose`, `lazygit`, `gh`; user **not** added to the docker group |
+
+### Unattended mode (planned — Phase 6)
+
+`sensible-install --config answers.toml` reads every prompt from a file and asks nothing. Same validation as interactive mode; any missing or invalid key aborts **before** partitioning. `confirm_wipe` must repeat the disk name — the type-to-confirm safety survives automation. Primary consumer is CI: running all four disk layouts end-to-end in QEMU.
+
+```toml
+disk            = "/dev/vda"
+confirm_wipe    = "/dev/vda"        # must equal disk
+filesystem      = "btrfs"           # btrfs | ext4
+luks            = true
+luks_passphrase = "correct-horse"
+desktop         = "gnome"           # gnome | kde
+mac_clipboard   = true
+autologin       = true              # only honored when luks = true
+biopass         = false
+extra_browsers  = []                # chromium, brave
+extra_media     = []                # audacious, amberol, elisa
+hostname        = "debian"
+username        = "user"
+full_name       = ""                # optional: GECOS + git user.name
+email           = ""                # optional: git user.email
+user_password   = "hunter2hunter2"
+dev_tools       = false
+timezone        = "UTC"
+locale          = "en_US.UTF-8"
+keyboard        = "us"
+```
 
 ---
 
@@ -159,16 +196,23 @@ mount "$EFI_PART" /mnt/boot/efi
 
 ## 6. Deploy base
 
-Prefer copying the live root (fast, offline):
+Prefer copying the live root (fast, offline). Exclude the **contents** of the API filesystems (`/dev/*`), never the directories themselves (`/dev`): a whole-directory exclude leaves the target without the mountpoints the bind mounts below require, and the install aborts.
 
 ```bash
 rsync -aAX --info=progress2 \
-  --exclude=/dev --exclude=/proc --exclude=/sys --exclude=/tmp \
-  --exclude=/run --exclude=/mnt --exclude=/media --exclude=/lost+found \
+  --exclude='/dev/*' --exclude='/proc/*' --exclude='/sys/*' --exclude='/tmp/*' \
+  --exclude='/run/*' --exclude='/mnt/*' --exclude='/media/*' --exclude=/lost+found \
   / /mnt/
 ```
 
 If the live image is a thin installer (no desktop squash), `debootstrap --arch=amd64 testing /mnt https://deb.debian.org/debian` instead, then `sources.list` with `main contrib non-free non-free-firmware`.
+
+Whatever the deploy path produced, ensure the skeleton exists:
+
+```bash
+mkdir -p /mnt/{dev,proc,sys,run,tmp,mnt,media}
+chmod 1777 /mnt/tmp
+```
 
 Bind-mount before any chroot:
 
@@ -306,6 +350,62 @@ rm -rf /mnt/etc/skel/.config/nvim/.git
 
 Enable: `NetworkManager`, `bluetooth`, `power-profiles-daemon`, `fwupd`, `gdm3` or `sddm`, and `keyd` when selected.
 
+### Planned — Phase 6 additions (not implemented)
+
+Package additions to the sets above:
+
+```text
+Always (add):
+  fprintd libpam-fprintd
+  cups ipp-usb sane-airscan
+  ufw
+
+If GNOME (add):  simple-scan
+If KDE (add):    skanlite
+
+If BioPass:
+  pinned biopass_<ver>_amd64.deb from GitHub releases, SHA256 verified, then
+  apt-get install ./biopass_<ver>_amd64.deb   # resolves its PAM/polkit deps
+  PAM wiring via the package's pam-auth-update profile; enrollment is done
+  post-install in the BioPass app, never by the installer
+
+If Developer tools:
+  docker.io docker-compose lazygit gh
+  systemctl enable docker
+  # The user is NOT added to the docker group — membership is root-equivalent.
+```
+
+Shared skel/shell/git content — all refs **pinned** (tag or commit + SHA256 recorded in this repo), populated **before** `useradd -m` (requires moving user creation after this step; today LazyVim is copied into the user home as a workaround):
+
+```bash
+# oh-my-bash: shared read-only install + skel bashrc from this repo
+git clone --depth 1 --branch <pinned-tag> https://github.com/ohmybash/oh-my-bash /mnt/usr/share/oh-my-bash
+rm -rf /mnt/usr/share/oh-my-bash/.git
+install -m 0644 configs/omb-bashrc /mnt/etc/skel/.bashrc
+# root keeps the stock Debian bashrc — do not touch /root
+
+# JetBrainsMono Nerd Font: pinned nerd-fonts release artifact, SHA256 verified
+mkdir -p /mnt/usr/local/share/fonts/jetbrains-mono-nerd
+unzip -o JetBrainsMono.zip -d /mnt/usr/local/share/fonts/jetbrains-mono-nerd
+chroot /mnt fc-cache -f
+
+# git: system-wide sensible defaults; identity is per-user
+install -m 0644 configs/gitconfig /mnt/etc/gitconfig
+# after useradd, only when the optional name/email prompts were answered:
+#   [user] name/email → /mnt/home/$USERNAME/.gitconfig, chowned to the user
+```
+
+Firewall (ufw): defaults in `/etc/default/ufw` are already deny incoming / allow outgoing. Never run `ufw enable` in the chroot — it would touch the live kernel's netfilter. Add allow rules first, while ufw is still marked disabled (they are only written to `/etc/ufw/user.rules`):
+
+```bash
+if [ "$DESKTOP_ENV" = kde ]; then
+  chroot /mnt ufw allow 1714:1764/udp   # KDE Connect
+  chroot /mnt ufw allow 1714:1764/tcp
+fi
+sed -i 's/^ENABLED=no/ENABLED=yes/' /mnt/etc/ufw/ufw.conf
+chroot /mnt systemctl enable ufw
+```
+
 ---
 
 ## 10. Plymouth and GRUB
@@ -324,6 +424,14 @@ fi
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3"
 GRUB_GFXMODE=auto
 GRUB_GFXPAYLOAD_LINUX=keep
+```
+
+If NVIDIA was detected, append `nvidia-drm.modeset=1` to `GRUB_CMDLINE_LINUX_DEFAULT` — without KMS the display managers silently fall back to X11.
+
+If LUKS is on, carry the console keymap into the initramfs so the Plymouth passphrase dialog uses the layout the user chose (a non-US user must not be locked out of a passphrase they typed correctly):
+
+```bash
+sed -i 's/^KEYMAP=.*/KEYMAP=y/' /mnt/etc/initramfs-tools/initramfs.conf   # append if absent
 ```
 
 Append the hibernation parameters to `GRUB_CMDLINE_LINUX_DEFAULT` and write `RESUME=` for the initramfs:
@@ -386,8 +494,11 @@ AutomaticLoginEnable=True
 AutomaticLogin=<username>
 
 # KDE (sddm), /etc/sddm.conf.d/autologin.conf:
+# Session= is required by SDDM — with only User= autologin never engages.
+# "plasma" = /usr/share/wayland-sessions/plasma.desktop.
 [Autologin]
 User=<username>
+Session=plasma
 ```
 
 Caveats (by design): logout immediately logs back in, and gnome-keyring is not
@@ -400,5 +511,5 @@ unlocked by autologin (first use prompts once).
 ```bash
 umount -R /mnt
 [ "$ENABLE_LUKS" = true ] && cryptsetup close cryptroot
-# cryptswap is not opened during install
+# The swapfile lives inside the root filesystem — nothing else to close.
 ```

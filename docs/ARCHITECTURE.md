@@ -108,12 +108,14 @@ UEFI
   → GNOME or Plasma
 ```
 
+With LUKS on, the installer sets `KEYMAP=y` in `/etc/initramfs-tools/initramfs.conf`: the Plymouth passphrase dialog decodes keys with the initramfs keymap, and without the console keymap a non-US passphrase can never match — a lockout on a passphrase the user typed correctly.
+
 ### Secure Boot
 
 The full chain is signed and Secure Boot is **supported in v1**, on the installed system and on the live ISO:
 
 - Target: `shim-signed` + `grub-efi-amd64-signed` (always installed). Shim falls through transparently when SB is off, so there is no prompt and no downside.
-- Live ISO: a binary hook injects `shimx64.efi` and the signed `grubx64.efi` into the ISO EFI image (`live/config/hooks/binary/0100-secure-boot.hook.binary`), then `sbverify`-checks both signatures at build time. The media boots with SB on or off.
+- Live ISO: a binary hook injects `shimx64.efi` and the signed `grubx64.efi` into the ISO EFI image (`live/config/hooks/live/0100-secure-boot.hook.binary`), then `sbverify`-checks both signatures at build time. The media boots with SB on or off. The `.hook.binary` suffix is load-bearing: live-build silently skips hooks named otherwise, so CI asserts the hook's success line in the build log.
 - Kernel and firmware updates stay bootable: everything in the chain is Debian-signed; no MOK enrollment needed for stock packages.
 
 Caveats (documented, not solved): the proprietary **NVIDIA** module is unsigned, so with SB on the kernel's lockdown rejects it — disable SB or enroll a MOK for DKMS. Lockdown also blocks **hibernation** (see §3).
@@ -154,7 +156,22 @@ Idle screen lock is always enforced, independent of the choice: GNOME gets
 system dconf defaults (`idle-delay=300`, `lock-enabled`, `lock-delay=0`), KDE
 gets `/etc/xdg/kscreenlockerrc` with `Autolock` + `LockOnResume` (resume from
 suspend is covered). Known tradeoffs: logout logs back in immediately; the
-keyring is not unlocked by autologin.
+keyring is not unlocked by autologin. SDDM autologin requires `Session=`
+alongside `User=` — the installer writes `Session=plasma` (the Wayland
+session file name); with only `User=` autologin never engages.
+
+### Biometric login (planned — Phase 6)
+
+Two tiers, because fingerprint and face have very different maturity on Debian:
+
+- **Fingerprint — always installed.** `fprintd` + `libpam-fprintd` (Debian main). Enrollment lives in GNOME Settings / Plasma System Settings; nothing to configure at install time, dormant without a supported reader.
+- **Face (and unified face + fingerprint UX) — installer checkbox, default off.** [BioPass](https://github.com/TickLabVN/biopass) (MIT): PAM module plus GUI enrollment, local models (YOLO-Face detection, EdgeFace recognition, MiniFASv2/MobileNetV3 anti-spoofing), polkit prompts, PAM wiring via `pam-auth-update`. Installed as a **pinned `.deb` with a recorded SHA256** — same third-party policy as Brave and the AI CLIs. Off by default because the project is young, models are fetched at first run, and real anti-spoofing wants an IR camera. Enrollment happens post-install in the BioPass app; the installer only installs.
+
+Facts to not relearn later:
+
+- **Biometrics never unlock LUKS.** The Plymouth passphrase dialog at boot is untouched; face/fingerprint cover session login, lock screen, `sudo`, and polkit only.
+- **Fingerprint login leaves the GNOME Keyring locked** (the keyring is encrypted with the password), so the first secret access after a biometric login still prompts. Known papercut — documented, not "fixed". Same class of caveat as autologin above.
+- Landscape check (2026): Howdy is face-only and semi-maintained, `howdy-next` and `authFace` are young and face-only. BioPass is the only serious multi-modal candidate.
 
 ---
 
@@ -168,12 +185,14 @@ keyring is not unlocked by autologin.
 | Audio | PipeWire, WirePlumber, `pipewire-pulse`, `pipewire-audio`, `pipewire-alsa` |
 | GPU | `mesa-vulkan-drivers`, `va-driver-all`, `vdpau-driver-all`; `nvidia-driver` + `firmware-misc-nonfree` if `lspci` sees NVIDIA |
 | Power | `power-profiles-daemon` (not TLP — it fights PPD and both DEs) |
+| Biometrics | `fprintd`, `libpam-fprintd`; BioPass optional — see §5 **(planned — Phase 6)** |
+| Print / scan | `cups`, `ipp-usb` (driverless IPP-over-USB), `sane-airscan`; `simple-scan` with GNOME, `skanlite` with KDE **(planned — Phase 6)** |
 | Updates | `fwupd` (LVFS), `wireless-regdb` |
 | Repos on the target | `main`, `contrib`, `non-free`, `non-free-firmware` |
 
 `firmware-broadcom` is not a Debian package name; Broadcom Wi-Fi is `firmware-brcm80211`. `firmware-linux-nonfree` is a leftover name — do not list it.
 
-NVIDIA: detect at install time, install proprietary stack when present. No nouveau-vs-prop prompt in v1.
+NVIDIA: detect at install time, install proprietary stack when present. No nouveau-vs-prop prompt in v1. The installer adds `nvidia-drm.modeset=1` to the kernel command line whenever NVIDIA is detected — without KMS, GDM/KWin silently fall back to X11 and the Wayland-by-default promise breaks on exactly the hardware we special-cased.
 
 ---
 
@@ -185,6 +204,8 @@ Keep this list the single source of truth. README and the installer spec should 
 
 `sudo`, `locales`, `keyboard-configuration`, `console-setup`, NetworkManager, `fwupd`, Flatpak, fonts (`fonts-noto-core`, `fonts-noto-color-emoji`, `fonts-liberation`), `git`, `curl`, `ca-certificates`.
 
+**Planned — Phase 6:** JetBrainsMono Nerd Font from a pinned nerd-fonts release (Debian packages no Nerd Fonts; LazyVim and the fancier prompt themes want one), and `ufw` enabled with default deny incoming / allow outgoing — on KDE, ports 1714–1764 tcp/udp are allowed so KDE Connect keeps working (a silent-breakage trap otherwise).
+
 ### Default apps
 
 | Kind | Package |
@@ -194,9 +215,28 @@ Keep this list the single source of truth. README and the installer spec should 
 | Editor | Neovim + LazyVim starter copied to `/etc/skel/.config/nvim` |
 | CLI | `ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`, `jq` |
 
+### Shell (all users) — planned, Phase 6
+
+oh-my-bash from a **shared, read-only install** — not per-user clones:
+
+- A pinned upstream tag vendored to `/usr/share/oh-my-bash` (`.git` stripped).
+- `/etc/skel/.bashrc` comes from `configs/omb-bashrc`: `OSH=/usr/share/oh-my-bash`, the `font` theme (no patched-font dependency), auto-update off (the install is root-owned; updates come with the OS), git/ssh completions.
+- The same file **activates the CLI set we already install** — `zoxide init`, fzf keybindings, `eza` ls aliases, and `bat`/`fd` aliases for Debian's renamed `batcat`/`fdfind` binaries. Installing tools nobody wired up is not sensible.
+- Requires `/etc/skel` to be complete **before** `useradd -m` (today the installer copies LazyVim into the created user's home as a workaround — that reordering lands with this work). Root keeps the stock Debian bashrc.
+
+### Git (all users) — planned, Phase 6
+
+System-wide defaults in `/etc/gitconfig` from `configs/gitconfig` — `init.defaultBranch=main`, `pull.rebase=true`, `push.autoSetupRemote=true`, `fetch.prune=true`, `rebase.autostash=true`. Nothing else; users override in `~/.gitconfig`.
+
+Identity is **per-user, never system-wide**: the installer optionally asks for full name and email (also reused for the account's GECOS field) and writes the first user's `~/.gitconfig`. Skipping the prompts leaves git fully working, just without identity until the user sets it.
+
+No credential helper is configured: Debian ships no packaged libsecret helper (`git-credential-libsecret` is not a package; the contrib helper must be compiled), and we do not build software in the installer. GitHub auth is `gh auth login` when Developer tools are selected.
+
 ### Optional (installer checkboxes)
 
 Chromium; Brave from [the official apt origin](https://brave.com/linux/); Audacious; Amberol (GNOME) or Elisa (KDE); AI CLIs only as a later optional module with pinned artifacts.
+
+**Planned — Phase 6:** BioPass face login (pinned `.deb`, see §5); Developer tools — `docker.io`, `docker-compose` (the v2 rewrite in Testing), `lazygit`, `gh`. Developer tools deliberately do **not** add the user to the `docker` group — membership is root-equivalent, so the default is `sudo docker` (a user can opt in later, knowing the tradeoff).
 
 ### Explicitly not installed
 
@@ -208,6 +248,8 @@ Steam, Slack, WhatsApp, Zoom, Discord, Spotify, Snapd, any SaaS “default clien
 
 **In v1:** amd64, UEFI only, single-disk wipe, the four disk combinations above, GNOME or KDE, English-first locales (other locales selectable), working Wi-Fi/audio/GPU on common laptops.
 
-**Later:** Btrfs Snapper, GUI NVIDIA/MOK enrollment flow, Calamares if someone wants a GUI, other arches.
+**Planned (Phase 6):** biometrics (§5), oh-my-bash + git defaults (§7), ufw, printing/scanning, developer tools, `--config` unattended installs.
+
+**Later:** Btrfs Snapper (+ `grub-btrfs` boot-menu rollback), TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis; PCR policy must account for the unencrypted `/boot`), FIDO2 keys for sudo/polkit (`libpam-u2f`), GUI NVIDIA/MOK enrollment flow, Calamares if someone wants a GUI, other arches.
 
 **Never (Sensible):** LVM as the guided path, dual-DE live ISO, shipping commercial apps, pretending this is not Debian.

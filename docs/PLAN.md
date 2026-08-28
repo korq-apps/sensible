@@ -8,6 +8,7 @@ Phase 1  Build harness (live-build ISO, TUI live session)
         → Phase 3  Hardware packages (firmware, PipeWire, GPU, fwupd)
             → Phase 4  Desktops + keyd + default apps
                 → Phase 5  CI and releases
+                    → Phase 6  Sensible extras (biometrics, shell, git, firewall, unattended)
 ```
 
 Phase 3 is hardware, Phase 4 is desktop. Do not swap those.
@@ -73,9 +74,27 @@ Make the installed system useful on a real laptop **before** polishing the DE.
 
 ---
 
+## Phase 6 — Sensible extras (planned, not implemented)
+
+Agreed additions that extend the v1 installer. Architecture/spec sections for these are marked **(planned — Phase 6)**; nothing below exists in `installer/` yet.
+
+- [ ] Fingerprint login: `fprintd` + `libpam-fprintd` always installed (Debian main; enrollment via GNOME/KDE settings, dormant without a reader)
+- [ ] BioPass face login checkbox (off): pinned `.deb` + SHA256 from [TickLabVN/biopass](https://github.com/TickLabVN/biopass), PAM via `pam-auth-update`; biometrics never unlock LUKS, and fingerprint login leaves the keyring locked — both documented
+- [ ] oh-my-bash for all users: pinned clone → `/usr/share/oh-my-bash`, `configs/omb-bashrc` → `/etc/skel/.bashrc` (wires zoxide/fzf/`batcat`/`fdfind`/eza); requires moving skel population before `useradd -m` (today LazyVim is copied into the user home as a workaround)
+- [ ] JetBrainsMono Nerd Font: pinned nerd-fonts release + SHA256 (Debian packages none; LazyVim and prompt themes want one)
+- [ ] git defaults: `configs/gitconfig` → `/etc/gitconfig`; optional full-name/email prompts → GECOS + first user's `~/.gitconfig` (no packaged libsecret credential helper exists — do not invent one)
+- [ ] `ufw` enabled, deny incoming / allow outgoing (config-file enable, never `ufw enable` in chroot); KDE Connect ports 1714–1764 tcp/udp allowed on KDE
+- [ ] Printing/scanning: `cups` + `ipp-usb` + `sane-airscan`; `simple-scan` (GNOME) / `skanlite` (KDE)
+- [ ] Developer tools checkbox (off): `docker.io` + `docker-compose` + `lazygit` + `gh`; user **not** added to the docker group (root-equivalent)
+- [ ] `--config answers.toml` unattended mode: every prompt from a file, same validation, `confirm_wipe` must repeat the disk name — unblocks the Phase 2 QEMU install matrix in CI
+
+---
+
 ## Later (not v1)
 
-- Snapper on Btrfs (`@swap` already keeps the swapfile out of snapshot sets)
+- Snapper on Btrfs (`@swap` already keeps the swapfile out of snapshot sets) + `grub-btrfs` boot-menu rollback
+- TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis + `clevis-initramfs`); with biometrics this completes the Windows Hello flow — PCR policy must account for the unencrypted `/boot`, and Secure Boot in v1 strengthens the measurements
+- FIDO2 hardware keys for sudo/polkit (`libpam-u2f`, enrollment via `pamu2fcfg`)
 - GUI NVIDIA/MOK enrollment (unsigned NVIDIA module is rejected under Secure Boot lockdown)
 - GUI installer
 - Super+A / Super+Z if we find a terminal-safe mapping
@@ -90,4 +109,7 @@ Make the installed system useful on a real laptop **before** polishing the DE.
 | Wrong firmware package names | Use the Architecture list (`firmware-brcm80211`, not `firmware-broadcom`) |
 | Initramfs unlock / Plymouth fail | Unencrypted `/boot`; crypttab only; `update-initramfs -u -k all`; QEMU LUKS job in Phase 2 |
 | Brave or AI CLIs add untrusted install paths | Brave only from the documented origin; AI CLIs stay optional and pinned |
+| BioPass is young third-party PAM code (Phase 6) | Checkbox off by default; pinned `.deb` + SHA256; PAM via `pam-auth-update` so removal is clean; `fprintd` covers fingerprint without it |
+| Pinned artifacts rot (BioPass, Nerd Font, oh-my-bash, LazyVim) | Versions + SHA256 recorded in one place; CI fails loudly when a pin 404s |
+| live-build silently skips misnamed hooks | Hooks must match `*.hook.{chroot,binary}`; unit test enforces the naming, CI greps the build log for the Secure Boot hook's success line |
 | Live ISO too large | No DE on the live image |

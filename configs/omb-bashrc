@@ -1,0 +1,41 @@
+# Sensible default bashrc — installed to /etc/skel/.bashrc.
+# oh-my-bash runs from a shared, read-only system install; per-user state
+# (history, custom themes) stays in $HOME as usual.
+#
+# Status: planned (PLAN Phase 6) — not yet wired into the installer.
+
+# Interactive shells only.
+case $- in *i*) ;; *) return ;; esac
+
+# --- oh-my-bash -------------------------------------------------------------
+export OSH=/usr/share/oh-my-bash
+
+OSH_THEME="font"            # renders with any font; Nerd Font themes are opt-in
+DISABLE_AUTO_UPDATE="true"  # /usr/share is root-owned; updates ship with the OS
+
+completions=(git ssh)
+aliases=(general)
+plugins=(git)
+
+[ -r "$OSH/oh-my-bash.sh" ] && source "$OSH/oh-my-bash.sh"
+
+# --- Sensible CLI defaults --------------------------------------------------
+# Debian renames these binaries; give them back their upstream names.
+command -v batcat >/dev/null && alias bat='batcat'
+command -v fdfind >/dev/null && alias fd='fdfind'
+
+if command -v eza >/dev/null; then
+  alias ls='eza'
+  alias ll='eza -la --git'
+  alias tree='eza --tree'
+fi
+
+# zoxide: `z <dir>` — smarter cd
+command -v zoxide >/dev/null && eval "$(zoxide init bash)"
+
+# fzf: Ctrl-R history search, Ctrl-T file picker, ** completion
+[ -r /usr/share/doc/fzf/examples/key-bindings.bash ] && source /usr/share/doc/fzf/examples/key-bindings.bash
+[ -r /usr/share/doc/fzf/examples/completion.bash ] && source /usr/share/doc/fzf/examples/completion.bash
+
+export EDITOR=nvim
+export VISUAL=nvim

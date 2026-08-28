@@ -23,13 +23,13 @@ Sensible is a **reproducible live ISO** plus a **TUI installer**. It partitions 
 
 ### Disk (4 combinations, one layout)
 
-Two filesystems, each with optional LUKS2. Every option uses the same four partitions — no LVM:
+Two filesystems, each with optional LUKS2. One GPT layout — no LVM:
 
 | Partition | Size | Filesystem | Mount |
 | :--- | :--- | :--- | :--- |
 | EFI | 1 GiB | FAT32 | `/boot/efi` |
 | BOOT | 1 GiB | Ext4 | `/boot` (always unencrypted) |
-| SWAP | physical RAM + 10% | swap | hibernation on **unencrypted** installs; see [Architecture](docs/ARCHITECTURE.md#swap-luks-and-hibernation) |
+| SWAP | physical RAM + 10% | swap | plain partition without LUKS; **with LUKS it is a swapfile inside the encrypted root** — hibernation works in both modes (Secure Boot lockdown blocks it; see [Architecture](docs/ARCHITECTURE.md#3-swap-luks-and-hibernation)) |
 | ROOT | rest of disk | Btrfs **or** Ext4, optional LUKS2 | `/` |
 
 - **Btrfs**: subvolumes `@`, `@home`, `@snapshots`, `@var_log` (Snapper/Timeshift-ready; snapshot tools themselves are optional later).
@@ -47,11 +47,13 @@ The live ISO does **not** ship both desktops. It is a console/TUI installer envi
 
 ### Software (defaults vs optional)
 
-**Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak + Flathub, fonts, `fwupd`.
+**Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak + Flathub, fonts, `fwupd`, Secure Boot chain (shim + Debian-signed GRUB).
 
 **Default apps:** Firefox, VLC, Neovim (LazyVim starter in `/etc/skel`), modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`).
 
 **Installer checkboxes (off unless selected):** Chromium, Brave (official apt origin, not a Flatpak), Audacious, DE-native player (Amberol on GNOME, Elisa on KDE), AI CLIs (`opencode` and similar — optional, pinned, not `curl | sh` from the ISO).
+
+**Planned ([Phase 6](docs/PLAN.md#phase-6--sensible-extras-planned-not-implemented)):** fingerprint login (`fprintd`) always on, BioPass face login checkbox, oh-my-bash for all users with a sensible `.bashrc`, system git defaults + optional name/email prompts, JetBrainsMono Nerd Font, `ufw` firewall (KDE Connect-aware), printing/scanning, developer-tools checkbox (Docker + Compose, `lazygit`, `gh`), unattended `--config` installs.
 
 Slack, WhatsApp, Zoom, Discord, and the rest are **Flathub**, not preinstalled.
 
@@ -67,6 +69,8 @@ Make as much hardware work as Debian Testing allows, on first boot:
 - Audio / BT: PipeWire + WirePlumber + `libspa-0.2-bluetooth`
 - Power: `power-profiles-daemon`
 - Device firmware updates: `fwupd` + LVFS
+- Secure Boot: shim + Debian-signed GRUB chain, on the live ISO and the installed system (NVIDIA module and hibernation are blocked under lockdown — documented in Architecture)
+- Planned (Phase 6): fingerprint via `fprintd` + `libpam-fprintd`, BioPass face login opt-in, printing/scanning (CUPS driverless + `sane-airscan`)
 
 First target is **amd64 + UEFI**. Legacy BIOS and other arches are out of scope for v1.
 
@@ -78,7 +82,6 @@ First target is **amd64 + UEFI**. Legacy BIOS and other arches are out of scope 
 - Shipping GNOME **and** KDE on the live ISO
 - Snaps, Steam, or any vendor/SaaS client in the base image
 - Encrypted `/boot` / `GRUB_ENABLE_CRYPTODISK`
-- Secure Boot enrollment as a guaranteed path (shim is a later milestone)
 - Supporting non-UEFI machines
 
 ---
@@ -106,10 +109,11 @@ The installed system hostname defaults to `debian`. The UEFI boot entry stays **
 │   ├── ARCHITECTURE.md     # layers, disk, boot, swap/LUKS decision
 │   ├── PLAN.md             # phases and milestones
 │   └── INSTALLER_SPEC.md   # installer prompts and exact commands
-├── live/                   # live-build config (not created yet)
-├── installer/              # sensible-install (not created yet)
-├── configs/                # keyd, Plymouth, desktop seeds
-└── scripts/                # optional post-install helpers
+├── live/                   # live-build config (Dockerfile, hooks, package lists)
+├── installer/              # sensible-install.sh + lib/ modules
+├── configs/                # keyd, omb-bashrc + gitconfig (Phase 6)
+├── scripts/                # run-qemu.sh — boot the built ISO in UEFI QEMU
+└── tests/                  # unit + integration suites (tests/run-tests.sh)
 ```
 
 ---
@@ -120,7 +124,7 @@ The installed system hostname defaults to `debian`. The UEFI boot entry stays **
 - [Installer spec](docs/INSTALLER_SPEC.md) — prompts, partitioning, chroot
 - [Plan](docs/PLAN.md) — implementation order
 
-Build instructions land when Phase 1 exists. Until then the working title of this repo can stay `debian-setup`.
+Build: `./live/build.sh` (podman/docker) produces `sensible-debian-testing-amd64.iso`; try it with `./scripts/run-qemu.sh`. Tests: `tests/run-tests.sh` — no root, no network.
 
 ---
 
