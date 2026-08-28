@@ -38,7 +38,7 @@ The live session is **not** a desktop. No GNOME/KDE on the ISO in v1. Banner and
 - [x] crypttab/fstab as in the spec (UUID fstab; LUKS: swapfile on encrypted root; `resume=`/`resume_offset=` for both modes)
 - [x] User, hostname, locale, keyboard, timezone
 - [x] GRUB EFI + `cryptsetup-initramfs` + Plymouth hook (theme can stay `spinner` until Phase 4)
-- [x] Secure Boot: `shim-signed` + `grub-efi-amd64-signed` chain on the installed system and the live ISO
+- [x] Secure Boot: `shim-signed` + `grub-efi-amd64-signed` chain on the installed system (`grub-install` stages the signed chain + module tree under `/EFI/debian`). Live-ISO Secure Boot deferred to Later.
 - [ ] QEMU: each of the four layouts boots; LUKS shows a passphrase prompt; both modes carry `resume=` in `/proc/cmdline`
 
 ---
@@ -92,6 +92,7 @@ Agreed additions that extend the v1 installer. Architecture/spec sections for th
 
 ## Later (not v1)
 
+- Secure Boot on the **live ISO** (deferred from v1): the Debian signed GRUB has a fixed `/EFI/debian` prefix and needs both a bootstrap `grub.cfg` and its full module tree staged there on the ISO; shipping it half-working drops to a rescue prompt. Installed-system Secure Boot stays in v1. See git history for the `0100-secure-boot.hook.binary` attempt.
 - Snapper on Btrfs (`@swap` already keeps the swapfile out of snapshot sets) + `grub-btrfs` boot-menu rollback
 - TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis + `clevis-initramfs`); with biometrics this completes the Windows Hello flow — PCR policy must account for the unencrypted `/boot`, and Secure Boot in v1 strengthens the measurements
 - FIDO2 hardware keys for sudo/polkit (`libpam-u2f`, enrollment via `pamu2fcfg`)
@@ -111,5 +112,5 @@ Agreed additions that extend the v1 installer. Architecture/spec sections for th
 | Brave or AI CLIs add untrusted install paths | Brave only from the documented origin; AI CLIs stay optional and pinned |
 | BioPass is young third-party PAM code (Phase 6) | Checkbox off by default; pinned `.deb` + SHA256; PAM via `pam-auth-update` so removal is clean; `fprintd` covers fingerprint without it |
 | Pinned artifacts rot (BioPass, Nerd Font, oh-my-bash, LazyVim) | Versions + SHA256 recorded in one place; CI fails loudly when a pin 404s |
-| live-build silently skips misnamed hooks | Hooks must match `*.hook.{chroot,binary}`; unit test enforces the naming, CI greps the build log for the Secure Boot hook's success line |
+| live-build silently skips misnamed hooks | Hooks must match `*.hook.{chroot,binary}`; unit test enforces the naming |
 | Live ISO too large | No DE on the live image |

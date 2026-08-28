@@ -112,11 +112,11 @@ With LUKS on, the installer sets `KEYMAP=y` in `/etc/initramfs-tools/initramfs.c
 
 ### Secure Boot
 
-The full chain is signed and Secure Boot is **supported in v1**, on the installed system and on the live ISO:
+Secure Boot is **supported in v1 on the installed system**. On the **live installer ISO it is deferred** (see Later) — the media ships live-build's own GRUB and boots with SB off.
 
-- Target: `shim-signed` + `grub-efi-amd64-signed` (always installed). Shim falls through transparently when SB is off, so there is no prompt and no downside.
-- Live ISO: a binary hook injects `shimx64.efi` and the signed `grubx64.efi` into the ISO EFI image (`live/config/hooks/live/0100-secure-boot.hook.binary`), then `sbverify`-checks both signatures at build time. The media boots with SB on or off. The `.hook.binary` suffix is load-bearing: live-build silently skips hooks named otherwise, so CI asserts the hook's success line in the build log.
-- Kernel and firmware updates stay bootable: everything in the chain is Debian-signed; no MOK enrollment needed for stock packages.
+- Target (installed system): `shim-signed` + `grub-efi-amd64-signed` (always installed). `grub-install` lays down the signed chain and grub's own module tree under `/EFI/debian`, so the signed GRUB finds its config and modules. Shim falls through transparently when SB is off, so there is no prompt and no downside.
+- Live ISO: **not** Secure Boot capable in v1. Injecting Debian's signed GRUB into the live media is non-trivial — the signed image has a fixed embedded prefix of `/EFI/debian` and expects its module tree there, neither of which live-build provides, so it drops to a rescue prompt / fails gfxterm setup. Deferred rather than shipped half-working; the installer USB is booted once, with SB toggled off if the firmware enforces it, and produces a fully SB-capable installed system.
+- Kernel and firmware updates stay bootable: everything in the installed chain is Debian-signed; no MOK enrollment needed for stock packages.
 
 Caveats (documented, not solved): the proprietary **NVIDIA** module is unsigned, so with SB on the kernel's lockdown rejects it — disable SB or enroll a MOK for DKMS. Lockdown also blocks **hibernation** (see §3).
 
@@ -250,6 +250,6 @@ Steam, Slack, WhatsApp, Zoom, Discord, Spotify, Snapd, any SaaS “default clien
 
 **Planned (Phase 6):** biometrics (§5), oh-my-bash + git defaults (§7), ufw, printing/scanning, developer tools, `--config` unattended installs.
 
-**Later:** Btrfs Snapper (+ `grub-btrfs` boot-menu rollback), TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis; PCR policy must account for the unencrypted `/boot`), FIDO2 keys for sudo/polkit (`libpam-u2f`), GUI NVIDIA/MOK enrollment flow, Calamares if someone wants a GUI, other arches.
+**Later:** Secure Boot on the **live ISO** (deferred from v1 — the signed GRUB needs both a bootstrap `grub.cfg` and its module tree staged under its `/EFI/debian` prefix on the ISO; see git history for the `0100-secure-boot.hook.binary` attempt), Btrfs Snapper (+ `grub-btrfs` boot-menu rollback), TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis; PCR policy must account for the unencrypted `/boot`), FIDO2 keys for sudo/polkit (`libpam-u2f`), GUI NVIDIA/MOK enrollment flow, Calamares if someone wants a GUI, other arches.
 
 **Never (Sensible):** LVM as the guided path, dual-DE live ISO, shipping commercial apps, pretending this is not Debian.

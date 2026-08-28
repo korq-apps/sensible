@@ -47,7 +47,7 @@ The live ISO does **not** ship both desktops. It is a console/TUI installer envi
 
 ### Software (defaults vs optional)
 
-**Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak + Flathub, fonts, `fwupd`, Secure Boot chain (shim + Debian-signed GRUB).
+**Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak + Flathub, fonts, `fwupd`, Secure Boot chain on the installed system (shim + Debian-signed GRUB).
 
 **Default apps:** Firefox, VLC, Neovim (LazyVim starter in `/etc/skel`), modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`).
 
@@ -69,7 +69,7 @@ Make as much hardware work as Debian Testing allows, on first boot:
 - Audio / BT: PipeWire + WirePlumber + `libspa-0.2-bluetooth`
 - Power: `power-profiles-daemon`
 - Device firmware updates: `fwupd` + LVFS
-- Secure Boot: shim + Debian-signed GRUB chain, on the live ISO and the installed system (NVIDIA module and hibernation are blocked under lockdown — documented in Architecture)
+- Secure Boot: shim + Debian-signed GRUB chain on the **installed system** (NVIDIA module and hibernation are blocked under lockdown — documented in Architecture). Secure Boot on the live installer ISO is deferred to Later; boot the installer with SB off if your firmware enforces it.
 - Planned (Phase 6): fingerprint via `fprintd` + `libpam-fprintd`, BioPass face login opt-in, printing/scanning (CUPS driverless + `sane-airscan`)
 
 First target is **amd64 + UEFI**. Legacy BIOS and other arches are out of scope for v1.
