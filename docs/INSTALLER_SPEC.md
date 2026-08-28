@@ -127,16 +127,24 @@ mkfs.vfat -F32 -n EFI "$EFI_PART"
 mkfs.ext4 -F -L BOOT "$BOOT_PART"
 
 if [ "$ENABLE_LUKS" = true ]; then
-  echo -n "$PASSPHRASE" | cryptsetup luksFormat \
+  # printf, not `echo -n`: bash's echo consumes option-shaped arguments, so a
+  # passphrase such as "-nnnnnnn" would reach cryptsetup as an empty key.
+  printf '%s' "$PASSPHRASE" | cryptsetup luksFormat \
     --type luks2 --pbkdf argon2id --hash sha512 --key-size 512 --batch-mode \
     "$ROOT_PART"
-  echo -n "$PASSPHRASE" | cryptsetup open "$ROOT_PART" cryptroot
+  printf '%s' "$PASSPHRASE" | cryptsetup open "$ROOT_PART" cryptroot
   TARGET_ROOT=/dev/mapper/cryptroot
-  # Swap is a swapfile on the encrypted root: encrypted at rest and resumable.
-  create_swapfile "$FS_TYPE" "$SWAP_MIB"   # see §5.1
 else
   TARGET_ROOT=$ROOT_PART
   mkswap -L SWAP "$SWAP_PART"
+fi
+
+# Swap is a swapfile on the encrypted root: encrypted at rest and resumable.
+# It must be created only AFTER format_and_mount has made the root filesystem
+# and mounted it (Btrfs: the @swap subvolume at /swap), otherwise the file is
+# allocated on the installer's own /mnt instead of inside the target.
+if [ "$ENABLE_LUKS" = true ]; then
+  create_swapfile "$FS_TYPE" "$SWAP_MIB"   # see §5.1
 fi
 ```
 
@@ -258,7 +266,11 @@ tmpfs                /tmp         tmpfs  defaults,nosuid,nodev                  
 
 Ext4 + LUKS: one `/` line (`ext4  noatime,errors=remount-ro,discard  0 1`), same boot/efi/tmpfs, swap line is `/swapfile none swap sw 0 0`.
 
-No LUKS, either filesystem: swap line is `UUID=<SWAP_UUID> none swap sw 0 0` and there is no `@swap`/swapfile line.
+No LUKS, either filesystem: the swap line is `UUID=<SWAP_UUID> none swap sw 0 0`
+(the dedicated swap partition) and there is no swapfile line. On Btrfs the
+`@swap` subvolume is still created, mounted at `/swap`, and still gets its
+`subvol=@swap` fstab entry — only the swapfile inside it is absent, so that
+enabling LUKS later does not require reshaping the subvolume layout.
 
 ---
 

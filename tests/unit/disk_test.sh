@@ -120,11 +120,15 @@ mock_setup   # fresh call log (earlier sections tore theirs down)
 free() { printf 'Mem:           8192        1024        7168\n'; }  # min = 31539 MiB
 lsblk() {
     mlog "lsblk $*"
+    # Resolve the device as the LAST argument, never a fixed position: the
+    # flags differ per call site (disk_below_min passes -d), so hardcoding $3
+    # silently reads a flag instead of the device.
+    local dev="${!#}"
     case "$*" in
         *"NAME,SIZE,TYPE,RO"*) printf '/dev/sda 500G disk 0\n/dev/vda 10G disk 0\n/dev/zda 500G disk 0\n' ;;
-        *MOUNTPOINTS*) [ "$3" = "/dev/zda" ] && echo "/run/live/medium" ;;
-        *"-bno SIZE"*) case "$3" in /dev/sda) echo 536870912000 ;; /dev/vda) echo 10737418240 ;; esac ;;
-        *"-dno MODEL"*) case "$3" in /dev/sda) echo "Samsung SSD 860" ;; esac ;;
+        *MOUNTPOINTS*) [ "$dev" = "/dev/zda" ] && echo "/run/live/medium" ;;
+        *"-bno SIZE"*) case "$dev" in /dev/sda) echo 536870912000 ;; /dev/vda) echo 10737418240 ;; esac ;;
+        *"-dno MODEL"*) case "$dev" in /dev/sda) echo "Samsung SSD 860" ;; esac ;;
     esac
 }
 mapfile -t CANDS < <(list_candidate_disks)
@@ -152,5 +156,27 @@ lsblk() { case "$*" in *"-bno SIZE"*) echo 10737418240 ;; esac; }  # 10 GiB
 disk_below_min /dev/vda 31539; assert_rc "10 GiB is below 31539 MiB" 0 $?
 lsblk() { case "$*" in *"-bno SIZE"*) echo 68719476736 ;; esac; }  # 64 GiB
 disk_below_min /dev/vda 31539; assert_rc "64 GiB is not below minimum" 1 $?
+
+t_section "disk_below_min: pre-partitioned disk (lsblk must be asked for -d)"
+# Without -d, lsblk prints the whole-disk row AND one row per partition. The
+# multi-line result makes the numeric comparison error out, so an undersized
+# disk would slip past the filter. This mock only answers with a single row
+# when -d is passed, and reproduces the multi-row output when it is not.
+lsblk() {
+    case "$*" in
+        *"-d "*) echo 10737418240 ;;                            # 10 GiB, whole disk
+        *"-bno SIZE"*) printf '10737418240\n1048576\n524288000\n' ;;  # disk + partitions
+    esac
+}
+disk_below_min /dev/vda 31539
+assert_rc "undersized pre-partitioned disk still refused" 0 $?
+lsblk() {
+    case "$*" in
+        *"-d "*) echo 536870912000 ;;                           # 500 GiB, whole disk
+        *"-bno SIZE"*) printf '536870912000\n1048576\n524288000\n' ;;
+    esac
+}
+disk_below_min /dev/vda 31539
+assert_rc "large pre-partitioned disk still accepted" 1 $?
 
 t_summary

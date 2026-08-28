@@ -21,7 +21,10 @@ calc_min_disk_mb() {
 disk_below_min() {
     local name="$1" min_mib="$2"
     local size_bytes
-    size_bytes=$(lsblk -bno SIZE "$name" 2>/dev/null || echo 0)
+    # -d: whole disk only. Without it lsblk also prints every partition row, so
+    # a pre-partitioned disk yields multi-line output, the numeric test below
+    # errors out, and an undersized disk survives filtering.
+    size_bytes=$(lsblk -d -bno SIZE "$name" 2>/dev/null || echo 0)
     [ "${size_bytes:-0}" -lt $((min_mib * 1048576)) ]
 }
 
@@ -156,11 +159,15 @@ format_and_mount() {
 
     if [ "$enable_luks" = "true" ]; then
         log_info "Setting up LUKS2 container on ${ROOT_PART}..."
-        echo -n "$passphrase" | cryptsetup luksFormat \
+        # printf, never `echo -n`: bash's echo eats option-shaped arguments, so
+        # a valid passphrase like "-nnnnnnn" is parsed as the -n flag and
+        # cryptsetup would receive an empty key -- after the disk is already
+        # partitioned. printf '%s' passes every byte through verbatim.
+        printf '%s' "$passphrase" | cryptsetup luksFormat \
             --type luks2 --pbkdf argon2id --hash sha512 --key-size 512 --batch-mode \
             "$ROOT_PART"
 
-        echo -n "$passphrase" | cryptsetup open "$ROOT_PART" cryptroot
+        printf '%s' "$passphrase" | cryptsetup open "$ROOT_PART" cryptroot
         TARGET_ROOT="/dev/mapper/cryptroot"
     else
         TARGET_ROOT="$ROOT_PART"

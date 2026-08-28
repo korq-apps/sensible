@@ -63,7 +63,10 @@ main() {
 
     # 2b. Minimum disk size (spec §1)
     local DISK_SIZE_MIB
-    DISK_SIZE_MIB=$(lsblk -bno SIZE "$TARGET_DISK" 2>/dev/null | awk '{print int($1 / 1048576)}')
+    # -d: whole disk only, else a partitioned disk emits one row per partition
+    # and DISK_SIZE_MIB becomes multi-line (non-numeric), making the -lt test
+    # below silently false -- letting an undersized disk through to the wipe.
+    DISK_SIZE_MIB=$(lsblk -d -bno SIZE "$TARGET_DISK" 2>/dev/null | awk '{print int($1 / 1048576)}')
     if [ -z "$DISK_SIZE_MIB" ] || [ "$DISK_SIZE_MIB" -lt "$MIN_DISK_MIB" ]; then
         ui_msgbox "Error: Disk Too Small" "${TARGET_DISK} is ${DISK_SIZE_MIB:-unknown} MiB.\nSensible requires at least ${MIN_DISK_MIB} MiB:\n1 GiB EFI + 1 GiB BOOT + ${SWAP_MIB} MiB swap + 20 GiB root."
         log_err "Selected disk ${TARGET_DISK} is too small: ${DISK_SIZE_MIB:-unknown} MiB < ${MIN_DISK_MIB} MiB."
@@ -266,6 +269,15 @@ main() {
     # Live-session-only: never ship passwordless root autologin to the target.
     rm -f ${MNT}/etc/systemd/system/getty@tty1.service.d/autologin.conf \
           ${MNT}/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf
+
+    # The rsync path copies the live session's /etc/machine-id, so every install
+    # from one boot would inherit the same identity (journald, DHCP DUIDs and
+    # other machine-ID consumers then collide). An empty /etc/machine-id is
+    # systemd's documented "first boot" marker: it regenerates one at boot.
+    : > "${MNT}/etc/machine-id"
+    # Debian usually symlinks this to /etc/machine-id; drop it only if the copy
+    # left a real file behind, so the symlink is preserved when present.
+    [ -L "${MNT}/var/lib/dbus/machine-id" ] || rm -f "${MNT}/var/lib/dbus/machine-id"
 
     # Step 4: Bind Mounts & DNS
     log_info "Preparing chroot environment..."

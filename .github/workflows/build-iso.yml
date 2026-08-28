@@ -35,12 +35,18 @@ jobs:
     name: Build Live ISO & UEFI Smoke Test
     needs: tests
     runs-on: ubuntu-latest
+    # Read-only: this job runs for pull_request and executes PR-controlled
+    # build scripts, so it must never hold a token that can write the repo.
+    # Publishing happens in the tag-only `release` job below.
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # Do not leave the job token on disk for the PR-controlled build.
+          persist-credentials: false
 
       - name: Cache APT packages
         uses: actions/cache@v4
@@ -77,8 +83,24 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Publication is isolated in its own job so that `contents: write` exists only
+  # on tag pushes and never in a run that builds PR-controlled code. It consumes
+  # the artifact the build job already produced rather than rebuilding.
+  release:
+    name: Publish Release Assets
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download built ISO artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sensible-debian-testing-amd64
+
       - name: Publish Release Assets
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |

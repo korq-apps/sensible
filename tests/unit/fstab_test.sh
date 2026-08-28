@@ -64,9 +64,13 @@ assert_file_not_contains "no subvols for ext4" "${MNT}/etc/fstab" "subvol="
 t_section "Guards: empty blkid result aborts before writing broken files"
 blkid_broken() { echo ""; }
 blkid() { blkid_broken "$@"; }
+# Seed a sentinel and assert it SURVIVES. Asserting the absence of a literal
+# that is never written passes even if the failed call truncates fstab, so it
+# proves nothing; the surviving sentinel is what actually shows no rewrite.
+echo "SENTINEL-PRESERVE-ON-FAILURE" > "${MNT}/etc/fstab"
 rc="$(run_exiting generate_crypttab_and_fstab /dev/mapper/cryptroot /dev/sda2 /dev/sda1 "" /dev/sda3 btrfs true)"
 assert_rc "missing ROOT UUID exits 1" 1 "${rc}"
-assert_file_not_contains "fstab not rewritten on failure" "${MNT}/etc/fstab" "SHOULD-NOT-APPEAR"
+assert_file_contains "fstab not rewritten on failure" "${MNT}/etc/fstab" "SENTINEL-PRESERVE-ON-FAILURE"
 
 rm -rf "${TMP_MNT}"
 t_summary

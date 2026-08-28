@@ -39,9 +39,14 @@ for candidate in \
 done
 
 OVMF_VARS=""
-if [ -n "${OVMF_CODE}" ] && [[ "${OVMF_CODE}" == *OVMF_CODE.fd ]]; then
-    # Matched code/vars pair from the same package
-    OVMF_VARS="${OVMF_CODE/OVMF_CODE.fd/OVMF_VARS.fd}"
+if [ -n "${OVMF_CODE}" ] && [[ "${OVMF_CODE}" == *OVMF_CODE*.fd ]]; then
+    # Matched code/vars pair from the same package. Substitute on the OVMF_CODE
+    # stem rather than the whole filename so the split 4M build pairs too:
+    # OVMF_CODE_4M.fd -> OVMF_VARS_4M.fd. That is Debian/Ubuntu's default and
+    # the first candidate above; matching only *OVMF_CODE.fd left it without a
+    # writable VARS image and fell through to -bios with a split CODE file,
+    # which cannot boot. smoke-boot.sh pairs the same way.
+    OVMF_VARS="${OVMF_CODE/OVMF_CODE/OVMF_VARS}"
     [ -f "${OVMF_VARS}" ] || OVMF_VARS=""
 fi
 
