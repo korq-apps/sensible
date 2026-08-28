@@ -69,7 +69,7 @@ Make as much hardware work as Debian Testing allows, on first boot:
 - Audio / BT: PipeWire + WirePlumber + `libspa-0.2-bluetooth`
 - Power: `power-profiles-daemon`
 - Device firmware updates: `fwupd` + LVFS
-- Secure Boot: shim + Debian-signed GRUB chain on the **installed system** (NVIDIA module and hibernation are blocked under lockdown — documented in Architecture). Secure Boot on the live installer ISO is enabled via live-build (`--uefi-secure-boot enable`) and pending verification; if your firmware rejects the medium, boot it with SB off.
+- Secure Boot: shim + Debian-signed GRUB chain on the **installed system** (NVIDIA module and hibernation are blocked under lockdown — documented in Architecture). Secure Boot on the live installer ISO is enabled via live-build (`--uefi-secure-boot enable`) and verified under OVMF with Microsoft keys (`SMOKE_FIRMWARE=sb scripts/smoke-boot.sh`): the kernel reports `secureboot: Secure boot enabled` and loads the Debian Secure Boot CA.
 - Planned (Phase 6): fingerprint via `fprintd` + `libpam-fprintd`, BioPass face login opt-in, printing/scanning (CUPS driverless + `sane-airscan`)
 
 First target is **amd64 + UEFI**. Legacy BIOS and other arches are out of scope for v1.

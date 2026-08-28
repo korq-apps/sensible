@@ -39,7 +39,7 @@ The live session is **not** a desktop. No GNOME/KDE on the ISO in v1. Banner and
 - [x] User, hostname, locale, keyboard, timezone
 - [x] GRUB EFI + `cryptsetup-initramfs` + Plymouth hook (theme can stay `spinner` until Phase 4)
 - [x] Secure Boot: `shim-signed` + `grub-efi-amd64-signed` chain on the installed system (`grub-install` stages the signed chain + module tree under `/EFI/debian`)
-- [ ] Secure Boot on the **live ISO** — back in scope via `--uefi-secure-boot enable`, pending a UEFI boot test. The earlier hand-rolled attempt dropped to a `grub>` rescue prompt because the Debian signed GRUB has a fixed `/EFI/debian` prefix and needs both a bootstrap `grub.cfg` and its full module tree staged there; live-build's own support is meant to handle that, so verify with `scripts/smoke-boot.sh` (OVMF) before trusting it. See git history for the `0100-secure-boot.hook.binary` attempt.
+- [x] Secure Boot on the **live ISO** — enabled via `--uefi-secure-boot enable` and verified with `SMOKE_FIRMWARE=sb scripts/smoke-boot.sh` (OVMF secboot + MS keys): boots to autologin, kernel logs `secureboot: Secure boot enabled` and `Kernel is locked down from EFI Secure Boot`. The earlier hand-rolled attempt dropped to a `grub>` rescue prompt because the Debian signed GRUB has a fixed `/EFI/debian` prefix and needs both a bootstrap `grub.cfg` and its full module tree staged there; live-build's native support handles that correctly. See git history for the `0100-secure-boot.hook.binary` attempt.
 - [ ] QEMU: each of the four layouts boots; LUKS shows a passphrase prompt; both modes carry `resume=` in `/proc/cmdline`
 
 ---
