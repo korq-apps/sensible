@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -e
+
+if [ -f /opt/sensible/installer/sensible-install.sh ]; then
+    exec /opt/sensible/installer/sensible-install.sh "$@"
+elif [ -f /usr/local/share/sensible/installer/sensible-install.sh ]; then
+    exec /usr/local/share/sensible/installer/sensible-install.sh "$@"
+else
+    echo "Error: Sensible installer script not found." >&2
+    exit 1
+fi

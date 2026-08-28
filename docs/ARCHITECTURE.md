@@ -35,21 +35,21 @@ The live image is an **installer appliance**, not a full desktop. That keeps ISO
 
 ## 2. Disk layout
 
-Every combination uses the same GPT table. No LVM.
+GPT table, no LVM. LUKS and no-LUKS differ in exactly one thing: where swap lives.
 
 ```
-/dev/nvme0n1 (example)
-├── p1  1 GiB    EF00   FAT32    /boot/efi
-├── p2  1 GiB    8300   Ext4     /boot          (never encrypted)
-├── p3  RAM+10%  8200   swap     [see below]
-└── p4  rest     8300/8309       /              Btrfs or Ext4, optional LUKS2
+/dev/nvme0n1 (example)                          LUKS on            LUKS off
+├── p1  1 GiB    EF00   FAT32    /boot/efi     yes                yes
+├── p2  1 GiB    8300   Ext4     /boot          yes                yes
+├── p3  RAM+10%  8200   swap     (plain)        —                  yes
+└── pN  rest     8309/8300        /              p3, LUKS2          p4
 ```
 
 Sizes are fixed for v1: EFI **1024 MiB**, BOOT **1024 MiB**, SWAP **detected RAM + 10%**, ROOT **remainder**. 1 GiB `/boot` is enough for a few Testing kernels plus initramfs; we are not leaving this as a 1–2 GiB range in the installer.
 
 ### Btrfs
 
-Subvolumes, then mount with `noatime,compress=zstd:1,space_cache=v2,discard=async`:
+Subvolumes, then mount with `noatime,compress=zstd:1,space_cache=v2,discard=async` (`@swap` is mounted without compression — NOCOW):
 
 | Subvolume | Mount |
 | :--- | :--- |
@@ -57,6 +57,7 @@ Subvolumes, then mount with `noatime,compress=zstd:1,space_cache=v2,discard=asyn
 | `@home` | `/home` |
 | `@snapshots` | `/.snapshots` |
 | `@var_log` | `/var/log` |
+| `@swap` | `/swap` (swapfile host; never snapshotted) |
 
 Ready for Snapper or Timeshift. Those tools are **not** installed in v1.
 
@@ -68,27 +69,27 @@ Single filesystem on the unlocked root (or the raw partition). Options: `noatime
 
 Plymouth and GRUB then work like a normal desktop: kernel and initramfs load immediately, graphical unlock follows. `GRUB_ENABLE_CRYPTODISK` and Arch-style `cryptdevice=` are **not used**. Debian unlocks via `/etc/crypttab` + `cryptsetup-initramfs`.
 
-Tradeoff: an attacker with physical access can tamper with `/boot`. Acceptable for v1; documented so we do not “fix” it later by accident.
+Tradeoff: an attacker with physical access can tamper with `/boot`. Secure Boot (§4) mitigates this: the boot chain is signature-verified, and the kernel locks down unsigned module loading.
 
 ---
 
 ## 3. Swap, LUKS, and hibernation
 
-These three interact. The installer spec used to say “encrypt swap for hibernation” and then format plaintext swap in both branches. The actual rule:
+The rule, as implemented:
 
 | Root encryption | Swap | Hibernation |
 | :--- | :--- | :--- |
-| Off | Plain partition, `resume=UUID=` in GRUB | Enabled |
-| On | LUKS `cryptswap`, key = `/dev/urandom` each boot (`swap` in crypttab) | **Disabled** |
+| Off | Plain partition (`p3`), `resume=UUID=<swap>` in GRUB | Enabled |
+| On | Swapfile **inside the LUKS root** (`@swap` subvol on Btrfs / `/swapfile` on Ext4), `resume=UUID=<rootfs> resume_offset=<n>` | Enabled* |
 
-Reasons:
+`*` Hibernation writes an unverified resume image, so the kernel blocks it under Secure Boot lockdown. With SB off, hibernation works in both modes.
 
-- Plain swap next to a LUKS root leaks memory.
-- A random-key `cryptswap` is discarded at shutdown, so resume is impossible — that is intended.
-- A persistent swap keyfile cannot live in the unencrypted `/boot` initramfs without making swap encryption theater.
-- Hibernation-through-LUKS without LVM is a later project (swapfile on the unlocked root + `resume_offset`, or a second passphrase-bound LUKS swap).
+Why the swapfile design wins:
 
-Installer must write `resume=UUID=<swap>` **only** when LUKS is off.
+- Swap inside the LUKS container is encrypted at rest — same protection the old ephemeral `cryptswap` gave, without giving up resume.
+- The initramfs unlocks `cryptroot` first (crypttab + Plymouth), so the kernel can then read the swapfile and resume. `resume_offset` (4K pages) comes from `btrfs inspect-internal map-swapfile -r` (Btrfs) or `filefrag -v` (Ext4) at install time.
+- The dedicated `@swap` subvolume keeps the swapfile out of any future snapshot set (a snapshotted swapfile breaks resume consistency).
+- Plain swap next to a LUKS root would leak memory — that design is gone.
 
 ---
 
@@ -96,14 +97,26 @@ Installer must write `resume=UUID=<swap>` **only** when LUKS is off.
 
 ```
 UEFI
-  → GRUB (files on unencrypted /boot)
-  → kernel + initramfs
+  → shim (MS-signed)
+  → GRUB (Debian-signed, files on unencrypted /boot)
+  → kernel + initramfs (Debian-signed)
   → Plymouth  (if LUKS: passphrase dialog; theme = spinner on GNOME, breeze on KDE)
   → unlock cryptroot (crypttab) if needed
+  → resume from swap(file) if a hibernation image exists
   → mount /, /boot, /boot/efi, activate swap
   → display manager (gdm3 or sddm)
   → GNOME or Plasma
 ```
+
+### Secure Boot
+
+The full chain is signed and Secure Boot is **supported in v1**, on the installed system and on the live ISO:
+
+- Target: `shim-signed` + `grub-efi-amd64-signed` (always installed). Shim falls through transparently when SB is off, so there is no prompt and no downside.
+- Live ISO: a binary hook injects `shimx64.efi` and the signed `grubx64.efi` into the ISO EFI image (`live/config/hooks/binary/0100-secure-boot.hook.binary`), then `sbverify`-checks both signatures at build time. The media boots with SB on or off.
+- Kernel and firmware updates stay bootable: everything in the chain is Debian-signed; no MOK enrollment needed for stock packages.
+
+Caveats (documented, not solved): the proprietary **NVIDIA** module is unsigned, so with SB on the kernel's lockdown rejects it — disable SB or enroll a MOK for DKMS. Lockdown also blocks **hibernation** (see §3).
 
 ---
 
@@ -181,6 +194,6 @@ Steam, Slack, WhatsApp, Zoom, Discord, Spotify, Snapd, any SaaS “default clien
 
 **In v1:** amd64, UEFI only, single-disk wipe, the four disk combinations above, GNOME or KDE, English-first locales (other locales selectable), working Wi-Fi/audio/GPU on common laptops.
 
-**Later:** Secure Boot (`shim-signed`), Btrfs Snapper, hibernation-on-LUKS, Calamares if someone wants a GUI, other arches.
+**Later:** Btrfs Snapper, GUI NVIDIA/MOK enrollment flow, Calamares if someone wants a GUI, other arches.
 
 **Never (Sensible):** LVM as the guided path, dual-DE live ISO, shipping commercial apps, pretending this is not Debian.

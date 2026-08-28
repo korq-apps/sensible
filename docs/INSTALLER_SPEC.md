@@ -26,6 +26,9 @@ Pre-flight (UEFI, disks, RAM, size check)
     → Unmount, close mappings, “remove USB and reboot”
 ```
 
+The target mount point is `${MNT:-/mnt}`; the variable exists so the test
+suite (`tests/`) can run the full flow unprivileged against a temp directory.
+
 ---
 
 ## 3. Prompts
@@ -60,13 +63,15 @@ SWAP_MIB=$((RAM_MIB + RAM_MIB / 10))
 sgdisk --zap-all "$DISK"
 wipefs --all --force "$DISK"
 
+# p1 (EFI, 1 GiB, ef00) and p2 (BOOT, 1 GiB, 8300) always:
 sgdisk -n 1:0:+1024M -t 1:ef00 -c 1:"EFI System Partition" "$DISK"
 sgdisk -n 2:0:+1024M -t 2:8300 -c 2:"Linux Boot" "$DISK"
-sgdisk -n 3:0:+"${SWAP_MIB}"M -t 3:8200 -c 3:"Linux Swap" "$DISK"
 
 if [ "$ENABLE_LUKS" = true ]; then
-  sgdisk -n 4:0:0 -t 4:8309 -c 4:"Linux LUKS" "$DISK"
+  # No swap partition: swap is a swapfile inside the encrypted root.
+  sgdisk -n 3:0:0 -t 3:8309 -c 3:"Linux LUKS" "$DISK"
 else
+  sgdisk -n 3:0:+"${SWAP_MIB}"M -t 3:8200 -c 3:"Linux Swap" "$DISK"
   sgdisk -n 4:0:0 -t 4:8300 -c 4:"Linux Root" "$DISK"
 fi
 
@@ -89,12 +94,31 @@ if [ "$ENABLE_LUKS" = true ]; then
     "$ROOT_PART"
   echo -n "$PASSPHRASE" | cryptsetup open "$ROOT_PART" cryptroot
   TARGET_ROOT=/dev/mapper/cryptroot
-  # Swap stays raw. crypttab will map it from /dev/urandom each boot.
-  wipefs --all --force "$SWAP_PART" || true
+  # Swap is a swapfile on the encrypted root: encrypted at rest and resumable.
+  create_swapfile "$FS_TYPE" "$SWAP_MIB"   # see §5.1
 else
   TARGET_ROOT=$ROOT_PART
   mkswap -L SWAP "$SWAP_PART"
 fi
+```
+
+### 5.1 Swapfile (LUKS only) and `resume_offset`
+
+Btrfs: dedicated `@swap` subvolume mounted at `/swap` (no compression, never
+snapshotted). Ext4: `/swapfile` at the root.
+
+```bash
+# Btrfs
+touch /mnt/swap/swapfile && chattr +C /mnt/swap/swapfile
+fallocate -l "${SWAP_MIB}M" /mnt/swap/swapfile
+# Ext4
+fallocate -l "${SWAP_MIB}M" /mnt/swapfile
+
+chmod 600 "$SWAPFILE"; mkswap "$SWAPFILE"
+
+# resume_offset (4K pages):
+#   Btrfs: btrfs inspect-internal map-swapfile -r "$SWAPFILE"
+#   Ext4:  filefrag -v "$SWAPFILE" | first extent physical start
 ```
 
 ### Btrfs
@@ -102,17 +126,18 @@ fi
 ```bash
 mkfs.btrfs -f -L ROOT "$TARGET_ROOT"
 mount "$TARGET_ROOT" /mnt
-for vol in @ @home @snapshots @var_log; do
+for vol in @ @home @snapshots @var_log @swap; do
   btrfs subvolume create "/mnt/$vol"
 done
 umount /mnt
 
 BTRFS_OPTS="noatime,compress=zstd:1,space_cache=v2,discard=async"
 mount -o "${BTRFS_OPTS},subvol=@" "$TARGET_ROOT" /mnt
-mkdir -p /mnt/{home,.snapshots,var/log,boot}
+mkdir -p /mnt/{home,.snapshots,var/log,boot,swap}
 mount -o "${BTRFS_OPTS},subvol=@home" "$TARGET_ROOT" /mnt/home
 mount -o "${BTRFS_OPTS},subvol=@snapshots" "$TARGET_ROOT" /mnt/.snapshots
 mount -o "${BTRFS_OPTS},subvol=@var_log" "$TARGET_ROOT" /mnt/var/log
+mount -o "noatime,subvol=@swap" "$TARGET_ROOT" /mnt/swap
 mount "$BOOT_PART" /mnt/boot
 mkdir -p /mnt/boot/efi
 mount "$EFI_PART" /mnt/boot/efi
@@ -162,33 +187,33 @@ Always use **filesystem UUIDs** in fstab, not `/dev/mapper/...`. `ROOT_FS_UUID` 
 ### crypttab
 
 ```bash
-# LUKS on: persistent root + ephemeral swap (no hibernation)
+# LUKS on: persistent root only — swap is a swapfile inside the container
 # cryptroot UUID=<ROOT_PART_UUID> none luks,discard
-# cryptswap UUID=<SWAP_PART_UUID> /dev/urandom swap,plain,offset=2048,cipher=aes-xts-plain64,size=512
 
 # LUKS off: empty crypttab
 ```
 
-`offset=2048` avoids wiping a possible partition header; `plain` + `/dev/urandom` is the Debian encrypted-swap idiom.
+All blkid-derived identifiers must be non-empty: abort the install rather than write a broken fstab/crypttab.
 
 ### fstab templates
 
-Btrfs + LUKS (swap is the mapper created by crypttab):
+Btrfs + LUKS (swapfile on the encrypted `@swap` subvolume):
 
 ```
 UUID=<ROOT_FS_UUID>  /            btrfs  noatime,compress=zstd:1,space_cache=v2,discard=async,subvol=@          0 0
 UUID=<ROOT_FS_UUID>  /home        btrfs  noatime,compress=zstd:1,space_cache=v2,discard=async,subvol=@home      0 0
 UUID=<ROOT_FS_UUID>  /.snapshots  btrfs  noatime,compress=zstd:1,space_cache=v2,discard=async,subvol=@snapshots 0 0
 UUID=<ROOT_FS_UUID>  /var/log     btrfs  noatime,compress=zstd:1,space_cache=v2,discard=async,subvol=@var_log   0 0
+UUID=<ROOT_FS_UUID>  /swap        btrfs  noatime,subvol=@swap                                                   0 0
 UUID=<BOOT_UUID>     /boot        ext4   noatime                                                               0 2
 UUID=<EFI_UUID>      /boot/efi    vfat   umask=0077                                                            0 2
-/dev/mapper/cryptswap none        swap   sw                                                                    0 0
+/swap/swapfile       none         swap   sw                                                                    0 0
 tmpfs                /tmp         tmpfs  defaults,nosuid,nodev                                                 0 0
 ```
 
-Ext4 + LUKS: one `/` line (`ext4  noatime,errors=remount-ro,discard  0 1`), same boot/efi/cryptswap/tmpfs.
+Ext4 + LUKS: one `/` line (`ext4  noatime,errors=remount-ro,discard  0 1`), same boot/efi/tmpfs, swap line is `/swapfile none swap sw 0 0`.
 
-No LUKS, either filesystem: replace `/dev/mapper/cryptswap` with `UUID=<SWAP_UUID>`.
+No LUKS, either filesystem: swap line is `UUID=<SWAP_UUID> none swap sw 0 0` and there is no `@swap`/swapfile line.
 
 ---
 
@@ -203,9 +228,26 @@ echo "$LOCALE UTF-8" > /mnt/etc/locale.gen   # or uncomment in locale.gen
 chroot /mnt locale-gen
 echo "LANG=$LOCALE" > /mnt/etc/default/locale
 
+# Ensure supplemental groups exist: a debootstrap base (and the live image,
+# without bluez) lacks bluetooth/netdev, and one missing group makes
+# useradd fail wholesale — which would leave no user for chpasswd.
+for grp in sudo audio video plugdev netdev bluetooth; do
+  chroot /mnt groupadd -f "$grp"
+done
 chroot /mnt useradd -m -s /bin/bash -G sudo,audio,video,plugdev,netdev,bluetooth "$USERNAME"
+# sudo group membership is mandatory: verify it, never install an admin-less system.
+chroot /mnt id -nG "$USERNAME" | grep -qw sudo
 echo "$USERNAME:$USERPASS" | chroot /mnt chpasswd
 echo "root:$USERPASS" | chroot /mnt chpasswd
+```
+
+Keyboard: take the live console layout (`/etc/default/keyboard`, `XKBLAYOUT`) and write it through `keyboard-configuration` after packages are installed:
+
+```bash
+printf 'keyboard-configuration keyboard-configuration/layoutcode select %s\n' "$KBLAYOUT" \
+  | chroot /mnt debconf-set-selections
+DEBIAN_FRONTEND=noninteractive chroot /mnt dpkg-reconfigure -f noninteractive keyboard-configuration
+# and write /mnt/etc/default/keyboard with XKBLAYOUT="$KBLAYOUT"
 ```
 
 ---
@@ -217,11 +259,12 @@ Order: apt sources → `apt-get update` → firmware/kernel → DE → defaults 
 ```text
 Always:
   linux-image-amd64 intel-microcode amd64-microcode
+  locales keyboard-configuration console-setup
   firmware-linux firmware-misc-nonfree firmware-iwlwifi firmware-realtek
   firmware-atheros firmware-brcm80211 firmware-mediatek firmware-sof-signed
   cryptsetup cryptsetup-initramfs
   plymouth plymouth-themes
-  grub-efi-amd64
+  grub-efi-amd64 grub-efi-amd64-signed shim-signed
   network-manager pipewire wireplumber pipewire-pulse pipewire-audio
   libspa-0.2-bluetooth bluez
   power-profiles-daemon fwupd
@@ -282,7 +325,15 @@ GRUB_GFXMODE=auto
 GRUB_GFXPAYLOAD_LINUX=keep
 ```
 
-If LUKS is **off**, append `resume=UUID=<SWAP_UUID>` to `GRUB_CMDLINE_LINUX_DEFAULT`. If LUKS is on, do not.
+Append the hibernation parameters to `GRUB_CMDLINE_LINUX_DEFAULT` and write `RESUME=` for the initramfs:
+
+```bash
+# LUKS on:  resume=UUID=<ROOT_FS_UUID> resume_offset=<RESUME_OFFSET>
+# LUKS off: resume=UUID=<SWAP_UUID>
+echo "RESUME=UUID=<...>" > /mnt/etc/initramfs-tools/conf.d/resume
+```
+
+Secure Boot: `grub-install` picks up the signed image from `grub-efi-amd64-signed` and installs `shimx64.efi` alongside `grubx64.efi` on the ESP (`shim-signed`). This works with Secure Boot on and off — no prompt, no conditional.
 
 ```bash
 # bootloader-id stays debian: firmware boot menu should say Debian.

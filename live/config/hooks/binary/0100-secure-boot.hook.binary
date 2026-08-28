@@ -1,0 +1,40 @@
+#!/bin/sh
+# Secure Boot for the live media: replace the unsigned standalone GRUB in the
+# ISO EFI image with the shim + Debian-signed GRUB chain. Shim works with
+# Secure Boot off as well, so this is unconditional.
+set -e
+
+SHIM=""
+for candidate in /usr/lib/shim/shimx64.efi.signed /usr/lib/shim/shimx64.efi.debian; do
+    if [ -f "$candidate" ]; then
+        SHIM="$candidate"
+        break
+    fi
+done
+GRUB_SIGNED="/usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed"
+
+if [ -z "$SHIM" ] || [ ! -f "$GRUB_SIGNED" ]; then
+    echo "secure-boot hook: shim/grub signed binaries not found; leaving ISO EFI unsigned" >&2
+    exit 0
+fi
+
+EFI_IMG=""
+for candidate in binary/efi.img ../binary/efi.img; do
+    if [ -f "$candidate" ]; then
+        EFI_IMG="$candidate"
+        break
+    fi
+done
+if [ -z "$EFI_IMG" ]; then
+    echo "secure-boot hook: binary/efi.img not found; leaving ISO EFI unsigned" >&2
+    exit 0
+fi
+
+mcopy -i "$EFI_IMG" -o "$SHIM" ::/EFI/boot/bootx64.efi
+mcopy -i "$EFI_IMG" -o "$GRUB_SIGNED" ::/EFI/boot/grubx64.efi
+
+# Fail the build if the injected chain is not actually signed.
+sbverify --list "$SHIM" 2>/dev/null | grep -q "Microsoft Corporation"
+sbverify --list "$GRUB_SIGNED" 2>/dev/null | grep -q "Debian"
+
+echo "secure-boot hook: shim + Debian-signed GRUB installed into ${EFI_IMG}"

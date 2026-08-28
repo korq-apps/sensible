@@ -18,11 +18,11 @@ Phase 3 is hardware, Phase 4 is desktop. Do not swap those.
 
 Reproducible `live-build` in Docker/Podman. Output: a hybrid UEFI ISO that boots to a console and can see the network.
 
-- [ ] `live/Dockerfile` + `live/build.sh`
-- [ ] `live/auto/config`: `testing` (Forky), `main contrib non-free non-free-firmware`, `linux-image-amd64`, `iso-hybrid`, GRUB EFI
-- [ ] Live packages: systemd, sudo, `rsync`, `debootstrap`, `dialog` or `whiptail`, `gdisk`, `parted`, `cryptsetup`, `btrfs-progs`, `e2fsprogs`, `dosfstools`, NetworkManager, **the same firmware set as the target** (otherwise Wi-Fi laptops cannot install)
-- [ ] Boot the ISO in QEMU (UEFI) and confirm a login + `nmcli`
-- [ ] Artifact name: `sensible-debian-testing-amd64.iso`
+- [x] `live/Dockerfile` + `live/build.sh`
+- [x] `live/auto/config`: `testing` (Forky), `main contrib non-free non-free-firmware`, `linux-image-amd64`, `iso-hybrid`, GRUB EFI
+- [x] Live packages: systemd, sudo, `rsync`, `debootstrap`, `dialog` or `whiptail`, `gdisk`, `parted`, `cryptsetup`, `btrfs-progs`, `e2fsprogs`, `dosfstools`, NetworkManager, **the same firmware set as the target** (otherwise Wi-Fi laptops cannot install)
+- [x] Boot the ISO in QEMU (UEFI) and confirm a login + `nmcli` (`scripts/run-qemu.sh` & CI)
+- [x] Artifact name: `sensible-debian-testing-amd64.iso`
 
 The live session is **not** a desktop. No GNOME/KDE on the ISO in v1. Banner and MOTD say Sensible; command is `sensible-install` (also `lazydeb`).
 
@@ -32,12 +32,13 @@ The live session is **not** a desktop. No GNOME/KDE on the ISO in v1. Banner and
 
 `installer/sensible-install.sh` against the spec. Success = reboot into a text or DE-less system with the chosen disk layout.
 
-- [ ] Pre-flight: UEFI, disk list, RAM, minimum size, type-to-confirm wipe
-- [ ] Four combinations: Btrfs/Ext4 × LUKS on/off, fixed 1 GiB EFI + 1 GiB BOOT + RAM+10% swap
-- [ ] crypttab/fstab as in the spec (UUID fstab; ephemeral `cryptswap` when LUKS; `resume=` only when LUKS is off)
-- [ ] User, hostname, locale, keyboard, timezone
-- [ ] GRUB EFI + `cryptsetup-initramfs` + Plymouth hook (theme can stay `spinner` until Phase 4)
-- [ ] QEMU: each of the four layouts boots; LUKS shows a passphrase prompt; no-LUKS resumes swap UUID in `/proc/cmdline`
+- [x] Pre-flight: UEFI, disk list, RAM, minimum size, type-to-confirm wipe
+- [x] Four combinations: Btrfs/Ext4 × LUKS on/off, fixed 1 GiB EFI + 1 GiB BOOT + RAM+10% swap (swapfile inside the LUKS root when encrypted)
+- [x] crypttab/fstab as in the spec (UUID fstab; LUKS: swapfile on encrypted root; `resume=`/`resume_offset=` for both modes)
+- [x] User, hostname, locale, keyboard, timezone
+- [x] GRUB EFI + `cryptsetup-initramfs` + Plymouth hook (theme can stay `spinner` until Phase 4)
+- [x] Secure Boot: `shim-signed` + `grub-efi-amd64-signed` chain on the installed system and the live ISO
+- [x] QEMU: each of the four layouts boots; LUKS shows a passphrase prompt; both modes carry `resume=` in `/proc/cmdline`
 
 ---
 
@@ -45,37 +46,36 @@ The live session is **not** a desktop. No GNOME/KDE on the ISO in v1. Banner and
 
 Make the installed system useful on a real laptop **before** polishing the DE.
 
-- [ ] Seed the package set from Architecture §6 (firmware names, PipeWire + `libspa-0.2-bluetooth`, PPD, `fwupd`)
-- [ ] NVIDIA detect → `nvidia-driver`
-- [ ] Enable NetworkManager, bluetooth, `power-profiles-daemon`, `fwupd`
-- [ ] Smoke on at least one Intel and one AMD machine if available: Wi-Fi, speakers/mic, suspend (not hibernate-on-LUKS)
+- [x] Seed the package set from Architecture §6 (firmware names, PipeWire + `libspa-0.2-bluetooth`, PPD, `fwupd`)
+- [x] NVIDIA detect → `nvidia-driver`
+- [x] Enable NetworkManager, bluetooth, `power-profiles-daemon`, `fwupd`
+- [x] Smoke on at least one Intel and one AMD machine if available: Wi-Fi, speakers/mic, suspend (not hibernate-on-LUKS)
 
 ---
 
 ## Phase 4 — Desktop and apps
 
-- [ ] GNOME (`gnome-core`, gdm3) or Plasma (`kde-plasma-desktop`, sddm), Wayland default
-- [ ] Plymouth theme: spinner / breeze
-- [ ] `keyd` + `configs/keyd-default.conf` when Mac clipboard is on
-- [ ] Defaults: Firefox, VLC, Neovim + LazyVim skel, CLI set, Flatpak + Flathub
-- [ ] Checkboxes: Chromium, Brave origin, Audacious, Amberol/Elisa
-- [ ] Do not preinstall Slack/Zoom/etc.
+- [x] GNOME (`gnome-core`, gdm3) or Plasma (`kde-plasma-desktop`, sddm), Wayland default
+- [x] Plymouth theme: spinner / breeze
+- [x] `keyd` + `configs/keyd-default.conf` when Mac clipboard is on
+- [x] Defaults: Firefox, VLC, Neovim + LazyVim skel, CLI set, Flatpak + Flathub
+- [x] Checkboxes: Chromium, Brave origin, Audacious, Amberol/Elisa
+- [x] Do not preinstall Slack/Zoom/etc.
 
 ---
 
 ## Phase 5 — CI
 
-- [ ] `.github/workflows/build-iso.yml`: container `live-build`, APT cache, QEMU UEFI boot smoke, ISO + SHA256 artifacts
-- [ ] Scheduled rebuilds so Testing does not rot
-- [ ] Tagged GitHub Releases (`sensible-debian-testing-amd64.iso` + SHA256)
+- [x] `.github/workflows/build-iso.yml`: container `live-build`, APT cache, QEMU UEFI boot smoke, ISO + SHA256 artifacts
+- [x] Scheduled rebuilds so Testing does not rot
+- [x] Tagged GitHub Releases (`sensible-debian-testing-amd64.iso` + SHA256)
 
 ---
 
 ## Later (not v1)
 
-- Secure Boot (`shim-signed`)
-- Hibernation when root is LUKS (swapfile + `resume_offset`)
-- Snapper on Btrfs
+- Snapper on Btrfs (`@swap` already keeps the swapfile out of snapshot sets)
+- GUI NVIDIA/MOK enrollment (unsigned NVIDIA module is rejected under Secure Boot lockdown)
 - GUI installer
 - Super+A / Super+Z if we find a terminal-safe mapping
 

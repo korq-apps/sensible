@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+
+lb config noauto \
+    --mode debian \
+    --distribution testing \
+    --archive-areas "main contrib non-free non-free-firmware" \
+    --binary-images iso-hybrid \
+    --bootloader grub-efi \
+    --linux-flavours amd64 \
+    --linux-packages linux-image \
+    --security false \
+    --updates false \
+    --backports false \
+    --memtest none \
+    --iso-application "Sensible Live Installer" \
+    --iso-publisher "Korq <https://korq.io>" \
+    --iso-volume "SENSIBLE_LIVE" \
+    --image-name "sensible-debian-testing-amd64" \
+    --apt-recommends true \
+    --bootappend-live "boot=live components console=ttyS0,115200n8 console=tty0" \
+    "${@}"
