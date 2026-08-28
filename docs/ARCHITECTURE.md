@@ -250,6 +250,6 @@ Steam, Slack, WhatsApp, Zoom, Discord, Spotify, Snapd, any SaaS “default clien
 
 **Planned (Phase 6):** biometrics (§5), oh-my-bash + git defaults (§7), ufw, printing/scanning, developer tools, `--config` unattended installs.
 
-**Later:** Secure Boot on the **live ISO** (deferred from v1 — the signed GRUB needs both a bootstrap `grub.cfg` and its module tree staged under its `/EFI/debian` prefix on the ISO; see git history for the `0100-secure-boot.hook.binary` attempt), Btrfs Snapper (+ `grub-btrfs` boot-menu rollback), TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis; PCR policy must account for the unencrypted `/boot`), FIDO2 keys for sudo/polkit (`libpam-u2f`), GUI NVIDIA/MOK enrollment flow, Calamares if someone wants a GUI, other arches.
+**Later:** Btrfs Snapper (+ `grub-btrfs` boot-menu rollback), TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis; PCR policy must account for the unencrypted `/boot`), FIDO2 keys for sudo/polkit (`libpam-u2f`), GUI NVIDIA/MOK enrollment flow, Calamares if someone wants a GUI, other arches.
 
 **Never (Sensible):** LVM as the guided path, dual-DE live ISO, shipping commercial apps, pretending this is not Debian.
