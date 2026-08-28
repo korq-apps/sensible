@@ -1,0 +1,45 @@
+#!/bin/sh
+# Make the live GRUB menu actually boot.
+#
+# live-build generates boot/grub/config.cfg with `terminal_output gfxterm` only
+# and boot/grub/grub.cfg with no `timeout`, so GRUB renders its menu to the
+# graphical framebuffer and waits forever for a keypress. On a headless or
+# serial console (CI, servers, a laptop lid closed on an external display) the
+# menu is invisible and the machine never boots — the ISO looks "unbootable".
+#
+# Fix, applied to the generated config the running GRUB actually sources
+# (the ISO9660 boot/grub/config.cfg; the efi.img only carries a bootstrap that
+# hands off to it):
+#   - drop the obsolete `insmod efi_uga` (efi_uga.mod no longer ships in GRUB
+#     2.14, so it prints a spurious "file not found" error every boot),
+#   - add a serial terminal alongside gfxterm so the menu shows on serial too,
+#   - set a finite timeout so the default entry auto-boots.
+#
+# NAMING: only *.hook.binary is executed at the binary stage (cwd = binary/).
+set -e
+
+CFG="boot/grub/config.cfg"
+if [ ! -f "$CFG" ]; then
+    echo "grub-serial-timeout hook: $CFG not found (wrong live-build layout?)" >&2
+    exit 1
+fi
+
+# Idempotent: don't append twice if the hook somehow runs again.
+if grep -q 'sensible: serial console' "$CFG"; then
+    echo "grub-serial-timeout hook: already applied to $CFG"
+    exit 0
+fi
+
+# Obsolete module — its insmod only ever prints an error on GRUB 2.14+.
+sed -i '/insmod efi_uga/d' "$CFG"
+
+cat >> "$CFG" <<'EOF'
+
+# sensible: serial console + auto-boot so headless/serial media boots
+serial --unit=0 --speed=115200
+terminal_input console serial
+terminal_output gfxterm console serial
+set timeout=10
+EOF
+
+echo "grub-serial-timeout hook: serial console + timeout added to $CFG"

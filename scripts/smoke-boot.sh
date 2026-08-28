@@ -92,14 +92,20 @@ if [ "${rc}" -ne 0 ] && [ "${rc}" -ne 124 ]; then
     exit 1
 fi
 
+# Strip NULs and ANSI/control escapes before asserting: systemd colourises its
+# banner, so its escape codes split "Welcome to Debian" in the raw log and a
+# plain grep misses it even on a perfect boot. Assert against the cleaned text.
+CLEAN="${WORK}/serial-clean.log"
+tr -d '\000' < "${SERIAL_LOG}" | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g; s/\x1b[()][A-B0]//g' > "${CLEAN}"
+
 fail=0
-if grep -q "Welcome to Debian" "${SERIAL_LOG}"; then
+if grep -q "Welcome to Debian" "${CLEAN}"; then
     echo "  ok: systemd boot banner seen"
 else
     echo "  FAIL: systemd 'Welcome to Debian' banner not seen on serial console" >&2
     fail=1
 fi
-if grep -q "Sensible (aka Lazydeb)" "${SERIAL_LOG}"; then
+if grep -q "Sensible (aka Lazydeb)" "${CLEAN}"; then
     echo "  ok: Sensible live autologin/MOTD reached"
 else
     echo "  FAIL: live session autologin/MOTD ('Sensible (aka Lazydeb)') not reached" >&2
@@ -107,8 +113,8 @@ else
 fi
 
 if [ "${fail}" -ne 0 ]; then
-    echo "----- last 50 lines of serial log -----" >&2
-    tail -n 50 "${SERIAL_LOG}" >&2 || true
+    echo "----- last 50 lines of serial log (cleaned) -----" >&2
+    tail -n 50 "${CLEAN}" >&2 || true
     echo "Smoke test FAILED." >&2
     exit 1
 fi
