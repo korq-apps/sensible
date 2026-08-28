@@ -46,7 +46,18 @@ main() {
     # Parse candidate disks
     mapfile -t DISK_CANDIDATES < <(list_candidate_disks)
     if [ ${#DISK_CANDIDATES[@]} -eq 0 ]; then
-        ui_msgbox "Error" "No suitable target installation disks found."
+        ui_msgbox "Error: No Installable Disk" "\
+No disk qualified as an installation target.
+
+Detected block devices:
+$(explain_no_candidates "${MIN_DISK_MIB}")
+
+Sensible needs a disk of at least ${MIN_DISK_MIB} MiB:
+  1 GiB EFI + 1 GiB /boot + ${SWAP_MIB} MiB swap + 20 GiB root
+
+Swap is sized to RAM + 10% so the system can hibernate, so the minimum
+grows with RAM (this machine has ${RAM_MIB} MiB). In a VM, give the guest
+a bigger virtual disk, or less RAM."
         exit 1
     fi
 

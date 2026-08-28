@@ -300,7 +300,12 @@ printf '\n1\n' > "${ANSWERS}"   # welcome + disk pick only; never reached
 rc=0; ( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" ) || rc=$?
 cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
 assert_rc "installer exits 1 when no disk is large enough" 1 "${rc}"
-assert_contains "no-candidates error surfaced" "$(cat "${ERR}")" "No suitable target installation disks found"
+assert_contains "no-candidates error surfaced" "$(cat "${ERR}")" "No disk qualified as an installation target"
+# Not just that it failed: the dialog must say which disk was rejected and why,
+# so an undersized VM disk is distinguishable from having no disk at all.
+assert_contains "error names the rejected disk" "$(cat "${ERR}")" "/dev/sda"
+assert_contains "error gives the reason" "$(cat "${ERR}")" "too small"
+assert_contains "error explains the RAM-derived minimum" "$(cat "${ERR}")" "RAM + 10%"
 assert_not_contains "no partitioning happened" "$(log_text)" "sgdisk"
 lsblk() {
     mlog "lsblk $*"

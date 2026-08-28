@@ -28,6 +28,34 @@ disk_below_min() {
     [ "${size_bytes:-0}" -lt $((min_mib * 1048576)) ]
 }
 
+explain_no_candidates() {
+    # Per-device reason, shown only when nothing survived the filters.
+    # "No suitable target installation disks found." on its own gives someone
+    # no way to tell an absent disk from an undersized one, and the minimum
+    # here scales with RAM, so the cause is rarely obvious.
+    #
+    # Deliberately re-scans instead of sharing state with list_candidate_disks:
+    # that runs in a subshell (mapfile < <(...)), so globals set inside it
+    # would not survive. Filter order mirrors list_candidate_disks exactly.
+    local min_mib="$1"
+    local name size type ro found=0
+    while read -r name size type ro; do
+        found=1
+        if [ "$type" != "disk" ]; then
+            printf '  %-12s %-8s not a disk (%s)\n' "$name" "$size" "$type"
+        elif [ "$ro" != "0" ]; then
+            printf '  %-12s %-8s read-only\n' "$name" "$size"
+        elif lsblk -no MOUNTPOINTS "$name" 2>/dev/null | grep -qE '^/(run/live/medium|run/live/findiso)?$'; then
+            printf '  %-12s %-8s in use as the live medium or root\n' "$name" "$size"
+        elif disk_below_min "$name" "$min_mib"; then
+            printf '  %-12s %-8s too small (needs %s MiB)\n' "$name" "$size" "$min_mib"
+        else
+            printf '  %-12s %-8s eligible\n' "$name" "$size"
+        fi
+    done < <(lsblk -dpno NAME,SIZE,TYPE,RO 2>/dev/null)
+    [ "$found" -eq 1 ] || printf '  (no block devices detected at all)\n'
+}
+
 list_candidate_disks() {
     # List candidate disks excluding loop devices, optical drives, and live
     # mounts. Disks below the minimum install size (spec §1) are refused.

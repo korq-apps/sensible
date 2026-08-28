@@ -179,4 +179,35 @@ lsblk() {
 disk_below_min /dev/vda 31539
 assert_rc "large pre-partitioned disk still accepted" 1 $?
 
+t_section "explain_no_candidates: says WHY nothing qualified"
+# The bare "No suitable target installation disks found." gave no way to tell
+# an absent disk from an undersized one. Reproduces the common test-VM layout:
+# a 20 GiB virtio disk plus the live ISO on an optical device.
+lsblk() {
+    local dev="${!#}"
+    case "$*" in
+        *"NAME,SIZE,TYPE,RO"*) printf '/dev/vda 20G disk 0\n/dev/sr0 1.3G rom 1\n' ;;
+        *MOUNTPOINTS*) [ "$dev" = "/dev/sr0" ] && echo "/run/live/medium" ;;
+        *"-d "*) case "$dev" in /dev/vda) echo 21474836480 ;; esac ;;
+    esac
+}
+REASONS="$(explain_no_candidates 31539)"
+assert_contains "undersized disk named with its size" "${REASONS}" "/dev/vda"
+assert_contains "and the reason it was refused" "${REASONS}" "too small (needs 31539 MiB)"
+assert_contains "optical device explained too" "${REASONS}" "not a disk (rom)"
+
+t_section "explain_no_candidates: no block devices at all"
+lsblk() { case "$*" in *"NAME,SIZE,TYPE,RO"*) : ;; esac; }
+assert_contains "empty machine says so explicitly" "$(explain_no_candidates 31539)" "no block devices detected at all"
+
+t_section "explain_no_candidates: a read-only disk is not silently dropped"
+lsblk() {
+    case "$*" in
+        *"NAME,SIZE,TYPE,RO"*) printf '/dev/sda 500G disk 1\n' ;;
+        *MOUNTPOINTS*) : ;;
+        *"-d "*) echo 536870912000 ;;
+    esac
+}
+assert_contains "read-only disk reported as such" "$(explain_no_candidates 31539)" "read-only"
+
 t_summary
