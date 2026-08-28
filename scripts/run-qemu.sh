@@ -24,6 +24,7 @@ fi
 # Locate OVMF firmware (prefer pflash code+vars pairing, fall back to -bios)
 OVMF_CODE=""
 for candidate in \
+    /usr/share/OVMF/OVMF_CODE_4M.fd \
     /usr/share/OVMF/OVMF_CODE.fd \
     /usr/share/edk2/x64/OVMF_CODE.fd \
     /usr/share/edk2-ovmf/x64/OVMF_CODE.fd \

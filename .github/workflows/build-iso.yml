@@ -62,9 +62,28 @@ jobs:
 
       - name: Headless QEMU UEFI Boot Smoke Test
         run: |
+          # Locate OVMF code+vars pair (Ubuntu 24.04 ships 4M variants)
+          OVMF_CODE=""
+          for pair in \
+            "/usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_VARS_4M.fd" \
+            "/usr/share/OVMF/OVMF_CODE.fd /usr/share/OVMF/OVMF_VARS.fd"; do
+            set -- ${pair}
+            if [ -f "$1" ] && [ -f "$2" ]; then
+              OVMF_CODE="$1"
+              OVMF_VARS="$2"
+              break
+            fi
+          done
+          if [ -z "${OVMF_CODE}" ]; then
+            echo "::error::No OVMF code/vars pair found under /usr/share/OVMF:"
+            ls -la /usr/share/OVMF || true
+            exit 1
+          fi
+          echo "Using OVMF: ${OVMF_CODE}"
+
           # Create a dummy virtual disk and a working copy of the EFI varstore
           qemu-img create -f qcow2 /tmp/smoke-disk.qcow2 10G
-          cp /usr/share/OVMF/OVMF_VARS.fd /tmp/OVMF_VARS.fd
+          cp "${OVMF_VARS}" /tmp/OVMF_VARS.fd
 
           # Boot headlessly with UEFI (pflash code+vars) and a serial console.
           # The live image autologins root on tty1 and serial-getty@ttyS0, so
@@ -73,7 +92,7 @@ jobs:
           timeout 600s qemu-system-x86_64 \
             -m 3072 \
             -smp 2 \
-            -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
+            -drive if=pflash,format=raw,readonly=on,file=${OVMF_CODE} \
             -drive if=pflash,format=raw,file=/tmp/OVMF_VARS.fd \
             -cdrom sensible-debian-testing-amd64.iso \
             -drive file=/tmp/smoke-disk.qcow2,format=qcow2,if=virtio \
