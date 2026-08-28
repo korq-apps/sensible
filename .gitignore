@@ -21,3 +21,4 @@ live/config/includes.chroot/opt/sensible/
 *~
 *.swp
 *.bak
+live/.build.lock
