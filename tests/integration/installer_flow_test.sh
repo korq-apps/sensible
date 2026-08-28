@@ -117,12 +117,14 @@ prep_target() {
 }
 
 # main() uses exit() on abort paths, so always invoke it in a subshell.
+# errexit must be (re)enabled INSIDE the subshell: being on the left of `||`
+# suppresses it for the subshell body, which would mask set -e failures.
 run_flow() {
     prep_target
     mock_setup
     : > "${OUT}"; : > "${ERR}"
     RC=0
-    ( main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" ) || RC=$?
+    ( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" ) || RC=$?
     cp "${MOCK_LOG}" "${WORK}/calls.log"
     mock_teardown
 }
@@ -140,6 +142,8 @@ assert_common_success() {
     assert_file_contains "locale.gen" "${MNT}/etc/locale.gen" "en_US.UTF-8 UTF-8"
     assert_file_contains "default locale" "${MNT}/etc/default/locale" "LANG=en_US.UTF-8"
     assert_file_contains "keyboard layout applied" "${MNT}/etc/default/keyboard" 'XKBLAYOUT="us"'
+    assert_file_not_exists "no root autologin leak into target (tty1)" "${MNT}/etc/systemd/system/getty@tty1.service.d/autologin.conf"
+    assert_file_not_exists "no root autologin leak into target (serial)" "${MNT}/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf"
     assert_contains "timezone symlink attempted via chroot" "$(log_text)" "chroot ${MNT} ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime"
     assert_contains "groups pre-created" "$(log_text)" "chroot ${MNT} groupadd -f bluetooth"
     assert_contains "user added to sudo group" "$(log_text)" "chroot ${MNT} useradd -m -s /bin/bash -G sudo,audio,video,plugdev,netdev,bluetooth alice"
@@ -256,7 +260,7 @@ lsblk() {
 }
 printf '\n1\n' > "${ANSWERS}"   # welcome + disk pick only; never reached
 : > "${OUT}"; : > "${ERR}"
-rc=0; ( main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" ) || rc=$?
+rc=0; ( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" ) || rc=$?
 cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
 assert_rc "installer exits 1 when no disk is large enough" 1 "${rc}"
 assert_contains "no-candidates error surfaced" "$(cat "${ERR}")" "No suitable target installation disks found"
@@ -275,7 +279,7 @@ t_section "Abort: wipe confirmation must match disk exactly"
 build_answers btrfs yes gnome yes "" "/dev/wrong-disk"
 prep_target
 mock_setup
-rc=0; ( main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" ) || rc=$?
+rc=0; ( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" ) || rc=$?
 cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
 assert_rc "installer aborts on mismatched confirmation" 1 "${rc}"
 assert_not_contains "no partitioning on mismatch" "$(log_text)" "sgdisk"
@@ -303,7 +307,7 @@ mock_setup
     printf '\n'                       # enter on the final "Complete" msgbox
 } > "${ANSWERS}"
 : > "${OUT}"; : > "${ERR}"
-rc=0; ( main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" ) || rc=$?
+rc=0; ( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" ) || rc=$?
 cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
 assert_rc "install succeeds after re-prompt" 0 "${rc}"
 assert_contains "user 'alice' created (not 'Bad Name')" "$(log_text)" "useradd -m -s /bin/bash -G sudo,audio,video,plugdev,netdev,bluetooth alice"

@@ -51,32 +51,47 @@ install_default_apps() {
 install_optional_apps() {
     local extra_options="$1" # string or array of selected tags
 
+    # Optional installs never abort the whole installation, but failures are
+    # surfaced loudly: the user must know their selection was not applied.
     if [[ "$extra_options" =~ "brave" ]]; then
         log_info "Configuring official Brave Browser apt repository..."
         mkdir -p ${MNT}/usr/share/keyrings ${MNT}/etc/apt/sources.list.d
-        curl -fsSLo ${MNT}/usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg || true
-        echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" > ${MNT}/etc/apt/sources.list.d/brave-browser-release.list
-        chroot ${MNT} apt-get update -y || true
-        DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y brave-browser || true
+        if ! curl -fsSLo ${MNT}/usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg; then
+            log_warn "Could not download the Brave signing key; skipping Brave."
+        else
+            echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" > ${MNT}/etc/apt/sources.list.d/brave-browser-release.list
+            chroot ${MNT} apt-get update -y || log_warn "Brave apt origin update failed."
+            if ! DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y brave-browser; then
+                log_warn "Brave installation failed; the browser was not installed."
+            fi
+        fi
     fi
 
     if [[ "$extra_options" =~ "chromium" ]]; then
         log_info "Installing Chromium..."
-        DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y chromium || true
+        if ! DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y chromium; then
+            log_warn "Chromium installation failed; the package was not installed."
+        fi
     fi
 
     if [[ "$extra_options" =~ "audacious" ]]; then
         log_info "Installing Audacious..."
-        DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y audacious || true
+        if ! DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y audacious; then
+            log_warn "Audacious installation failed; the package was not installed."
+        fi
     fi
 
     if [[ "$extra_options" =~ "amberol" ]]; then
         log_info "Installing Amberol..."
-        DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y amberol || true
+        if ! DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y amberol; then
+            log_warn "Amberol installation failed; the package was not installed."
+        fi
     fi
 
     if [[ "$extra_options" =~ "elisa" ]]; then
         log_info "Installing Elisa..."
-        DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y elisa || true
+        if ! DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y elisa; then
+            log_warn "Elisa installation failed; the package was not installed."
+        fi
     fi
 }

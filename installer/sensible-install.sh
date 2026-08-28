@@ -169,14 +169,23 @@ main() {
     # 10. Timezone, Locale & Keyboard
     local TIMEZONE
     TIMEZONE=$(timedatectl show --property=Timezone --value 2>/dev/null || echo "UTC")
-    TIMEZONE=$(ui_inputbox "Timezone" "Enter timezone (e.g. UTC, America/New_York, Europe/London):" "${TIMEZONE:-UTC}")
+    while true; do
+        TIMEZONE=$(ui_inputbox "Timezone" "Enter timezone (e.g. UTC, America/New_York, Europe/London):" "${TIMEZONE:-UTC}")
+        TIMEZONE="${TIMEZONE:-UTC}"
+        # A typo would create a dangling /etc/localtime (ln -sf does not check).
+        if [ -e "/usr/share/zoneinfo/${TIMEZONE}" ]; then
+            break
+        fi
+        ui_msgbox "Invalid Timezone" "/usr/share/zoneinfo/${TIMEZONE} does not exist.\nUse an IANA name like Europe/Berlin or America/New_York."
+    done
 
     local LOCALE="en_US.UTF-8"
     while true; do
         LOCALE=$(ui_inputbox "Locale" "Enter system locale:" "${LOCALE}")
         LOCALE="${LOCALE:-en_US.UTF-8}"
-        # Spec §3: the locale must exist in /usr/share/i18n/SUPPORTED
-        if [ ! -r /usr/share/i18n/SUPPORTED ] || grep -Eq "^${LOCALE//./\\.}[[:space:]]+UTF-8$" /usr/share/i18n/SUPPORTED; then
+        # Spec §3: the locale must exist in /usr/share/i18n/SUPPORTED.
+        # Field-based match: no regex on user input.
+        if [ ! -r /usr/share/i18n/SUPPORTED ] || awk -v loc="${LOCALE}" '$1 == loc && $2 == "UTF-8" { found = 1 } END { exit !found }' /usr/share/i18n/SUPPORTED; then
             break
         fi
         ui_msgbox "Invalid Locale" "${LOCALE} was not found in /usr/share/i18n/SUPPORTED (UTF-8).\nExample: en_US.UTF-8"
@@ -228,11 +237,16 @@ main() {
         rsync -aAX \
             --exclude=/dev --exclude=/proc --exclude=/sys --exclude=/tmp \
             --exclude=/run --exclude="${MNT}" --exclude=/media --exclude=/lost+found \
+            --exclude=/etc/systemd/system/getty@tty1.service.d/autologin.conf \
+            --exclude=/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf \
             / "${MNT}/"
     else
         log_info "Bootstrapping Debian Testing to ${MNT} with debootstrap..."
         debootstrap --arch=amd64 testing ${MNT} https://deb.debian.org/debian
     fi
+    # Live-session-only: never ship passwordless root autologin to the target.
+    rm -f ${MNT}/etc/systemd/system/getty@tty1.service.d/autologin.conf \
+          ${MNT}/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf
 
     # Step 4: Bind Mounts & DNS
     log_info "Preparing chroot environment..."

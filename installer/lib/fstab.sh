@@ -22,6 +22,9 @@ generate_crypttab_and_fstab() {
     require_id "ROOT filesystem UUID" "$ROOT_FS_UUID"
     require_id "BOOT filesystem UUID" "$BOOT_UUID"
     require_id "EFI filesystem UUID" "$EFI_UUID"
+    if [ "$enable_luks" = "true" ]; then
+        require_id "LUKS partition UUID" "$ROOT_PART_UUID"
+    fi
 
     log_info "Generating /etc/crypttab..."
     if [ "$enable_luks" = "true" ]; then

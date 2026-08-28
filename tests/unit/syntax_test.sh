@@ -23,6 +23,13 @@ sh_files=(
     scripts/run-qemu.sh
     tests/run-tests.sh
     tests/lib/harness.sh
+    tests/unit/common_test.sh
+    tests/unit/disk_test.sh
+    tests/unit/fstab_test.sh
+    tests/unit/desktop_test.sh
+    tests/unit/apps_test.sh
+    tests/unit/syntax_test.sh
+    tests/integration/installer_flow_test.sh
 )
 for f in "${sh_files[@]}"; do
     if bash -n "${REPO_ROOT}/${f}" 2>/dev/null; then

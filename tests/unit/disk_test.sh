@@ -133,19 +133,19 @@ assert_contains "multi-word model kept intact" "$(printf '%s\n' "${CANDS[@]}")" 
 assert_not_contains "10G disk filtered (below 31539 MiB min)" "$(printf '%s\n' "${CANDS[@]}")" "/dev/vda"
 assert_not_contains "live medium excluded" "$(printf '%s\n' "${CANDS[@]}")" "/dev/zda"
 
-t_section "list_candidate_disks: fallback when primary list is empty"
+t_section "list_candidate_disks: no fallback — only the live medium exists"
+mock_reset
 lsblk() {
     mlog "lsblk $*"
     case "$*" in
-        *"NAME,SIZE,TYPE,RO"*) printf '/dev/sda 500G disk 1\n' ;;  # read-only -> skipped
-        *"NAME,SIZE,TYPE"*)    printf '/dev/sdb 500G disk\n' ;;
-        *MOUNTPOINTS*) : ;;
+        *"NAME,SIZE,TYPE,RO"*) printf '/dev/zda 500G disk 0\n' ;;
+        *MOUNTPOINTS*) echo "/run/live/medium" ;;
         *"-bno SIZE"*) echo 536870912000 ;;
-        *"-dno MODEL"*) echo "WDC WD5000" ;;
+        *"-dno MODEL"*) echo "LiveUSB" ;;
     esac
 }
 mapfile -t CANDS < <(list_candidate_disks)
-assert_contains "fallback lists read-only-adjacent writable disk" "$(printf '%s\n' "${CANDS[@]}")" "/dev/sdb"
+assert_eq "live-only system yields zero candidates (never offered for wipe)" 0 "${#CANDS[@]}"
 
 t_section "disk_below_min"
 lsblk() { case "$*" in *"-bno SIZE"*) echo 10737418240 ;; esac; }  # 10 GiB

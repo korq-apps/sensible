@@ -131,10 +131,18 @@ ui_menu() {
             echo "$i) ${items[j]} - ${items[j+1]}" >&2
             ((i++))
         done
-        read -rp "Selection: " sel
-        # map number to tag
-        local idx=$(((sel - 1) * 2))
-        echo "${items[idx]}"
+        # Re-prompt until the selection is a number within range; an empty or
+        # non-numeric answer must never map to an unintended item.
+        local idx sel
+        while true; do
+            read -rp "Selection: " sel
+            if [[ "${sel:-}" =~ ^[0-9]+$ ]] && [ "${sel}" -ge 1 ] && [ "${sel}" -le $(( ${#items[@]} / 2 )) ]; then
+                idx=$(((sel - 1) * 2))
+                echo "${items[idx]}"
+                return 0
+            fi
+            echo "Please enter a number between 1 and $(( ${#items[@]} / 2 ))." >&2
+        done
     fi
 }
 

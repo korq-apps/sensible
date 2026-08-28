@@ -30,6 +30,8 @@ list_candidate_disks() {
     # mounts. Disks below the minimum install size (spec §1) are refused.
     # Parsing uses only space-free lsblk columns (NAME,SIZE,TYPE[,RO]); MODEL
     # may contain spaces and is queried per-disk for display only.
+    # Deliberately no fallback: if nothing survives the filters (e.g. the
+    # only disk is the live USB), returning an empty list is the safe answer.
     local min_mib
     min_mib=$(calc_min_disk_mb)
     local candidates=()
@@ -47,20 +49,6 @@ list_candidate_disks() {
             fi
         fi
     done < <(lsblk -dpno NAME,SIZE,TYPE,RO 2>/dev/null)
-
-    if [ ${#candidates[@]} -eq 0 ]; then
-        # Fallback to any disk
-        while read -r name size type; do
-            if [ "$type" = "disk" ]; then
-                if disk_below_min "$name" "$min_mib"; then
-                    log_warn "Skipping ${name}: smaller than the ${min_mib} MiB minimum."
-                    continue
-                fi
-                model=$(lsblk -dno MODEL "$name" 2>/dev/null | head -n 1)
-                candidates+=("$name" "${size} - ${model:-Disk}")
-            fi
-        done < <(lsblk -dpno NAME,SIZE,TYPE 2>/dev/null)
-    fi
 
     if [ ${#candidates[@]} -gt 0 ]; then
         printf '%s\n' "${candidates[@]}"

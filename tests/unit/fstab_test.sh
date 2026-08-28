@@ -68,5 +68,5 @@ rc="$(run_exiting generate_crypttab_and_fstab /dev/mapper/cryptroot /dev/sda2 /d
 assert_rc "missing ROOT UUID exits 1" 1 "${rc}"
 assert_file_not_contains "fstab not rewritten on failure" "${MNT}/etc/fstab" "SHOULD-NOT-APPEAR"
 
-t_summary
 rm -rf "${TMP_MNT}"
+t_summary

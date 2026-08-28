@@ -45,7 +45,11 @@ if [ -n "${OVMF_CODE}" ] && [[ "${OVMF_CODE}" == *OVMF_CODE.fd ]]; then
 fi
 
 if [ -z "${OVMF_CODE}" ]; then
-    echo "Warning: OVMF UEFI firmware not found in standard paths. Attempting bios boot if supported or install ovmf/edk2-ovmf." >&2
+    echo "Error: OVMF UEFI firmware not found in standard paths." >&2
+    echo "Sensible is UEFI-only; install the firmware package and retry:" >&2
+    echo "  Debian/Ubuntu: sudo apt-get install ovmf" >&2
+    echo "  Arch:          sudo pacman -S edk2-ovmf" >&2
+    exit 1
 fi
 
 # Create test disk if not existing

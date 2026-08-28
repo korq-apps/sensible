@@ -21,7 +21,7 @@ Reproducible `live-build` in Docker/Podman. Output: a hybrid UEFI ISO that boots
 - [x] `live/Dockerfile` + `live/build.sh`
 - [x] `live/auto/config`: `testing` (Forky), `main contrib non-free non-free-firmware`, `linux-image-amd64`, `iso-hybrid`, GRUB EFI
 - [x] Live packages: systemd, sudo, `rsync`, `debootstrap`, `dialog` or `whiptail`, `gdisk`, `parted`, `cryptsetup`, `btrfs-progs`, `e2fsprogs`, `dosfstools`, NetworkManager, **the same firmware set as the target** (otherwise Wi-Fi laptops cannot install)
-- [x] Boot the ISO in QEMU (UEFI) and confirm a login + `nmcli` (`scripts/run-qemu.sh` & CI)
+- [ ] Boot the ISO in QEMU (UEFI) and confirm a login + `nmcli` (`scripts/run-qemu.sh` & CI; CI boot smoke pending first green run)
 - [x] Artifact name: `sensible-debian-testing-amd64.iso`
 
 The live session is **not** a desktop. No GNOME/KDE on the ISO in v1. Banner and MOTD say Sensible; command is `sensible-install` (also `lazydeb`).
@@ -38,7 +38,7 @@ The live session is **not** a desktop. No GNOME/KDE on the ISO in v1. Banner and
 - [x] User, hostname, locale, keyboard, timezone
 - [x] GRUB EFI + `cryptsetup-initramfs` + Plymouth hook (theme can stay `spinner` until Phase 4)
 - [x] Secure Boot: `shim-signed` + `grub-efi-amd64-signed` chain on the installed system and the live ISO
-- [x] QEMU: each of the four layouts boots; LUKS shows a passphrase prompt; both modes carry `resume=` in `/proc/cmdline`
+- [ ] QEMU: each of the four layouts boots; LUKS shows a passphrase prompt; both modes carry `resume=` in `/proc/cmdline`
 
 ---
 
@@ -49,7 +49,7 @@ Make the installed system useful on a real laptop **before** polishing the DE.
 - [x] Seed the package set from Architecture §6 (firmware names, PipeWire + `libspa-0.2-bluetooth`, PPD, `fwupd`)
 - [x] NVIDIA detect → `nvidia-driver`
 - [x] Enable NetworkManager, bluetooth, `power-profiles-daemon`, `fwupd`
-- [x] Smoke on at least one Intel and one AMD machine if available: Wi-Fi, speakers/mic, suspend (not hibernate-on-LUKS)
+- [ ] Smoke on at least one Intel and one AMD machine if available: Wi-Fi, speakers/mic, suspend (not hibernate-on-LUKS)
 
 ---
 
