@@ -36,6 +36,7 @@ lsblk() {
 }
 
 sgdisk()      { mlog "sgdisk $*"; }
+rsync()       { mlog "rsync $*"; }
 wipefs()      { mlog "wipefs $*"; }
 partprobe()   { mlog "partprobe $*"; }
 mkfs.vfat()   { mlog "mkfs.vfat $*"; }
@@ -191,6 +192,8 @@ assert_file_contains "fstab: @swap subvolume" "${MNT}/etc/fstab" "UUID=ROOTFS-FS
 assert_file_contains "fstab: swapfile on encrypted root" "${MNT}/etc/fstab" "/swap/swapfile none swap sw 0 0"
 assert_file_contains "resume= via swapfile offset (hibernation on LUKS)" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTFS-FS-UUID-5555 resume_offset=38400"
 assert_file_contains "initramfs RESUME set" "${MNT}/etc/initramfs-tools/conf.d/resume" "RESUME=UUID=ROOTFS-FS-UUID-5555"
+assert_file_contains "initramfs keymap carried for LUKS passphrase entry" "${MNT}/etc/initramfs-tools/initramfs.conf" "KEYMAP=y"
+assert_file_not_contains "no nvidia modeset without NVIDIA GPU" "${MNT}/etc/default/grub.d/installer.cfg" "nvidia-drm.modeset=1"
 assert_contains "GNOME packages" "$(log_text)" "gnome-core gdm3 gnome-software gnome-software-plugin-flatpak"
 assert_contains "spinner theme" "$(log_text)" "plymouth-set-default-theme -R spinner"
 assert_contains "gdm3 enabled" "$(log_text)" "systemctl enable gdm3.service"
@@ -218,6 +221,8 @@ assert_file_contains "crypttab placeholder" "${MNT}/etc/crypttab" "No encrypted 
 assert_file_contains "fstab: plain swap by UUID" "${MNT}/etc/fstab" "UUID=SWAP-FS-UUID-3333 none swap sw 0 0"
 assert_file_contains "resume=UUID for partition swap" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=SWAP-FS-UUID-3333"
 assert_file_contains "initramfs RESUME set" "${MNT}/etc/initramfs-tools/conf.d/resume" "RESUME=UUID=SWAP-FS-UUID-3333"
+assert_file_not_exists "no initramfs keymap override without LUKS" "${MNT}/etc/initramfs-tools/initramfs.conf"
+assert_file_contains "nvidia-drm.modeset=1 on NVIDIA (Wayland needs KMS)" "${MNT}/etc/default/grub.d/installer.cfg" "nvidia-drm.modeset=1"
 assert_contains "KDE packages" "$(log_text)" "kde-plasma-desktop sddm plasma-discover plasma-discover-backend-flatpak plymouth-theme-breeze"
 assert_contains "breeze theme" "$(log_text)" "plymouth-set-default-theme -R breeze"
 assert_contains "sddm enabled" "$(log_text)" "systemctl enable sddm.service"
@@ -252,6 +257,32 @@ assert_contains "ext4 on raw partition" "$(log_text)" "mkfs.ext4 -F -L ROOT -O f
 assert_file_contains "plain swap UUID" "${MNT}/etc/fstab" "UUID=SWAP-FS-UUID-3333 none swap sw 0 0"
 assert_file_contains "resume=UUID set" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=SWAP-FS-UUID-3333"
 assert_file_contains "keyd conf deployed" "${MNT}/etc/keyd/default.conf" "v = S-insert"
+
+t_section "Combo 5: Ext4 + LUKS, KDE, autologin accepted (SDDM needs Session=)"
+build_answers ext4 yes kde no ""
+MOCK_NVIDIA=0
+run_flow
+assert_common_success
+assert_file_contains "SDDM autologin user" "${MNT}/etc/sddm.conf.d/autologin.conf" "User=alice"
+assert_file_contains "SDDM autologin session (required, else autologin is a no-op)" "${MNT}/etc/sddm.conf.d/autologin.conf" "Session=plasma"
+assert_file_contains "KDE idle lock defaults" "${MNT}/etc/xdg/kscreenlockerrc" "Autolock=true"
+
+t_section "Live-copy deploy path: excludes keep API dirs, mountpoints exist"
+build_answers btrfs no gnome no ""
+MOCK_NVIDIA=0
+LIVE_ROOT_SENTINEL="${WORK}"   # any existing dir forces the rsync branch
+run_flow
+unset LIVE_ROOT_SENTINEL
+assert_common_success
+assert_contains "rsync deploy used" "$(log_text)" "rsync -aAX"
+assert_not_contains "debootstrap not used on the live path" "$(log_text)" "debootstrap"
+assert_contains "excludes /dev CONTENTS, keeps the directory" "$(log_text)" "--exclude=/dev/*"
+assert_contains "excludes /proc contents" "$(log_text)" "--exclude=/proc/*"
+assert_contains "excludes /run contents" "$(log_text)" "--exclude=/run/*"
+assert_not_contains "no whole-directory /dev exclude (bind mounts need it)" "$(log_text)" "--exclude=/dev --"
+for d in dev proc sys run tmp; do
+    if [ -d "${MNT}/${d}" ]; then t_ok; else t_fail "target /${d} exists for bind mount" "missing ${MNT}/${d}"; fi
+done
 
 t_section "Abort: undersized disk refused before partitioning"
 prep_target

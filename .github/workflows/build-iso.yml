@@ -52,8 +52,18 @@ jobs:
 
       - name: Build Live ISO in Container
         run: |
+          set -o pipefail
           chmod +x live/build.sh
-          ./live/build.sh
+          ./live/build.sh 2>&1 | tee /tmp/livebuild.log
+
+      - name: Assert Secure Boot hook actually ran
+        run: |
+          # A hook with the wrong name is silently skipped and the build still
+          # succeeds (with an unsigned GRUB the SB-off smoke can't detect).
+          if ! grep -q "secure-boot hook: shim + Debian-signed GRUB installed" /tmp/livebuild.log; then
+            echo "::error::Secure Boot binary hook did not run during live-build."
+            exit 1
+          fi
 
       - name: Install QEMU and OVMF for Smoke Test
         run: |

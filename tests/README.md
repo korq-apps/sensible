@@ -15,7 +15,7 @@ tests/run-tests.sh    # no root, no container, no network — plain bash
 | `fstab_test.sh` | All four combinations (Btrfs/Ext4 x LUKS on/off): crypttab root by LUKS header UUID (LUKS: root only), swapfile line on the encrypted root, plain swap UUID, `@swap` subvol line, tmpfs, and the blkid-empty abort guards |
 | `desktop_test.sh` | GNOME/KDE package sets, Plymouth spinner/breeze, gdm3/sddm enablement, keyd conf deployed from `configs/` (never generated — spec §11), hard-fail on missing conf |
 | `apps_test.sh` | Canonical default app set (Architecture §7), Flathub, LazyVim skel + user copy + ownership, Brave official apt origin + signed keyring, quoted whiptail checklist matching, amberol/elisa per tag, no Slack/Zoom/Steam/Snapd |
-| `syntax_test.sh` | `bash -n` over every shell script in the repo + executable bits |
+| `syntax_test.sh` | `bash -n` over every shell script in the repo, executable bits, and live-build hook naming (`*.hook.{chroot,binary}` — anything else is silently skipped) |
 
 ### Integration test (`tests/integration/installer_flow_test.sh`)
 
@@ -28,6 +28,8 @@ function mock that records its invocation. Asserts, per scenario:
 - Combo 2: Btrfs + no LUKS, KDE, NVIDIA GPU
 - Combo 3: Ext4 + LUKS, GNOME, one extra app
 - Combo 4: Ext4 + no LUKS, KDE, keyd on
+- Combo 5: Ext4 + LUKS, KDE, autologin accepted (SDDM `Session=` required)
+- Live-copy deploy path: rsync excludes keep the API directories, mountpoints exist
 - Aborts: undersized/no-disk, mismatched wipe confirmation
 - Re-prompts: invalid username rejected, valid accepted
 

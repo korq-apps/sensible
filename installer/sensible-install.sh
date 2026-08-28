@@ -245,11 +245,14 @@ main() {
 
     # Step 3: Base Deployment
     log_info "Deploying base system..."
-    if [ -d /lib/live ] || [ -f /etc/issue.sensible ]; then
+    if [ -d "${LIVE_ROOT_SENTINEL:-/lib/live}" ] || [ -f /etc/issue.sensible ]; then
         log_info "Copying live environment root to ${MNT} with rsync..."
-        rsync -aAX \
-            --exclude=/dev --exclude=/proc --exclude=/sys --exclude=/tmp \
-            --exclude=/run --exclude="${MNT}" --exclude=/media --exclude=/lost+found \
+        # Exclude the CONTENTS of the API filesystems ('/dev/*'), never the
+        # directories themselves ('/dev'): the bind mounts below need existing
+        # mountpoints on the target.
+        rsync -aAX --info=progress2 \
+            --exclude='/dev/*' --exclude='/proc/*' --exclude='/sys/*' --exclude='/tmp/*' \
+            --exclude='/run/*' --exclude="${MNT}/*" --exclude='/media/*' --exclude=/lost+found \
             --exclude=/etc/systemd/system/getty@tty1.service.d/autologin.conf \
             --exclude=/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf \
             / "${MNT}/"
@@ -257,6 +260,9 @@ main() {
         log_info "Bootstrapping Debian Testing to ${MNT} with debootstrap..."
         debootstrap --arch=amd64 testing ${MNT} https://deb.debian.org/debian
     fi
+    # Whatever the deploy path produced, the API mountpoints and /tmp must exist.
+    mkdir -p "${MNT}/dev" "${MNT}/proc" "${MNT}/sys" "${MNT}/run" "${MNT}/tmp" "${MNT}/mnt" "${MNT}/media"
+    chmod 1777 "${MNT}/tmp"
     # Live-session-only: never ship passwordless root autologin to the target.
     rm -f ${MNT}/etc/systemd/system/getty@tty1.service.d/autologin.conf \
           ${MNT}/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf
@@ -279,8 +285,9 @@ main() {
 
     chroot ${MNT} ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime 2>/dev/null || true
     echo "$LOCALE UTF-8" > ${MNT}/etc/locale.gen
-    chroot ${MNT} locale-gen || true
     echo "LANG=$LOCALE" > ${MNT}/etc/default/locale
+    # locale-gen itself runs after Step 7: on a debootstrap base the locales
+    # package (which provides it) is not installed yet at this point.
 
     # Ensure supplemental groups exist before useradd: in a debootstrap base
     # (and on the live image, without bluez) groups like bluetooth/netdev do
@@ -301,6 +308,9 @@ main() {
     # Step 7: Hardware Packages & Services (Phase 3)
     install_hardware_packages
 
+    # Step 7a: Generate locales now that the locales package is present.
+    chroot ${MNT} locale-gen || log_warn "locale-gen failed; locales may be incomplete on the target."
+
     # Step 7b: Keyboard layout through keyboard-configuration (spec §3)
     configure_keyboard "$KEYBOARD_LAYOUT"
 
@@ -316,9 +326,15 @@ main() {
 
     # Step 10: GRUB & Initramfs
     log_info "Configuring GRUB and initramfs..."
+    local GRUB_CMDLINE="quiet splash loglevel=3"
+    if detect_nvidia_gpu; then
+        # KMS is required for GDM/KWin to offer a Wayland session on the
+        # proprietary driver; without it the DE silently falls back to X11.
+        GRUB_CMDLINE+=" nvidia-drm.modeset=1"
+    fi
     mkdir -p ${MNT}/etc/default/grub.d
     cat <<EOF > ${MNT}/etc/default/grub.d/installer.cfg
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3"
+GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE}"
 GRUB_GFXMODE=auto
 GRUB_GFXPAYLOAD_LINUX=keep
 EOF
@@ -328,6 +344,15 @@ EOF
     # no-LUKS: dedicated plaintext swap partition.
     mkdir -p ${MNT}/etc/initramfs-tools/conf.d
     if [ "$ENABLE_LUKS" = "true" ]; then
+        # The Plymouth passphrase dialog decodes keys with the initramfs keymap;
+        # without the console keymap a non-US passphrase can never match — the
+        # user is locked out of a passphrase they typed correctly.
+        if grep -q '^KEYMAP=' ${MNT}/etc/initramfs-tools/initramfs.conf 2>/dev/null; then
+            sed -i 's/^KEYMAP=.*/KEYMAP=y/' ${MNT}/etc/initramfs-tools/initramfs.conf
+        else
+            echo 'KEYMAP=y' >> ${MNT}/etc/initramfs-tools/initramfs.conf
+        fi
+
         local ROOTFS_UUID
         ROOTFS_UUID=$(blkid -s UUID -o value "$TARGET_ROOT")
         require_id "ROOT filesystem UUID" "$ROOTFS_UUID"

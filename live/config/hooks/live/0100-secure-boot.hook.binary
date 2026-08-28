@@ -3,9 +3,12 @@
 # the shim + Debian-signed GRUB chain. Shim works with Secure Boot off as
 # well, so this is unconditional.
 #
-# live-build (>= 20250814) executes *.binary hooks with cwd = binary/, where
-# the EFI partition image lives at boot/grub/efi.img and the ISO9660 carries
-# the same EFI tree at EFI/boot/.
+# NAMING MATTERS: live-build only executes hooks matching *.hook.binary (in
+# config/hooks/live/ or config/hooks/normal/) at the binary stage — a file
+# named just *.binary is silently skipped and the ISO ships unsigned GRUB.
+# CI greps the build log for this hook's success line to catch that.
+# Binary hooks run with cwd = binary/, where the EFI partition image lives at
+# boot/grub/efi.img and the ISO9660 carries the same EFI tree at EFI/boot/.
 set -e
 
 SHIM=""

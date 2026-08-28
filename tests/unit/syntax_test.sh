@@ -17,7 +17,7 @@ sh_files=(
     live/auto/build
     live/auto/clean
     live/config/hooks/live/0100-sensible-setup.hook.chroot
-    live/config/hooks/live/0100-secure-boot.binary
+    live/config/hooks/live/0100-secure-boot.hook.binary
     live/config/includes.chroot/usr/local/bin/sensible-install
     live/config/includes.chroot/usr/local/bin/lazydeb
     scripts/run-qemu.sh
@@ -37,6 +37,16 @@ for f in "${sh_files[@]}"; do
     else
         t_fail "bash -n ${f}" "$(bash -n "${REPO_ROOT}/${f}" 2>&1 | head -3)"
     fi
+done
+
+t_section "live-build hooks use the executed naming convention"
+# live-build only runs config/hooks/*/*.hook.{chroot,binary}; any other name
+# is silently skipped — which is how the Secure Boot hook once shipped inert.
+for f in "${REPO_ROOT}"/live/config/hooks/*/*; do
+    case "$(basename "$f")" in
+        *.hook.chroot|*.hook.binary) t_ok ;;
+        *) t_fail "hook $(basename "$f") would be silently skipped by live-build" "rename to *.hook.chroot or *.hook.binary" ;;
+    esac
 done
 
 t_section "executable bits"

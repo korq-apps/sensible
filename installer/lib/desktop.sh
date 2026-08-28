@@ -100,10 +100,13 @@ EOF
     else
         log_info "Enabling SDDM automatic login for ${username}..."
         mkdir -p ${MNT}/etc/sddm.conf.d
+        # SDDM requires Session= alongside User= or autologin never engages.
+        # "plasma" = /usr/share/wayland-sessions/plasma.desktop (Wayland default).
         cat <<EOF > ${MNT}/etc/sddm.conf.d/autologin.conf
 # Written by sensible-install
 [Autologin]
 User=${username}
+Session=plasma
 EOF
     fi
 }

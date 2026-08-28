@@ -82,6 +82,7 @@ assert_file_contains "KDE autolock" "${MNT}/etc/xdg/kscreenlockerrc" "Autolock=t
 assert_file_contains "KDE lock on resume (suspend cover)" "${MNT}/etc/xdg/kscreenlockerrc" "LockOnResume=true"
 assert_file_contains "KDE idle timeout" "${MNT}/etc/xdg/kscreenlockerrc" "Timeout=5"
 assert_file_contains "SDDM autologin user" "${MNT}/etc/sddm.conf.d/autologin.conf" "User=bob"
+assert_file_contains "SDDM autologin session (required by SDDM)" "${MNT}/etc/sddm.conf.d/autologin.conf" "Session=plasma"
 mock_teardown
 
 t_section "configure_login: without autologin the lock defaults still apply"
