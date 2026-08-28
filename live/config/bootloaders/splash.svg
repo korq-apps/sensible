@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  Boot splash for the Sensible live medium.
+
+  live-build looks for config/bootloaders/splash.svg last and the last match
+  wins, so this replaces the stock Debian splash for both the syslinux (BIOS)
+  menu and the GRUB (UEFI) menu. binary_bootloader_splash substitutes the
+  @PLACEHOLDER@ tokens below before rasterising it.
+
+  Layout constraint: the boot menu is drawn over the lower part of this image,
+  so everything stays inside the top ~200px of the 640x480 canvas, the same
+  envelope the stock splash used.
+
+  @VERSION@ is deliberately unused: Debian Testing carries no version number,
+  so the stock title rendered as "Debian GNU/Linux none (testing)".
+-->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="640" height="480" viewBox="0 0 640 480">
+
+  <rect x="0" y="0" width="640" height="480" style="fill:#000000" />
+
+  <!-- Mark: a console frame with a prompt chevron and cursor.
+       Built from filled shapes only, never strokes: the frame is an amber
+       rounded rect with a black one inset on top. Stroke-only geometry is
+       rendered inconsistently across SVG rasterisers, and this image is
+       rasterised at build time, where a silently blank mark would ship. -->
+  <g transform="translate(34,46)">
+    <rect x="0" y="0" width="126" height="126" rx="15" ry="15"
+          style="fill:#f0b429" />
+    <rect x="5" y="5" width="116" height="116" rx="11" ry="11"
+          style="fill:#000000" />
+    <path d="M 30,44 L 42,44 L 64,63 L 42,82 L 30,82 L 52,63 Z"
+          style="fill:#f0b429" />
+    <rect x="70" y="75" width="30" height="7" rx="3" ry="3"
+          style="fill:#f0b429" />
+  </g>
+
+  <text xml:space="preserve"
+        style="font-family:'DejaVu Sans';fill:#ffffff;stroke:none">
+    <tspan x="191" y="76"
+           style="font-size:34px;font-weight:bold">Sensible</tspan>
+    <tspan x="191" y="99"
+           style="font-size:14px;fill:#f0b429">aka Lazydeb - Debian @DISTRIBUTION@ @ARCHITECTURE@ live installer</tspan>
+    <tspan x="191" y="126"
+           style="font-size:10px;fill:#909090">Built: @YEAR@-@MONTH@-@DAY@ @HOUR@:@MINUTE@:@SECOND@ @TIMEZONE@</tspan>
+    <tspan x="191" y="146"
+           style="font-size:10px;fill:#909090">linux: @LINUX_VERSIONS@</tspan>
+    <tspan x="191" y="160"
+           style="font-size:10px;fill:#909090">live-build: @LIVE_BUILD_VERSION@</tspan>
+    <tspan x="191" y="174"
+           style="font-size:10px;fill:#909090">live-boot: @LIVE_BOOT_VERSION@</tspan>
+    <tspan x="191" y="188"
+           style="font-size:10px;fill:#909090">live-config: @LIVE_CONFIG_VERSION@</tspan>
+  </text>
+</svg>
