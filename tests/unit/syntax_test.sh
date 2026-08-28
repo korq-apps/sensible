@@ -31,6 +31,7 @@ sh_files=(
     live/config/includes.chroot/usr/local/bin/sensible-install
     live/config/includes.chroot/usr/local/bin/lazydeb
     scripts/run-qemu.sh
+    scripts/smoke-boot.sh
     tests/run-tests.sh
     tests/lib/harness.sh
     tests/unit/common_test.sh
@@ -61,7 +62,7 @@ for f in "${REPO_ROOT}"/live/config/hooks/*/*; do
 done
 
 t_section "executable bits"
-for f in installer/sensible-install.sh live/build.sh scripts/run-qemu.sh live/auto/config tests/run-tests.sh; do
+for f in installer/sensible-install.sh live/build.sh scripts/run-qemu.sh scripts/smoke-boot.sh live/auto/config tests/run-tests.sh; do
     if [ -x "${REPO_ROOT}/${f}" ]; then t_ok; else t_fail "${f} is not executable" ""; fi
 done
 

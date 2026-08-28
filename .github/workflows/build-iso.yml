@@ -71,63 +71,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf
 
       - name: Headless QEMU UEFI Boot Smoke Test
+        # Same script developers run locally (scripts/smoke-boot.sh), so a
+        # green local smoke and a green CI smoke exercise identical logic.
         run: |
-          # Locate OVMF code+vars pair (Ubuntu 24.04 ships 4M variants)
-          OVMF_CODE=""
-          for pair in \
-            "/usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_VARS_4M.fd" \
-            "/usr/share/OVMF/OVMF_CODE.fd /usr/share/OVMF/OVMF_VARS.fd"; do
-            set -- ${pair}
-            if [ -f "$1" ] && [ -f "$2" ]; then
-              OVMF_CODE="$1"
-              OVMF_VARS="$2"
-              break
-            fi
-          done
-          if [ -z "${OVMF_CODE}" ]; then
-            echo "::error::No OVMF code/vars pair found under /usr/share/OVMF:"
-            ls -la /usr/share/OVMF || true
-            exit 1
-          fi
-          echo "Using OVMF: ${OVMF_CODE}"
-
-          # Create a dummy virtual disk and a working copy of the EFI varstore
-          qemu-img create -f qcow2 /tmp/smoke-disk.qcow2 10G
-          cp "${OVMF_VARS}" /tmp/OVMF_VARS.fd
-
-          # Boot headlessly with UEFI (pflash code+vars) and a serial console.
-          # The live image autologins root on tty1 and serial-getty@ttyS0, so
-          # reaching the motd banner proves live-boot + a working session.
-          set +e
-          timeout 600s qemu-system-x86_64 \
-            -m 3072 \
-            -smp 2 \
-            -drive if=pflash,format=raw,readonly=on,file=${OVMF_CODE} \
-            -drive if=pflash,format=raw,file=/tmp/OVMF_VARS.fd \
-            -cdrom sensible-debian-testing-amd64.iso \
-            -drive file=/tmp/smoke-disk.qcow2,format=qcow2,if=virtio \
-            -netdev user,id=net0 -device virtio-net-pci,netdev=net0 \
-            -nographic \
-            > /tmp/boot-serial.log 2>&1
-          rc=$?
-          set -e
-
-          echo "QEMU exit code: ${rc} (124 = stopped after the boot window)"
-          tail -n 50 /tmp/boot-serial.log || true
-
-          if [ "${rc}" -ne 0 ] && [ "${rc}" -ne 124 ]; then
-            echo "::error::QEMU exited unexpectedly (rc=${rc}) before completing the boot window."
-            exit 1
-          fi
-          if ! grep -q "Welcome to Debian" /tmp/boot-serial.log; then
-            echo "::error::Smoke assertion failed: systemd boot banner not seen on the serial console."
-            exit 1
-          fi
-          if ! grep -q "Sensible (aka Lazydeb)" /tmp/boot-serial.log; then
-            echo "::error::Smoke assertion failed: live session autologin/MOTD not reached."
-            exit 1
-          fi
-          echo "UEFI boot smoke test passed: live session reached autologin."
+          chmod +x scripts/smoke-boot.sh
+          scripts/smoke-boot.sh sensible-debian-testing-amd64.iso
 
       - name: Upload ISO and Checksum Artifacts
         uses: actions/upload-artifact@v4
