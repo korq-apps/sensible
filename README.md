@@ -124,7 +124,7 @@ The installed system hostname defaults to `debian`. The UEFI boot entry stays **
 - [Installer spec](docs/INSTALLER_SPEC.md) — prompts, partitioning, chroot
 - [Plan](docs/PLAN.md) — implementation order
 
-Build: `./live/build.sh` (podman/docker) produces `sensible-debian-testing-amd64.iso`; try it with `./scripts/run-qemu.sh`. Tests: `tests/run-tests.sh` — no root, no network.
+Build: `./live/build.sh` (podman/docker) or `sudo ./scripts/build-native.sh` (containerless, on Debian) produces `sensible-debian-testing-amd64.iso`. Verify it the way CI does with `./scripts/smoke-boot.sh` (headless UEFI boot assertion), or launch it interactively with `./scripts/run-qemu.sh`. Tests: `tests/run-tests.sh` — no root, no network.
 
 ---
 

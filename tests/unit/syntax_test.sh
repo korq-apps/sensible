@@ -32,6 +32,7 @@ sh_files=(
     live/config/includes.chroot/usr/local/bin/lazydeb
     scripts/run-qemu.sh
     scripts/smoke-boot.sh
+    scripts/build-native.sh
     tests/run-tests.sh
     tests/lib/harness.sh
     tests/unit/common_test.sh
