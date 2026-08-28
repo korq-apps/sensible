@@ -12,7 +12,7 @@ install_desktop() {
     local plymouth_theme="spinner"
 
     if [ "$desktop_env" = "gnome" ]; then
-        pkgs+=(gnome-core gdm3 gnome-software gnome-software-plugin-flatpak)
+        pkgs+=(gnome-core gdm3 gnome-software gnome-software-plugin-flatpak dconf-cli)
         plymouth_theme="spinner"
     elif [ "$desktop_env" = "kde" ]; then
         pkgs+=(kde-plasma-desktop sddm plasma-discover plasma-discover-backend-flatpak plymouth-theme-breeze)
@@ -47,4 +47,63 @@ install_desktop() {
     fi
 
     log_success "Desktop environment ${desktop_env} configured successfully."
+}
+
+configure_login() {
+    # Session login model: with LUKS the boot passphrase is the single
+    # authentication step, so the desktop may auto-login — while the idle
+    # screen lock (always configured) protects the running session.
+    local desktop_env="$1" autologin="$2" username="$3"
+
+    # Screen lock on idle (and on resume from suspend) for both desktops.
+    if [ "$desktop_env" = "gnome" ]; then
+        log_info "Configuring GNOME idle screen lock (5 min)..."
+        mkdir -p ${MNT}/etc/dconf/profile ${MNT}/etc/dconf/db/local.d
+        printf 'user-db:user\nsystem-db:local\n' > ${MNT}/etc/dconf/profile/user
+        cat <<EOF > ${MNT}/etc/dconf/db/local.d/00-sensible-lock
+[org/gnome/desktop/session]
+idle-delay=uint32 300
+
+[org/gnome/desktop/screensaver]
+lock-enabled=true
+lock-delay=uint32 0
+EOF
+        chroot ${MNT} dconf update 2>/dev/null || log_warn "dconf update failed; screen lock defaults may not apply."
+    else
+        log_info "Configuring KDE idle screen lock (5 min)..."
+        mkdir -p ${MNT}/etc/xdg
+        cat <<EOF > ${MNT}/etc/xdg/kscreenlockerrc
+[Daemon]
+Autolock=true
+Timeout=5
+LockOnResume=true
+EOF
+    fi
+
+    if [ "$autologin" != "true" ]; then
+        return 0
+    fi
+    if [ -z "$username" ]; then
+        log_warn "Autologin enabled but no username given; skipping."
+        return 0
+    fi
+
+    if [ "$desktop_env" = "gnome" ]; then
+        log_info "Enabling GDM automatic login for ${username}..."
+        mkdir -p ${MNT}/etc/gdm3
+        cat <<EOF > ${MNT}/etc/gdm3/daemon.conf
+# Written by sensible-install
+[daemon]
+AutomaticLoginEnable=True
+AutomaticLogin=${username}
+EOF
+    else
+        log_info "Enabling SDDM automatic login for ${username}..."
+        mkdir -p ${MNT}/etc/sddm.conf.d
+        cat <<EOF > ${MNT}/etc/sddm.conf.d/autologin.conf
+# Written by sensible-install
+[Autologin]
+User=${username}
+EOF
+    fi
 }

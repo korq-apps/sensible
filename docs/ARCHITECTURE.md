@@ -142,6 +142,20 @@ Super tap alone stays with the DE (GNOME Overview). We do **not** map Super+A / 
 
 Panel, launcher, tray, Alt+Tab. `keyd` is offered but default **off**.
 
+### Login: autologin with LUKS, idle lock always
+
+Single-user, disk-encrypted desktop: the LUKS passphrase at boot is the
+authentication, so the installer offers to **skip the login password**
+(GDM `AutomaticLogin` / SDDM `[Autologin]`), default **on**, **only when LUKS
+is enabled** — without disk encryption autologin would leave the machine wide
+open. The user's password is still set (sudo, keyring, screen unlock).
+
+Idle screen lock is always enforced, independent of the choice: GNOME gets
+system dconf defaults (`idle-delay=300`, `lock-enabled`, `lock-delay=0`), KDE
+gets `/etc/xdg/kscreenlockerrc` with `Autolock` + `LockOnResume` (resume from
+suspend is covered). Known tradeoffs: logout logs back in immediately; the
+keyring is not unlocked by autologin.
+
 ---
 
 ## 6. Hardware

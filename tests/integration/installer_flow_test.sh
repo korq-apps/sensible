@@ -102,6 +102,7 @@ build_answers() {
         printf 'sensible-box\n'           # hostname
         printf '%s\n' "${username}"       # username
         printf 'pw1234567\npw1234567\n'   # user password + confirm
+        if [ "$luks" = "yes" ]; then printf 'y\n'; fi   # autologin prompt (LUKS only)
         printf 'Europe/Berlin\n'          # timezone
         printf 'en_US.UTF-8\n'            # locale
         printf 'us\n'                     # keyboard
@@ -194,6 +195,8 @@ assert_contains "GNOME packages" "$(log_text)" "gnome-core gdm3 gnome-software g
 assert_contains "spinner theme" "$(log_text)" "plymouth-set-default-theme -R spinner"
 assert_contains "gdm3 enabled" "$(log_text)" "systemctl enable gdm3.service"
 assert_file_contains "keyd conf deployed from configs/" "${MNT}/etc/keyd/default.conf" "c = C-insert"
+assert_file_contains "GDM autologin enabled (LUKS-only offer accepted)" "${MNT}/etc/gdm3/daemon.conf" "AutomaticLogin=alice"
+assert_file_contains "idle lock defaults written" "${MNT}/etc/dconf/db/local.d/00-sensible-lock" "lock-enabled=true"
 assert_contains "chromium installed" "$(log_text)" "apt-get install -y chromium"
 assert_file_contains "brave official origin" "${MNT}/etc/apt/sources.list.d/brave-browser-release.list" "https://brave-browser-apt-release.s3.brave.com/ stable main"
 assert_contains "amberol for GNOME native_media" "$(log_text)" "apt-get install -y amberol"
@@ -221,6 +224,9 @@ assert_contains "sddm enabled" "$(log_text)" "systemctl enable sddm.service"
 assert_file_not_exists "no keyd conf when declined" "${MNT}/etc/keyd/default.conf"
 assert_contains "NVIDIA driver added on detection" "$(log_text)" "nvidia-driver"
 assert_contains "elisa for KDE native_media" "$(log_text)" "apt-get install -y elisa"
+assert_not_contains "no autologin without LUKS" "$(log_text)" "AutomaticLogin"
+assert_file_not_exists "no SDDM autologin file without LUKS" "${MNT}/etc/sddm.conf.d/autologin.conf"
+assert_file_contains "KDE idle lock defaults still written" "${MNT}/etc/xdg/kscreenlockerrc" "Autolock=true"
 assert_not_contains "no amberol on KDE" "$(log_text)" "apt-get install -y amberol"
 
 t_section "Combo 3: Ext4 + LUKS, GNOME, keyd off, one extra"

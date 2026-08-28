@@ -57,6 +57,7 @@ Make the installed system useful on a real laptop **before** polishing the DE.
 
 - [x] GNOME (`gnome-core`, gdm3) or Plasma (`kde-plasma-desktop`, sddm), Wayland default
 - [x] Plymouth theme: spinner / breeze
+- [x] Optional autologin (LUKS only, default on) + enforced idle screen lock on both DEs
 - [x] `keyd` + `configs/keyd-default.conf` when Mac clipboard is on
 - [x] Defaults: Firefox, VLC, Neovim + LazyVim skel, CLI set, Flatpak + Flathub
 - [x] Checkboxes: Chromium, Brave origin, Audacious, Amberol/Elisa

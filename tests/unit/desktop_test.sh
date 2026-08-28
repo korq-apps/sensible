@@ -63,5 +63,39 @@ assert_rc "aborts with exit 1" 1 "${rc}"
 assert_file_not_exists "no generated fallback conf" "${MNT}/etc/keyd/default.conf"
 mock_teardown
 
+t_section "configure_login: GNOME idle lock defaults + GDM autologin"
+mock_setup
+configure_login gnome true alice
+assert_file_contains "dconf profile" "${MNT}/etc/dconf/profile/user" "system-db:local"
+assert_file_contains "idle lock after 300s" "${MNT}/etc/dconf/db/local.d/00-sensible-lock" "idle-delay=uint32 300"
+assert_file_contains "lock enabled" "${MNT}/etc/dconf/db/local.d/00-sensible-lock" "lock-enabled=true"
+assert_file_contains "lock immediately on idle" "${MNT}/etc/dconf/db/local.d/00-sensible-lock" "lock-delay=uint32 0"
+assert_contains "dconf db compiled" "$(cat "${MOCK_LOG}")" "dconf update"
+assert_file_contains "GDM autologin enabled" "${MNT}/etc/gdm3/daemon.conf" "AutomaticLoginEnable=True"
+assert_file_contains "GDM autologin user" "${MNT}/etc/gdm3/daemon.conf" "AutomaticLogin=alice"
+mock_teardown
+
+t_section "configure_login: SDDM autologin + kscreenlocker defaults"
+mock_setup
+configure_login kde true bob
+assert_file_contains "KDE autolock" "${MNT}/etc/xdg/kscreenlockerrc" "Autolock=true"
+assert_file_contains "KDE lock on resume (suspend cover)" "${MNT}/etc/xdg/kscreenlockerrc" "LockOnResume=true"
+assert_file_contains "KDE idle timeout" "${MNT}/etc/xdg/kscreenlockerrc" "Timeout=5"
+assert_file_contains "SDDM autologin user" "${MNT}/etc/sddm.conf.d/autologin.conf" "User=bob"
+mock_teardown
+
+t_section "configure_login: without autologin the lock defaults still apply"
+mock_setup
+rm -rf "${MNT}/etc/gdm3" "${MNT}/etc/sddm.conf.d"   # drop-ins from earlier sections
+configure_login gnome false alice
+assert_file_contains "idle lock defaults present" "${MNT}/etc/dconf/db/local.d/00-sensible-lock" "lock-enabled=true"
+assert_file_not_exists "no GDM autologin" "${MNT}/etc/gdm3/daemon.conf"
+mock_teardown
+mock_setup
+configure_login kde false alice
+assert_file_not_exists "no SDDM autologin" "${MNT}/etc/sddm.conf.d/autologin.conf"
+assert_file_contains "KDE lock defaults present" "${MNT}/etc/xdg/kscreenlockerrc" "Autolock=true"
+mock_teardown
+
 rm -rf "${TMP_MNT}"
 t_summary

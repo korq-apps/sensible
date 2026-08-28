@@ -49,6 +49,7 @@ suite (`tests/`) can run the full flow unprivileged against a temp directory.
 | Timezone | `timedatectl` or `UTC` | zoneinfo |
 | Locale | `en_US.UTF-8` | Must be in `/usr/share/i18n/SUPPORTED` |
 | Keyboard | live console layout | written through `keyboard-configuration` |
+| Skip login password (autologin) | On (only offered with LUKS) | GDM/SDDM autologin; the LUKS passphrase stays the single authentication and the idle screen lock is always enforced |
 
 Firefox, VLC, Neovim, Flatpak, firmware, and the CLI set are always installed — not checkboxes.
 
@@ -274,7 +275,7 @@ Always:
   fonts-noto-core fonts-noto-color-emoji fonts-liberation
 
 If GNOME:
-  gnome-core gdm3 gnome-software gnome-software-plugin-flatpak
+  gnome-core gdm3 gnome-software gnome-software-plugin-flatpak dconf-cli
   plymouth theme: spinner
 
 If KDE:
@@ -363,7 +364,38 @@ x = C-x
 
 ---
 
-## 12. Teardown
+## 12. Session login and screen lock
+
+With LUKS enabled the installer offers autologin (default **on**): the boot
+passphrase authenticates once, the desktop starts without a login prompt, and
+the password remains set for sudo, screen unlock, and the keyring. Without
+LUKS the prompt is never shown.
+
+Screen lock defaults are written for both desktops regardless of the choice:
+
+- GNOME: system dconf defaults — `idle-delay=300`, `lock-enabled=true`,
+  `lock-delay=0` (`/etc/dconf/profile/user` + `/etc/dconf/db/local.d/`), then
+  `dconf update` (hence `dconf-cli` in the GNOME package set).
+- KDE: `/etc/xdg/kscreenlockerrc` — `Autolock=true`, `Timeout=5`,
+  `LockOnResume=true` (covers resume from suspend).
+
+```bash
+# GNOME (gdm3), /etc/gdm3/daemon.conf:
+[daemon]
+AutomaticLoginEnable=True
+AutomaticLogin=<username>
+
+# KDE (sddm), /etc/sddm.conf.d/autologin.conf:
+[Autologin]
+User=<username>
+```
+
+Caveats (by design): logout immediately logs back in, and gnome-keyring is not
+unlocked by autologin (first use prompts once).
+
+---
+
+## 13. Teardown
 
 ```bash
 umount -R /mnt

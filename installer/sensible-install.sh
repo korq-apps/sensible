@@ -166,6 +166,18 @@ main() {
         break
     done
 
+    # 9b. Optional autologin — only meaningful with disk encryption: the LUKS
+    # passphrase at boot is the authentication, the idle lock protects the
+    # session. Without LUKS this would leave the machine wide open.
+    local ENABLE_AUTOLOGIN="false"
+    if [ "$ENABLE_LUKS" = "true" ]; then
+        if ui_yesno "Skip Login Password" "Boot straight into the desktop as ${USERNAME} (no login password)?\n\nThe LUKS passphrase at boot stays required, the screen still locks on idle,\nand the password is kept for sudo and screen unlock. Without LUKS this is not offered." "yes"; then
+            ENABLE_AUTOLOGIN="true"
+        fi
+    else
+        log_info "Autologin is only offered with full disk encryption."
+    fi
+
     # 10. Timezone, Locale & Keyboard
     local TIMEZONE
     TIMEZONE=$(timedatectl show --property=Timezone --value 2>/dev/null || echo "UTC")
@@ -205,6 +217,7 @@ main() {
     SUMMARY_TEXT+="• Swap Size:     ${SWAP_MIB} MiB\n"
     SUMMARY_TEXT+="• Desktop:       ${DESKTOP_CHOICE}\n"
     SUMMARY_TEXT+="• Mac keyd:      ${ENABLE_KEYD}\n"
+    SUMMARY_TEXT+="• Autologin:     ${ENABLE_AUTOLOGIN}\n"
     SUMMARY_TEXT+="• Hostname:      ${HOSTNAME}\n"
     SUMMARY_TEXT+="• Username:      ${USERNAME}\n"
     SUMMARY_TEXT+="• Timezone:      ${TIMEZONE}\n"
@@ -293,6 +306,9 @@ main() {
 
     # Step 8: Desktop Environment & Plymouth (Phase 4)
     install_desktop "$DESKTOP_CHOICE" "$ENABLE_KEYD" "$CONFIG_DIR"
+
+    # Step 8b: Session login (autologin) + idle screen lock (Phase 4)
+    configure_login "$DESKTOP_CHOICE" "$ENABLE_AUTOLOGIN" "$USERNAME"
 
     # Step 9: Default Apps & Optional Software
     install_default_apps "$USERNAME"
