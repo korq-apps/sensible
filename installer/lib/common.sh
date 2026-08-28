@@ -169,7 +169,25 @@ check_uefi() {
     if [ ! -d /sys/firmware/efi ]; then
         log_err "UEFI boot is required. /sys/firmware/efi was not found."
         log_err "Sensible only supports amd64 systems booted in UEFI mode."
-        ui_msgbox "Error: Non-UEFI System" "Sensible requires UEFI boot. This system booted in legacy BIOS mode. Please boot in UEFI mode."
+        # Say how to fix it, not just what is wrong: reaching this point means
+        # someone already booted the live medium and got all the way into the
+        # installer, so "boot in UEFI mode" alone leaves them stuck.
+        ui_msgbox "Error: Non-UEFI System" "\
+Sensible requires UEFI boot, but this system booted in legacy BIOS mode,
+so the installer cannot continue.
+
+Virtual machine (QEMU/libvirt/virt-manager):
+  Set the firmware to UEFI (OVMF) instead of the default BIOS/SeaBIOS.
+  virt-manager: Overview -> Firmware -> UEFI x86_64 (a new VM is needed;
+  firmware cannot be switched on an existing one).
+  qemu directly: pass an OVMF pflash pair, as scripts/run-qemu.sh does.
+
+Physical machine:
+  Enable UEFI in firmware setup and disable Legacy/CSM/BIOS compatibility,
+  then boot the medium from its UEFI entry.
+
+Sensible installs a UEFI-only system (GRUB EFI on an ESP), which is why
+a BIOS-booted session is refused before any disk is touched."
         exit 1
     fi
 }

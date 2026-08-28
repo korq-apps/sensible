@@ -29,6 +29,7 @@ sh_files=(
     live/config/hooks/live/0100-sensible-setup.hook.chroot
     live/config/hooks/live/0100-grub-serial-timeout.hook.binary
     live/config/includes.chroot/usr/local/bin/sensible-install
+    live/config/includes.chroot/etc/profile.d/99-sensible-firmware-check.sh
     live/config/includes.chroot/usr/local/bin/lazydeb
     scripts/run-qemu.sh
     scripts/smoke-boot.sh

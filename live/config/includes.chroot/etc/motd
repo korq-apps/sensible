@@ -7,7 +7,9 @@
   Sensible (aka Lazydeb) — Debian Testing Live Installer
 
   To start the installer, run:
-    sensible-install   (or: lazydeb)
+    sensible-install   (or: lazydeb)      [asks for sudo automatically]
+
+  Sensible installs a UEFI-only system; a BIOS-booted session is refused.
 
   For network configuration:
     nmtui   (or: nmcli device wifi connect <SSID> password <PASS>)
