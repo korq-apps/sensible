@@ -17,7 +17,7 @@ sh_files=(
     live/auto/build
     live/auto/clean
     live/config/hooks/live/0100-sensible-setup.hook.chroot
-    live/config/hooks/binary/0100-secure-boot.hook.binary
+    live/config/hooks/live/0100-secure-boot.binary
     live/config/includes.chroot/usr/local/bin/sensible-install
     live/config/includes.chroot/usr/local/bin/lazydeb
     scripts/run-qemu.sh

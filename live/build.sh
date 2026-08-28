@@ -51,12 +51,25 @@ ${CONTAINER_ENGINE} run --rm --privileged \
     "${IMAGE_TAG}" \
     bash -c "lb clean --purge && lb config && lb build"
 
-# Locate generated ISO
+# Locate generated ISO. live-build's output name varies by version
+# (e.g. sensible-debian-testing-amd64.hybrid.iso), so resolve by pattern.
 ISO_OUTPUT=""
-if [ -f "${REPO_ROOT}/live/sensible-debian-testing-amd64.iso" ]; then
-    ISO_OUTPUT="${REPO_ROOT}/live/sensible-debian-testing-amd64.iso"
-elif [ -f "${REPO_ROOT}/live/live-image-amd64.hybrid.iso" ]; then
-    ISO_OUTPUT="${REPO_ROOT}/live/live-image-amd64.hybrid.iso"
+for candidate in \
+    "${REPO_ROOT}/live/sensible-debian-testing-amd64.iso" \
+    "${REPO_ROOT}/live/sensible-debian-testing-amd64.hybrid.iso"; do
+    if [ -f "${candidate}" ]; then
+        ISO_OUTPUT="${candidate}"
+        break
+    fi
+done
+
+if [ -z "${ISO_OUTPUT}" ]; then
+    for candidate in "${REPO_ROOT}/live"/*.hybrid.iso "${REPO_ROOT}/live"/*.iso; do
+        if [ -f "${candidate}" ]; then
+            ISO_OUTPUT="${candidate}"
+            break
+        fi
+    done
 fi
 
 if [ -n "${ISO_OUTPUT}" ] && [ -f "${ISO_OUTPUT}" ]; then

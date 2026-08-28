@@ -1,0 +1,46 @@
+#!/bin/sh
+# Secure Boot for the live media: replace the unsigned standalone GRUB with
+# the shim + Debian-signed GRUB chain. Shim works with Secure Boot off as
+# well, so this is unconditional.
+#
+# live-build (>= 20250814) executes *.binary hooks with cwd = binary/, where
+# the EFI partition image lives at boot/grub/efi.img and the ISO9660 carries
+# the same EFI tree at EFI/boot/.
+set -e
+
+SHIM=""
+for candidate in /usr/lib/shim/shimx64.efi.signed /usr/lib/shim/shimx64.efi.debian; do
+    if [ -f "$candidate" ]; then
+        SHIM="$candidate"
+        break
+    fi
+done
+GRUB_SIGNED="/usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed"
+
+if [ -z "$SHIM" ] || [ ! -f "$GRUB_SIGNED" ]; then
+    echo "secure-boot hook: shim/grub signed binaries not found in builder image" >&2
+    exit 1
+fi
+
+EFI_IMG="boot/grub/efi.img"
+if [ ! -f "$EFI_IMG" ]; then
+    echo "secure-boot hook: $EFI_IMG not found (wrong live-build layout?)" >&2
+    exit 1
+fi
+
+# El Torito / ESP image: shim as the removable-media loader, signed GRUB next
+# to it (shim's default fallthrough target).
+mcopy -i "$EFI_IMG" -o "$SHIM" ::/EFI/boot/bootx64.efi
+mcopy -i "$EFI_IMG" -o "$GRUB_SIGNED" ::/EFI/boot/grubx64.efi
+
+# Same files on the ISO9660 filesystem (UEFI removable-media fallback path).
+if [ -d EFI/boot ]; then
+    cp -f "$SHIM" EFI/boot/bootx64.efi
+    cp -f "$GRUB_SIGNED" EFI/boot/grubx64.efi
+fi
+
+# Fail the build if the injected chain is not actually signed.
+sbverify --list "$SHIM" 2>/dev/null | grep -q "Microsoft Corporation"
+sbverify --list "$GRUB_SIGNED" 2>/dev/null | grep -q "Debian"
+
+echo "secure-boot hook: shim + Debian-signed GRUB installed into ${EFI_IMG}"

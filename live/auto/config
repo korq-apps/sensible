@@ -16,7 +16,7 @@ lb config noauto \
     --iso-application "Sensible Live Installer" \
     --iso-publisher "Korq <https://korq.io>" \
     --iso-volume "SENSIBLE_LIVE" \
-    --image-name "sensible-debian-testing-amd64" \
+    --image-name "sensible-debian-testing" \
     --apt-recommends true \
     --bootappend-live "boot=live components console=ttyS0,115200n8 console=tty0" \
     "${@}"
