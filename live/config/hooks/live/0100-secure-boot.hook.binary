@@ -37,6 +37,21 @@ fi
 WORK_DIR="$(mktemp -d)"
 NEW_IMG="${WORK_DIR}/efi.img"
 
+# The signed grubx64.efi has a fixed embedded prefix of /EFI/debian (verified:
+# `grep -a /EFI/debian` on grubx64.efi.signed) and cannot carry live-build's
+# memdisk config. On its own it finds no /EFI/debian/grub.cfg and drops to the
+# `grub>` prompt — the kernel never boots. Ship a tiny bootstrap config at that
+# prefix that pins root to the live medium (via the squashfs marker, which only
+# exists on the ISO9660, not the FAT ESP) and hands off to the real grub.cfg.
+BOOT_CFG="${WORK_DIR}/grub.cfg"
+cat > "$BOOT_CFG" <<'CFG'
+search --no-floppy --set=root --file /live/filesystem.squashfs
+if [ "x${root}" = "x" ]; then
+  search --no-floppy --set=root --file /boot/grub/grub.cfg
+fi
+configfile /boot/grub/grub.cfg
+CFG
+
 mcopy -i "$EFI_IMG" -/ -n :: "${WORK_DIR}/root"
 
 OLD_KB=$(( ( $(stat -c%s "$EFI_IMG") + 1023) / 1024 ))
@@ -49,12 +64,17 @@ mcopy -i "$NEW_IMG" -s -o "${WORK_DIR}/root/boot" ::boot
 
 mcopy -i "$NEW_IMG" -o "$SHIM" ::/EFI/boot/bootx64.efi
 mcopy -i "$NEW_IMG" -o "$GRUB_SIGNED" ::/EFI/boot/grubx64.efi
+# Bootstrap config at the signed grub's embedded prefix.
+mmd -i "$NEW_IMG" ::EFI/debian
+mcopy -i "$NEW_IMG" -o "$BOOT_CFG" ::/EFI/debian/grub.cfg
 mv "$NEW_IMG" "$EFI_IMG"
 
 # Same files on the ISO9660 filesystem (UEFI removable-media fallback path).
 if [ -d EFI/boot ]; then
     cp -f "$SHIM" EFI/boot/bootx64.efi
     cp -f "$GRUB_SIGNED" EFI/boot/grubx64.efi
+    mkdir -p EFI/debian
+    cp -f "$BOOT_CFG" EFI/debian/grub.cfg
 fi
 
 # Fail the build if the injected chain is not actually signed.
