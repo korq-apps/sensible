@@ -275,7 +275,8 @@ the connection again. Choose No to leave the installer safely." "yes"; then
 
 valid_hostname() {
     local hostname="$1"
-    [ ${#hostname} -ge 1 ] && [ ${#hostname} -le 253 ] || return 1
+    # Linux's static hostname is limited to 64 bytes including the terminator.
+    [ ${#hostname} -ge 1 ] && [ ${#hostname} -le 63 ] || return 1
     [[ "$hostname" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || return 1
 
     local label
@@ -294,7 +295,7 @@ valid_username() {
     # These accounts are created by packages installed later, but do not all
     # exist in the small live image used for preflight validation.
     case "$username" in
-        sddm|gdm|avahi|colord|geoclue|rtkit|saned|fwupd-refresh|nm-openvpn)
+        sddm|gdm|avahi|colord|geoclue|rtkit|saned|fwupd-refresh|nm-openvpn|speech-dispatcher|usbmux|polkitd|pulse|pipewire|_flatpak)
             return 1
             ;;
     esac

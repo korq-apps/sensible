@@ -84,8 +84,11 @@ valid_hostname "debian"; assert_rc "simple hostname accepted" 0 $?
 valid_hostname "living-room.pc"; assert_rc "dotted hostname accepted" 0 $?
 valid_hostname "-bad"; assert_rc "leading hyphen rejected" 1 $?
 valid_hostname "bad_name"; assert_rc "underscore rejected" 1 $?
+valid_hostname "$(printf 'a%.0s' {1..64})"; assert_rc "Linux-overlong hostname rejected" 1 $?
 valid_username "root"; assert_rc "existing system account rejected" 1 $?
 valid_username "sddm"; assert_rc "future desktop service account rejected" 1 $?
+valid_username "speech-dispatcher"; assert_rc "future accessibility service account rejected" 1 $?
+valid_username "pipewire"; assert_rc "future audio service account rejected" 1 $?
 valid_username "Bad Name"; assert_rc "invalid username characters rejected" 1 $?
 valid_username "sensible_test_user_9274"; assert_rc "available username accepted" 0 $?
 

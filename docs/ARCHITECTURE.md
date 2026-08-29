@@ -112,10 +112,10 @@ With LUKS on, the installer sets `KEYMAP=y` in `/etc/initramfs-tools/initramfs.c
 
 ### Secure Boot
 
-Secure Boot is **supported in v1 on the installed system**. On the **live installer ISO it is deferred** (see Later) — the media ships live-build's own GRUB and boots with SB off.
+Secure Boot is supported by both the **live installer ISO** and the **installed system**.
 
 - Target (installed system): `shim-signed` + `grub-efi-amd64-signed` (always installed). `grub-install` lays down the signed chain and grub's own module tree under `/EFI/debian`, so the signed GRUB finds its config and modules. Shim falls through transparently when SB is off, so there is no prompt and no downside.
-- Live ISO: **not** Secure Boot capable in v1. Injecting Debian's signed GRUB into the live media is non-trivial — the signed image has a fixed embedded prefix of `/EFI/debian` and expects its module tree there, neither of which live-build provides, so it drops to a rescue prompt / fails gfxterm setup. Deferred rather than shipped half-working; the installer USB is booted once, with SB toggled off if the firmware enforces it, and produces a fully SB-capable installed system.
+- Live ISO: built with live-build's native `--uefi-secure-boot enable` support, which supplies Debian's signed shim/GRUB chain. Sensible also stages the redirect config required at GRUB's embedded `/EFI/debian` prefix. The Secure Boot smoke path uses OVMF Secure Boot firmware with Microsoft keys and must reach the live session, proving that unsigned fallback code did not boot.
 - Kernel and firmware updates stay bootable: everything in the installed chain is Debian-signed; no MOK enrollment needed for stock packages.
 
 Caveats (documented, not solved): the proprietary **NVIDIA** module is unsigned, so with SB on the kernel's lockdown rejects it — disable SB or enroll a MOK for DKMS. Lockdown also blocks **hibernation** (see §3).
@@ -232,9 +232,11 @@ Identity is **per-user, never system-wide**: the installer optionally asks for f
 
 No credential helper is configured: Debian ships no packaged libsecret helper (`git-credential-libsecret` is not a package; the contrib helper must be compiled), and we do not build software in the installer. GitHub auth is `gh auth login` when Developer tools are selected.
 
-### Optional (installer checkboxes)
+### Optional software
 
-Chromium; Brave from [the official apt origin](https://brave.com/linux/); Audacious; Amberol (GNOME) or Elisa (KDE); AI CLIs only as a later optional module with pinned artifacts.
+**Current installer checkboxes:** Chromium; Brave from [the official apt origin](https://brave.com/linux/); Audacious; Amberol (GNOME) or Elisa (KDE).
+
+**Later, not implemented:** AI CLIs may be added as an optional module with pinned artifacts. They are not current installer checkboxes.
 
 **Planned — Phase 6:** BioPass face login (pinned `.deb`, see §5); Developer tools — `docker.io`, `docker-compose` (the v2 rewrite in Testing), `lazygit`, `gh`. Developer tools deliberately do **not** add the user to the `docker` group — membership is root-equivalent, so the default is `sudo docker` (a user can opt in later, knowing the tradeoff).
 

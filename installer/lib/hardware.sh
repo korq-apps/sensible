@@ -54,14 +54,18 @@ install_hardware_packages() {
     if detect_nvidia_gpu; then
         log_info "NVIDIA GPU detected. Adding proprietary nvidia-driver package..."
         pkgs+=(nvidia-driver)
-        log_warn "NVIDIA + Secure Boot: the proprietary module is unsigned and is"
-        log_warn "rejected by the kernel's lockdown. Hibernation is also blocked by"
-        log_warn "lockdown. Either disable Secure Boot or enroll a MOK for DKMS."
+        record_warning "NVIDIA: Secure Boot may block the proprietary driver and hibernation until a MOK is enrolled or Secure Boot is disabled."
     fi
 
     DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y --no-install-recommends "${pkgs[@]}"
 
     log_info "Enabling essential hardware systemd services..."
-    chroot ${MNT} systemctl enable NetworkManager.service bluetooth.service power-profiles-daemon.service fwupd.service 2>/dev/null || true
+    chroot ${MNT} systemctl enable NetworkManager.service
+    chroot ${MNT} systemctl enable bluetooth.service \
+        || record_warning "Bluetooth service could not be enabled automatically."
+    chroot ${MNT} systemctl enable power-profiles-daemon.service \
+        || record_warning "Power profile service could not be enabled automatically."
+    chroot ${MNT} systemctl enable fwupd.service \
+        || record_warning "Firmware update service could not be enabled automatically."
     log_success "Hardware stack installed and configured."
 }

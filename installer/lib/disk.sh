@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Disk partitioning, LUKS2 encryption, filesystems, and mount operations
 
+INSTALLER_OWNS_TARGET_MOUNTS="${INSTALLER_OWNS_TARGET_MOUNTS:-false}"
+INSTALLER_OPENED_CRYPTROOT="${INSTALLER_OPENED_CRYPTROOT:-false}"
+SYS_CLASS_BLOCK="${SYS_CLASS_BLOCK:-/sys/class/block}"
+PROC_SWAPS="${PROC_SWAPS:-/proc/swaps}"
+
 get_system_ram_mb() {
     free -m | awk '/^Mem:/{print $2}'
 }
@@ -28,6 +33,87 @@ disk_below_min() {
     [ "${size_bytes:-0}" -lt $((min_mib * 1048576)) ]
 }
 
+disk_has_mounts() {
+    local mountpoints
+    mountpoints=$(lsblk -nrpo MOUNTPOINTS "$1" 2>/dev/null) || return 0
+    grep -q '[^[:space:]]' <<< "$mountpoints"
+}
+
+disk_has_active_swap() {
+    local disk="$1" device_ids swaps swap_device swap_id
+    device_ids=$(lsblk -nrno MAJ:MIN "$disk" 2>/dev/null) || return 0
+    [ -r "$PROC_SWAPS" ] || return 0
+    swaps=$(<"$PROC_SWAPS") || return 0
+    while read -r swap_device _; do
+        [ "$swap_device" != "Filename" ] || continue
+        [ -n "$swap_device" ] || continue
+        swap_id=$(lsblk -dnro MAJ:MIN "$swap_device" 2>/dev/null) || return 0
+        grep -qxF "$swap_id" <<< "$device_ids" && return 0
+    done <<< "$swaps"
+    return 1
+}
+
+disk_has_holders() {
+    local disk="$1" knames kname holder
+    knames=$(lsblk -nrno KNAME "$disk" 2>/dev/null) || return 0
+    while read -r kname; do
+        [ -n "$kname" ] || continue
+        kname="${kname##*/}"
+        for holder in "${SYS_CLASS_BLOCK}/${kname}/holders/"*; do
+            [ -e "$holder" ] && return 0
+        done
+    done <<< "$knames"
+    return 1
+}
+
+target_mount_tree_busy() {
+    local target mounts mount_target
+    target="${1%/}"
+    mounts=$(findmnt -rn -o TARGET 2>/dev/null) || return 0
+    while read -r mount_target; do
+        [ "$mount_target" = "$target" ] && return 0
+        [[ "$mount_target" = "$target/"* ]] && return 0
+    done <<< "$mounts"
+    return 1
+}
+
+disk_is_in_use() {
+    disk_has_mounts "$1" || disk_has_active_swap "$1" || disk_has_holders "$1"
+}
+
+disk_property() {
+    local disk="$1" property="$2"
+    if [ "$property" = "SIZE" ]; then
+        lsblk -dnbo SIZE "$disk" 2>/dev/null | head -n 1
+    else
+        local value=""
+        IFS= read -r value < <(lsblk -dno "$property" "$disk" 2>/dev/null)
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        printf '%s\n' "$value"
+    fi
+}
+
+validate_target_disk() {
+    local disk="$1" min_mib="$2" expected_majmin="$3" expected_size="$4"
+    local expected_serial="$5" expected_wwn="$6"
+    local type ro majmin size serial wwn
+
+    type=$(disk_property "$disk" TYPE)
+    ro=$(disk_property "$disk" RO)
+    majmin=$(disk_property "$disk" MAJ:MIN)
+    size=$(disk_property "$disk" SIZE)
+    serial=$(disk_property "$disk" SERIAL)
+    wwn=$(disk_property "$disk" WWN)
+
+    [ "$type" = "disk" ] && [ "$ro" = "0" ] || return 1
+    [ -n "$size" ] && [ "$size" -ge $((min_mib * 1048576)) ] || return 1
+    [ "$majmin" = "$expected_majmin" ] && [ "$size" = "$expected_size" ] || return 1
+    [ "$serial" = "$expected_serial" ] && [ "$wwn" = "$expected_wwn" ] || return 1
+    ! disk_is_in_use "$disk" || return 1
+    [ ! -e /dev/mapper/cryptroot ] || return 1
+}
+
 explain_no_candidates() {
     # Per-device reason, shown only when nothing survived the filters.
     # "No suitable target installation disks found." on its own gives someone
@@ -45,8 +131,12 @@ explain_no_candidates() {
             printf '  %-12s %-8s not a disk (%s)\n' "$name" "$size" "$type"
         elif [ "$ro" != "0" ]; then
             printf '  %-12s %-8s read-only\n' "$name" "$size"
-        elif lsblk -no MOUNTPOINTS "$name" 2>/dev/null | grep -qE '^/(run/live/medium|run/live/findiso)?$'; then
-            printf '  %-12s %-8s in use as the live medium or root\n' "$name" "$size"
+        elif disk_has_mounts "$name"; then
+            printf '  %-12s %-8s has a mounted filesystem\n' "$name" "$size"
+        elif disk_has_active_swap "$name"; then
+            printf '  %-12s %-8s contains active swap\n' "$name" "$size"
+        elif disk_has_holders "$name"; then
+            printf '  %-12s %-8s is used by RAID, LVM, or device-mapper\n' "$name" "$size"
         elif disk_below_min "$name" "$min_mib"; then
             printf '  %-12s %-8s too small (needs %s MiB)\n' "$name" "$size" "$min_mib"
         else
@@ -69,8 +159,10 @@ list_candidate_disks() {
     local name size type ro model
     while read -r name size type ro; do
         if [ "$type" = "disk" ] && [ "$ro" = "0" ]; then
-            # Exclude disks mounted on /run/live or /
-            if ! lsblk -no MOUNTPOINTS "$name" 2>/dev/null | grep -E '^/(run/live/medium|run/live/findiso|)$' | grep -v '^$' >/dev/null; then
+            # Never offer a disk with mounted filesystems, active swap, or
+            # device-mapper/RAID/LVM holders. The live medium is covered by
+            # the mounted-filesystem check as well.
+            if ! disk_is_in_use "$name"; then
                 if disk_below_min "$name" "$min_mib"; then
                     log_warn "Skipping ${name}: smaller than the ${min_mib} MiB minimum."
                     continue
@@ -186,6 +278,10 @@ format_and_mount() {
     mkfs.ext4 -F -L BOOT "$BOOT_PART"
 
     if [ "$enable_luks" = "true" ]; then
+        if [ -e /dev/mapper/cryptroot ]; then
+            log_err "/dev/mapper/cryptroot already exists; refusing to reuse a mapping not created by this installer."
+            return 1
+        fi
         log_info "Setting up LUKS2 container on ${ROOT_PART}..."
         # printf, never `echo -n`: bash's echo eats option-shaped arguments, so
         # a valid passphrase like "-nnnnnnn" is parsed as the -n flag and
@@ -196,6 +292,7 @@ format_and_mount() {
             "$ROOT_PART"
 
         printf '%s' "$passphrase" | cryptsetup open "$ROOT_PART" cryptroot
+        INSTALLER_OPENED_CRYPTROOT="true"
         TARGET_ROOT="/dev/mapper/cryptroot"
     else
         TARGET_ROOT="$ROOT_PART"
@@ -209,6 +306,7 @@ format_and_mount() {
         log_info "Creating Btrfs filesystem on ${TARGET_ROOT} with subvolumes..."
         mkfs.btrfs -f -L ROOT "$TARGET_ROOT"
         mount "$TARGET_ROOT" ${MNT}
+        INSTALLER_OWNS_TARGET_MOUNTS="true"
         btrfs subvolume create ${MNT}/@
         btrfs subvolume create ${MNT}/@home
         btrfs subvolume create ${MNT}/@snapshots
@@ -227,6 +325,7 @@ format_and_mount() {
         log_info "Creating Ext4 filesystem on ${TARGET_ROOT}..."
         mkfs.ext4 -F -L ROOT -O fast_commit "$TARGET_ROOT"
         mount -o "noatime,errors=remount-ro,discard" "$TARGET_ROOT" ${MNT}
+        INSTALLER_OWNS_TARGET_MOUNTS="true"
         mkdir -p ${MNT}/boot
     fi
 
@@ -241,23 +340,30 @@ format_and_mount() {
 }
 
 unmount_target() {
-    log_info "Unmounting target filesystems..."
-    if mountpoint -q ${MNT}/dev/pts; then umount ${MNT}/dev/pts || true; fi
-    if mountpoint -q ${MNT}/dev; then umount ${MNT}/dev || true; fi
-    if mountpoint -q ${MNT}/proc; then umount ${MNT}/proc || true; fi
-    if mountpoint -q ${MNT}/sys; then umount ${MNT}/sys || true; fi
-    if mountpoint -q ${MNT}/run; then umount ${MNT}/run || true; fi
+    if [ "$INSTALLER_OWNS_TARGET_MOUNTS" = "true" ]; then
+        log_info "Unmounting installer-owned target filesystems..."
+        local path
+        for path in dev/pts dev proc sys run boot/efi boot swap home .snapshots var/log; do
+            if mountpoint -q "${MNT}/${path}"; then
+                umount "${MNT}/${path}" || return 1
+            fi
+        done
+        if mountpoint -q "${MNT}"; then
+            # Never recurse here: an unexpected nested mount was not created
+            # by this installer and must make cleanup fail rather than be torn
+            # down behind another process's back.
+            umount "${MNT}" || return 1
+        fi
+        if mountpoint -q "${MNT}"; then
+            log_err "Target ${MNT} is still mounted. Do not reboot until it is safely unmounted."
+            return 1
+        fi
+        INSTALLER_OWNS_TARGET_MOUNTS="false"
+    fi
 
-    if mountpoint -q ${MNT}/boot/efi; then umount ${MNT}/boot/efi || true; fi
-    if mountpoint -q ${MNT}/boot; then umount ${MNT}/boot || true; fi
-    if mountpoint -q ${MNT}/swap; then umount ${MNT}/swap || true; fi
-    if mountpoint -q ${MNT}/home; then umount ${MNT}/home || true; fi
-    if mountpoint -q ${MNT}/.snapshots; then umount ${MNT}/.snapshots || true; fi
-    if mountpoint -q ${MNT}/var/log; then umount ${MNT}/var/log || true; fi
-    if mountpoint -q ${MNT}; then umount -R ${MNT} 2>/dev/null || umount ${MNT} || true; fi
-
-    if [ -e /dev/mapper/cryptroot ]; then
+    if [ "$INSTALLER_OPENED_CRYPTROOT" = "true" ]; then
         log_info "Closing LUKS mapping cryptroot..."
-        cryptsetup close cryptroot 2>/dev/null || true
+        cryptsetup close cryptroot || return 1
+        INSTALLER_OPENED_CRYPTROOT="false"
     fi
 }

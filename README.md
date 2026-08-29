@@ -4,6 +4,8 @@
 
 Debian Testing (Forky), a few clear choices, working hardware, no vendor bloat. Inspired by Omarchy / Archinstall, without the extra religion.
 
+**Installing Sensible? Start with the [download-to-first-boot guide](docs/INSTALL.md).** It covers requirements, checksum verification, USB creation, the full-disk erase warning, installer choices, and first boot.
+
 ---
 
 ## Why this exists
@@ -51,7 +53,9 @@ The live ISO does **not** ship both desktops. It is a console/TUI installer envi
 
 **Default apps:** Firefox, VLC, Neovim (LazyVim starter in `/etc/skel`), modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`).
 
-**Installer checkboxes (off unless selected):** Chromium, Brave (official apt origin, not a Flatpak), Audacious, DE-native player (Amberol on GNOME, Elisa on KDE), AI CLIs (`opencode` and similar — optional, pinned, not `curl | sh` from the ISO).
+**Installer checkboxes (off unless selected):** Chromium, Brave (official apt origin, not a Flatpak), Audacious, and a DE-native player (Amberol on GNOME, Elisa on KDE).
+
+**Not currently offered:** AI CLIs. If added later, they will be optional and use pinned artifacts rather than `curl | sh` from the ISO.
 
 **Planned ([Phase 6](docs/PLAN.md#phase-6--sensible-extras-planned-not-implemented)):** fingerprint login (`fprintd`) always on, BioPass face login checkbox, oh-my-bash for all users with a sensible `.bashrc`, system git defaults + optional name/email prompts, JetBrainsMono Nerd Font, `ufw` firewall (KDE Connect-aware), printing/scanning, developer-tools checkbox (Docker + Compose, `lazygit`, `gh`), unattended `--config` installs.
 
@@ -121,6 +125,7 @@ The installed system hostname defaults to `debian`. The UEFI boot entry stays **
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) — layers, disk, boot, swap/LUKS, software
+- [Installation guide](docs/INSTALL.md) — download, verify, write USB, install, and first boot
 - [Installer spec](docs/INSTALLER_SPEC.md) — prompts, partitioning, chroot
 - [Plan](docs/PLAN.md) — implementation order
 

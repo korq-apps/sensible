@@ -84,12 +84,14 @@ jobs:
           retention-days: 14
 
   # Publication is isolated in its own job so that `contents: write` exists only
-  # on tag pushes and never in a run that builds PR-controlled code. It consumes
-  # the artifact the build job already produced rather than rebuilding.
+  # on tag pushes and never in a run that builds PR-controlled code. Keep
+  # SENSIBLE_RELEASE_READY unset/false until the real installed-disk matrix and
+  # documented release gate pass; enabling it is the final publication switch.
+  # This job consumes the build artifact rather than rebuilding.
   release:
     name: Publish Release Assets
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && vars.SENSIBLE_RELEASE_READY == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write

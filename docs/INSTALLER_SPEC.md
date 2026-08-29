@@ -10,6 +10,8 @@ Blueprint for `installer/sensible-install.sh`. On the live ISO the command is `s
 - **One disk, full wipe.** No dual-boot, no custom partition editor in v1.
 - **Minimum disk:** `2048 + SWAP_MIB + 20480` MiB (1 GiB EFI + 1 GiB BOOT + swap + 20 GiB root). Refuse smaller disks.
 - Live image already has `cryptsetup`, `btrfs-progs`, `e2fsprogs`, `dosfstools`, `gdisk`, NetworkManager, firmware, and either a squashfs or `debootstrap`.
+- **Internet is mandatory.** Reach Debian's Testing `Release` metadata before disk selection and recheck before destructive confirmation. Offer `nmtui-connect`/`nmtui` and retry; declining exits before any disk change.
+- Exclude disks with mounted descendants, active swap, or holders. Capture major:minor, byte size, serial and WWN where available, then re-read all identity/state immediately before partitioning.
 - Unlock is **`/etc/crypttab` + `cryptsetup-initramfs`**. Do not set `cryptdevice=` or `GRUB_ENABLE_CRYPTODISK`.
 
 ---
@@ -17,9 +19,12 @@ Blueprint for `installer/sensible-install.sh`. On the live ISO the command is `s
 ## 2. Flow
 
 ```
-Pre-flight (UEFI, disks, RAM, size check)
-    → Prompts (--config answers file: planned — Phase 6)
+Pre-flight (UEFI, unused target mountpoint)
+    → Select and apply live keyboard; check Debian mirror
+    → Disks, RAM, size/state check; remaining regional settings
+    → Remaining prompts (--config answers file: planned — Phase 6)
     → Type-the-disk-name confirmation
+    → Recheck network and selected disk identity/state
     → Partition, format, mount
     → Deploy base (squashfs rsync, or debootstrap)
     → Chroot: fstab/crypttab, identity + user, packages, locale-gen,
@@ -36,7 +41,7 @@ suite (`tests/`) can run the full flow unprivileged against a temp directory.
 
 | Field | Default | Notes |
 | :--- | :--- | :--- |
-| Target disk | none | `lsblk -dpno NAME,SIZE,MODEL`; skip the live USB if known |
+| Target disk | none | Show path/size/model; record major:minor, byte size, serial and WWN; exclude every in-use disk and revalidate before wipe |
 | Filesystem | Btrfs | Btrfs or Ext4 |
 | LUKS2 | Yes | If yes: passphrase twice, min 8 characters |
 | Swap | RAM + 10% | Shown, not editable in v1 |
@@ -44,12 +49,12 @@ suite (`tests/`) can run the full flow unprivileged against a temp directory.
 | Mac clipboard (`keyd`) | On for GNOME, off for KDE | Super+C/V/X only |
 | Extra browsers | none | Chromium; Brave (official apt origin) |
 | Extra media | none | Audacious; Amberol (GNOME) or Elisa (KDE) |
-| Hostname | `debian` | RFC 1123. Stay `debian` — the box is Debian, not a derivative. |
-| Username | none | `^[a-z_][a-z0-9_-]*$` |
+| Hostname | `debian` | RFC 1123 syntax and maximum 63 bytes for the Linux static hostname. Stay `debian` — the box is Debian, not a derivative. |
+| Username | none | `^[a-z_][a-z0-9_-]*$`, maximum 32 characters, and not an existing or known package-owned account; recheck after target packages before `useradd` |
 | User password | none | Twice; root password set to the same value for recovery |
 | Timezone | `timedatectl` or `UTC` | zoneinfo |
 | Locale | `en_US.UTF-8` | Must be in `/usr/share/i18n/SUPPORTED` |
-| Keyboard | live console layout | written through `keyboard-configuration` |
+| Keyboard | live console layout | Validate and apply to the live console before either password; write the same layout through target `keyboard-configuration` |
 | Skip login password (autologin) | On (only offered with LUKS) | GDM/SDDM autologin; the LUKS passphrase stays the single authentication and the idle screen lock is always enforced |
 
 Firefox, VLC, Neovim, Flatpak, firmware, and the CLI set are always installed — not checkboxes.
@@ -204,7 +209,12 @@ mount "$EFI_PART" /mnt/boot/efi
 
 ## 6. Deploy base
 
-Prefer copying the live root (fast, offline). Exclude the **contents** of the API filesystems (`/dev/*`), never the directories themselves (`/dev`): a whole-directory exclude leaves the target without the mountpoints the bind mounts below require, and the install aborts.
+Prefer copying the live root for the base deployment. This is faster, but the
+overall installation is not offline because current packages and the selected
+desktop are installed from Debian. Exclude the **contents** of the API
+filesystems (`/dev/*`), never the directories themselves (`/dev`): a
+whole-directory exclude leaves the target without the mountpoints the bind
+mounts below require, and the install aborts.
 
 ```bash
 rsync -aAX --info=progress2 \
@@ -222,13 +232,20 @@ mkdir -p /mnt/{dev,proc,sys,run,tmp,mnt,media}
 chmod 1777 /mnt/tmp
 ```
 
+After a live-root copy, remove the live installer profile scripts, command
+wrappers, staged `/opt/sensible` source/docs, live issue/MOTD branding, root
+autologin units, and live-only package/state trees. Reset `machine-id`. Purge
+`live-boot`, `live-config`, and `live-config-systemd` before rebuilding the
+target initramfs.
+
 Bind-mount before any chroot:
 
 ```bash
 for d in /dev /dev/pts /proc /sys /run; do
   mount --bind "$d" "/mnt$d"
 done
-cp /etc/resolv.conf /mnt/etc/resolv.conf
+rm -f /mnt/etc/resolv.conf
+cp -L /etc/resolv.conf /mnt/etc/resolv.conf
 ```
 
 ---
@@ -298,7 +315,11 @@ echo "$USERNAME:$USERPASS" | chroot /mnt chpasswd
 echo "root:$USERPASS" | chroot /mnt chpasswd
 ```
 
-Keyboard: take the live console layout (`/etc/default/keyboard`, `XKBLAYOUT`) and write it through `keyboard-configuration` after packages are installed:
+Keyboard is selected, validated against installed XKB symbols, and applied with
+`setupcon --force --keyboard-only` before collecting LUKS or account passwords.
+After target packages are installed, write that same layout through
+`keyboard-configuration`. Install desktop packages before creating the human
+user so package-owned accounts such as `sddm` already exist and cannot collide:
 
 ```bash
 printf 'keyboard-configuration keyboard-configuration/layoutcode select %s\n' "$KBLAYOUT" \
@@ -521,7 +542,16 @@ unlocked by autologin (first use prompts once).
 ## 13. Teardown
 
 ```bash
-umount -R /mnt
-[ "$ENABLE_LUKS" = true ] && cryptsetup close cryptroot
+# Only when this installer run successfully created the corresponding resource:
+flush installer log; cp it to /mnt/var/log/sensible-install.log
+umount known installer-created bind and subvolume mounts, deepest first
+umount /mnt  # never recursive; an unknown child mount is not ours to remove
+[ "$INSTALLER_OPENED_CRYPTROOT" = true ] && cryptsetup close cryptroot
 # The swapfile lives inside the root filesystem — nothing else to close.
 ```
+
+The installer records terminal and package output in root-only
+`/var/log/sensible-install.log`. On post-wipe failure it copies that log into
+the partial target when possible before owned cleanup. A critical operation or
+failed teardown prevents the success dialog; optional failures are retained and
+shown in the completion warning summary.

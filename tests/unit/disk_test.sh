@@ -4,6 +4,7 @@ TEST_NAME="disk_test"
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/harness.sh"
 source "${INSTALLER_DIR}/lib/common.sh"
 source "${INSTALLER_DIR}/lib/disk.sh"
+PROC_SWAPS="/dev/null"
 
 t_section "get_partition_name (nvme/mmcblk use pN)"
 assert_eq "sda"      "/dev/sda3"      "$(get_partition_name /dev/sda 3)"
@@ -126,7 +127,7 @@ lsblk() {
     local dev="${!#}"
     case "$*" in
         *"NAME,SIZE,TYPE,RO"*) printf '/dev/sda 500G disk 0\n/dev/vda 10G disk 0\n/dev/zda 500G disk 0\n' ;;
-        *MOUNTPOINTS*) [ "$dev" = "/dev/zda" ] && echo "/run/live/medium" ;;
+        *MOUNTPOINTS*) if [ "$dev" = "/dev/zda" ]; then echo "/run/live/medium"; fi; return 0 ;;
         *"-bno SIZE"*) case "$dev" in /dev/sda) echo 536870912000 ;; /dev/vda) echo 10737418240 ;; esac ;;
         *"-dno MODEL"*) case "$dev" in /dev/sda) echo "Samsung SSD 860" ;; esac ;;
     esac
@@ -187,7 +188,7 @@ lsblk() {
     local dev="${!#}"
     case "$*" in
         *"NAME,SIZE,TYPE,RO"*) printf '/dev/vda 20G disk 0\n/dev/sr0 1.3G rom 1\n' ;;
-        *MOUNTPOINTS*) [ "$dev" = "/dev/sr0" ] && echo "/run/live/medium" ;;
+        *MOUNTPOINTS*) if [ "$dev" = "/dev/sr0" ]; then echo "/run/live/medium"; fi; return 0 ;;
         *"-d "*) case "$dev" in /dev/vda) echo 21474836480 ;; esac ;;
     esac
 }
@@ -209,5 +210,76 @@ lsblk() {
     esac
 }
 assert_contains "read-only disk reported as such" "$(explain_no_candidates 31539)" "read-only"
+
+t_section "validate_target_disk: stable identity and safe state"
+lsblk() {
+    case "$*" in
+        *"-dno TYPE"*) echo disk ;;
+        *"-dno RO"*) echo 0 ;;
+        *"-dno MAJ:MIN"*) echo 8:0 ;;
+        *"-dnbo SIZE"*) echo 536870912000 ;;
+        *"-dno SERIAL"*) echo SERIAL-1 ;;
+        *"-dno WWN"*) echo WWN-1 ;;
+        *MOUNTPOINTS*|*"-nrpo NAME"*|*"-nrpo KNAME"*) : ;;
+    esac
+}
+validate_target_disk /dev/sda 31539 8:0 536870912000 SERIAL-1 WWN-1
+assert_rc "unchanged unused disk passes revalidation" 0 $?
+validate_target_disk /dev/sda 31539 8:0 536870912000 DIFFERENT WWN-1
+assert_rc "serial change fails revalidation" 1 $?
+lsblk() {
+    case "$*" in
+        *"-dno TYPE"*) echo disk ;;
+        *"-dno RO"*) echo 0 ;;
+        *"-dno MAJ:MIN"*) echo 8:0 ;;
+        *"-dnbo SIZE"*) echo 536870912000 ;;
+        *"-dno SERIAL"*) echo SERIAL-1 ;;
+        *"-dno WWN"*) echo WWN-1 ;;
+        *MOUNTPOINTS*) echo /media/data ;;
+        *"-nrpo NAME"*|*"-nrpo KNAME"*) : ;;
+    esac
+}
+validate_target_disk /dev/sda 31539 8:0 536870912000 SERIAL-1 WWN-1
+assert_rc "new mount fails revalidation" 1 $?
+
+t_section "in-use probes fail closed and detect holders/swap by device ID"
+safety_tree="$(mktemp -d)"
+mkdir -p "${safety_tree}/sys/sda/holders" "${safety_tree}/sys/sda1/holders"
+touch "${safety_tree}/sys/sda1/holders/dm-0"
+SYS_CLASS_BLOCK="${safety_tree}/sys"
+PROC_SWAPS="${safety_tree}/swaps"
+printf 'Filename Type Size Used Priority\n/dev/dm-2 partition 1024 0 -2\n' > "$PROC_SWAPS"
+lsblk() {
+    case "$*" in
+        *MOUNTPOINTS*) return 1 ;;
+        *"KNAME"*) printf 'sda\nsda1\n' ;;
+        *"-nrno MAJ:MIN /dev/sda"*) printf '8:0\n8:1\n253:2\n' ;;
+        *"-dnro MAJ:MIN /dev/dm-2"*) printf '253:2\n' ;;
+    esac
+}
+disk_has_mounts /dev/sda; assert_rc "failed mount probe marks disk in use" 0 $?
+disk_has_holders /dev/sda; assert_rc "sysfs holder detected without path-corrupted KNAME" 0 $?
+disk_has_active_swap /dev/sda; assert_rc "active mapper swap matched by major:minor" 0 $?
+PROC_SWAPS="${safety_tree}/missing-swaps"
+disk_has_active_swap /dev/sda; assert_rc "unreadable swap state marks disk in use" 0 $?
+SYS_CLASS_BLOCK="/sys/class/block"
+PROC_SWAPS="/dev/null"
+rm -rf "$safety_tree"
+
+t_section "target mount tree must be unused before installation"
+findmnt() { printf '/\n/mnt\n/mnt/external\n'; }
+target_mount_tree_busy /mnt; assert_rc "target mount itself is busy" 0 $?
+target_mount_tree_busy /safe-target; assert_rc "unmounted target path is available" 1 $?
+
+t_section "unmount_target touches only installer-owned resources"
+mock_setup
+INSTALLER_OWNS_TARGET_MOUNTS=false
+INSTALLER_OPENED_CRYPTROOT=false
+mountpoint() { mlog "mountpoint $*"; return 0; }
+umount() { mlog "umount $*"; }
+cryptsetup() { mlog "cryptsetup $*"; }
+unmount_target
+assert_eq "no ownership means no mount inspection or unmount" "" "$(cat "${MOCK_LOG}")"
+mock_teardown
 
 t_summary

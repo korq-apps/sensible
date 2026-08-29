@@ -10,8 +10,8 @@
 #   - not when booted in legacy BIOS mode, where check_uefi would refuse
 #     anyway; 99-sensible-firmware-check.sh has already explained why.
 #
-# A short countdown leaves an escape hatch to the shell, so network setup
-# (nmtui) stays reachable before installing.
+# A short countdown leaves an escape hatch to the shell for diagnostics or
+# manual network setup. The installer itself now checks and guides networking.
 
 [ -n "${BASH_VERSION:-}" ] || return 0
 case "$-" in *i*) ;; *) return 0 ;; esac

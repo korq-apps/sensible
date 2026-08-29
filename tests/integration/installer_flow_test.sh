@@ -21,6 +21,11 @@ ANSWERS="${WORK}/answers.txt"
 OUT="${WORK}/stdout.log"
 ERR="${WORK}/stderr.log"
 MOCK_NVIDIA=0
+LIVE_KEYBOARD_FILE="${WORK}/live-keyboard"
+INSTALL_LOG="${WORK}/sensible-install.log"
+PROC_SWAPS="${WORK}/swaps"
+printf 'Filename Type Size Used Priority\n' > "$PROC_SWAPS"
+declare -A MOCK_MOUNTS=()
 
 # --- global mocks (installed tools) ----------------------------------------
 free()         { printf '              total        used        free\nMem:           8192        1024        7168\n'; }
@@ -30,13 +35,24 @@ lsblk() {
     case "$*" in
         *"NAME,SIZE,TYPE,RO"*) echo "/dev/sda 500G disk 0" ;;
         *MOUNTPOINTS*) : ;;
-        *"-bno SIZE"*) echo 536870912000 ;;
+        *"-dnbo SIZE"*|*"-bno SIZE"*) echo 536870912000 ;;
+        *"-dno MAJ:MIN"*) echo "8:0" ;;
+        *"-dno TYPE"*) echo "disk" ;;
+        *"-dno RO"*) echo "0" ;;
+        *"-dno SERIAL"*) echo "TEST-SERIAL-001" ;;
+        *"-dno WWN"*) echo "TEST-WWN-001" ;;
         *"-dno MODEL"*) echo "TestDisk" ;;
     esac
 }
 
 sgdisk()      { mlog "sgdisk $*"; }
-rsync()       { mlog "rsync $*"; }
+rsync()       {
+    mlog "rsync $*"
+    mkdir -p "${MNT}/etc/profile.d" "${MNT}/usr/local/bin" "${MNT}/opt/sensible"
+    touch "${MNT}/etc/profile.d/99-sensible-autostart.sh" \
+          "${MNT}/etc/profile.d/99-sensible-firmware-check.sh" \
+          "${MNT}/usr/local/bin/sensible-install" "${MNT}/usr/local/bin/lazydeb"
+}
 wipefs()      { mlog "wipefs $*"; }
 partprobe()   { mlog "partprobe $*"; }
 mkfs.vfat()   { mlog "mkfs.vfat $*"; }
@@ -44,15 +60,35 @@ mkfs.ext4()   { mlog "mkfs.ext4 $*"; }
 mkfs.btrfs()  { mlog "mkfs.btrfs $*"; }
 mkswap()      { mlog "mkswap $*"; }
 cryptsetup()  { mlog "cryptsetup $*"; }
-mount()       { mlog "mount $*"; }
-umount()      { mlog "umount $*"; }
-mountpoint()  { mlog "mountpoint $*"; return 0; }
+mount()       {
+    mlog "mount $*"
+    local target="${*: -1}"
+    MOCK_MOUNTS["$target"]=1
+}
+umount()      {
+    mlog "umount $*"
+    local target="${*: -1}" mounted
+    if [ "${1:-}" = "-R" ]; then
+        for mounted in "${!MOCK_MOUNTS[@]}"; do
+            [[ "$mounted" = "$target" || "$mounted" = "$target/"* ]] && unset 'MOCK_MOUNTS[$mounted]'
+        done
+    else
+        unset 'MOCK_MOUNTS[$target]'
+    fi
+}
+mountpoint()  {
+    mlog "mountpoint $*"
+    local target="${*: -1}"
+    [ "${MOCK_MOUNTS[$target]:-0}" = "1" ]
+}
 btrfs()       { mlog "btrfs $*"; if [ "$1" = "inspect-internal" ]; then echo "38400"; fi; }
 chattr()      { mlog "chattr $*"; }
 fallocate()   { mlog "fallocate $*"; touch "$3"; }
 filefrag()    { mlog "filefrag $*"; echo " 0:        0..       0:    38400..    38400:       1:"; }
 debootstrap() { mlog "debootstrap $*"; }
 timedatectl() { mlog "timedatectl $*"; echo "Europe/Berlin"; }
+setupcon()     { mlog "setupcon $*"; }
+network_ready() { mlog "network_ready"; return 0; }
 git()         { mlog "git $*"; if [ "$1" = "clone" ]; then local t="${@: -1}"; mkdir -p "$t"; echo "test" > "$t/init.lua"; fi; }
 curl()        { mlog "curl $*"; touch "$2"; }
 lspci() {
@@ -78,6 +114,9 @@ blkid() {
 chroot() {
     mlog "chroot $*"
     shift
+    if [ "${1:-}" = "getent" ] && [ "${2:-}" = "passwd" ]; then
+        return 1
+    fi
     if [ "${1:-}" = "id" ] && [ "${2:-}" = "-nG" ]; then
         echo "sudo audio video plugdev netdev bluetooth"
     fi
@@ -91,8 +130,11 @@ build_answers() {
     local confirm="${6:-/dev/sda}" username="${7:-alice}"
     {
         printf '\n'                       # welcome msgbox
+        printf 'us\n'                     # live keyboard before networking
         printf '1\n'                      # disk menu -> /dev/sda
         case "$fs"   in btrfs) printf '1\n' ;; ext4) printf '2\n' ;; esac
+        printf 'Europe/Berlin\n'          # timezone
+        printf 'en_US.UTF-8\n'            # locale
         case "$luks" in
             yes) printf 'y\npass12345\npass12345\n' ;;
             no)  printf 'n\n' ;;
@@ -104,9 +146,6 @@ build_answers() {
         printf '%s\n' "${username}"       # username
         printf 'pw1234567\npw1234567\n'   # user password + confirm
         if [ "$luks" = "yes" ]; then printf 'y\n'; fi   # autologin prompt (LUKS only)
-        printf 'Europe/Berlin\n'          # timezone
-        printf 'en_US.UTF-8\n'            # locale
-        printf 'us\n'                     # keyboard
         printf '%s\n' "${confirm}"        # type-to-confirm wipe
         printf '\n'                       # enter on the final "Complete" msgbox
     } > "${ANSWERS}"
@@ -116,28 +155,32 @@ prep_target() {
     MNT="${WORK}/target"
     rm -rf "${MNT}"
     mkdir -p "${MNT}/etc" "${MNT}/etc/apt" "${MNT}/etc/default" "${MNT}/home/alice"
+    MOCK_MOUNTS=()
 }
 
-# main() uses exit() on abort paths, so always invoke it in a subshell.
-# errexit must be (re)enabled INSIDE the subshell: being on the left of `||`
-# suppresses it for the subshell body, which would mask set -e failures.
+# main() uses exit() on abort paths, so always invoke it in a subshell. Do not
+# put that subshell on the left of `||`: Bash then disables errexit throughout
+# the body, masking mandatory command failures even if `set -e` appears inside.
 run_flow() {
     prep_target
     mock_setup
     : > "${OUT}"; : > "${ERR}"
-    RC=0
-    ( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" ) || RC=$?
+    set +e
+    ( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" )
+    RC=$?
+    set -e
     cp "${MOCK_LOG}" "${WORK}/calls.log"
     mock_teardown
 }
 
 log_text() { cat "${WORK}/calls.log"; }
+output_text() { cat "${OUT}" "${ERR}"; }
 
 # Shared assertions for a successful run
 assert_common_success() {
     assert_rc "main returns 0" 0 "${RC}"
-    assert_contains "success logged" "$(cat "${ERR}")" "Installation finished successfully!"
-    assert_contains "completion dialog shown" "$(cat "${ERR}")" "has completed successfully"
+    assert_contains "success logged" "$(output_text)" "Installation finished successfully!"
+    assert_contains "completion dialog shown" "$(output_text)" "installation completed successfully"
     assert_file_contains "sources.list: testing + full archive areas" "${MNT}/etc/apt/sources.list" "deb https://deb.debian.org/debian testing main contrib non-free non-free-firmware"
     assert_file_contains "hostname written" "${MNT}/etc/hostname" "sensible-box"
     assert_file_contains "hosts entry" "${MNT}/etc/hosts" "127.0.1.1 sensible-box"
@@ -146,6 +189,12 @@ assert_common_success() {
     assert_file_contains "keyboard layout applied" "${MNT}/etc/default/keyboard" 'XKBLAYOUT="us"'
     assert_file_not_exists "no root autologin leak into target (tty1)" "${MNT}/etc/systemd/system/getty@tty1.service.d/autologin.conf"
     assert_file_not_exists "no root autologin leak into target (serial)" "${MNT}/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf"
+    assert_file_not_exists "no live installer autostart profile" "${MNT}/etc/profile.d/99-sensible-autostart.sh"
+    assert_file_not_exists "no live installer command" "${MNT}/usr/local/bin/sensible-install"
+    assert_file_not_exists "no staged installer tree" "${MNT}/opt/sensible"
+    assert_file_exists "installer log preserved on target" "${MNT}/var/log/sensible-install.log"
+    assert_contains "network checked before wipe and again before confirmation" "$(log_text)" "network_ready"
+    assert_contains "live keyboard applied" "$(log_text)" "setupcon --force --keyboard-only"
     assert_contains "timezone symlink attempted via chroot" "$(log_text)" "chroot ${MNT} ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime"
     assert_contains "groups pre-created" "$(log_text)" "chroot ${MNT} groupadd -f bluetooth"
     assert_contains "user added to sudo group" "$(log_text)" "chroot ${MNT} useradd -m -s /bin/bash -G sudo,audio,video,plugdev,netdev,bluetooth alice"
@@ -154,7 +203,8 @@ assert_common_success() {
     assert_contains "Secure Boot chain installed (shim + signed GRUB)" "$(log_text)" "grub-efi-amd64 grub-efi-amd64-signed shim-signed cryptsetup-initramfs"
     assert_contains "initramfs updated" "$(log_text)" "chroot ${MNT} update-initramfs -u -k all"
     assert_contains "grub config regenerated" "$(log_text)" "chroot ${MNT} update-grub"
-    assert_contains "teardown unmounts target" "$(log_text)" "umount -R ${MNT}"
+    assert_contains "teardown unmounts target without recursion" "$(log_text)" "umount ${MNT}"
+    assert_not_contains "teardown never recursively unmounts foreign children" "$(log_text)" "umount -R ${MNT}"
     assert_contains "EFI partition formatted" "$(log_text)" "mkfs.vfat -F32 -n EFI /dev/sda1"
     assert_contains "BOOT partition formatted" "$(log_text)" "mkfs.ext4 -F -L BOOT /dev/sda2"
     assert_contains "hardware: firmware-brcm80211 (not firmware-broadcom)" "$(log_text)" "firmware-brcm80211"
@@ -292,27 +342,35 @@ lsblk() {
     case "$*" in
         *"NAME,SIZE,TYPE,RO"*) echo "/dev/sda 10G disk 0" ;;
         *MOUNTPOINTS*) : ;;
-        *"-bno SIZE"*) echo 10737418240 ;;
+        *"-dnbo SIZE"*|*"-bno SIZE"*) echo 10737418240 ;;
     esac
 }
-printf '\n1\n' > "${ANSWERS}"   # welcome + disk pick only; never reached
+printf '\nus\n' > "${ANSWERS}"   # welcome + keyboard; disk menu is never reached
 : > "${OUT}"; : > "${ERR}"
-rc=0; ( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" ) || rc=$?
+set +e
+( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" )
+rc=$?
+set -e
 cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
 assert_rc "installer exits 1 when no disk is large enough" 1 "${rc}"
-assert_contains "no-candidates error surfaced" "$(cat "${ERR}")" "No disk qualified as an installation target"
+assert_contains "no-candidates error surfaced" "$(output_text)" "No disk qualified as an installation target"
 # Not just that it failed: the dialog must say which disk was rejected and why,
 # so an undersized VM disk is distinguishable from having no disk at all.
-assert_contains "error names the rejected disk" "$(cat "${ERR}")" "/dev/sda"
-assert_contains "error gives the reason" "$(cat "${ERR}")" "too small"
-assert_contains "error explains the RAM-derived minimum" "$(cat "${ERR}")" "RAM + 10%"
+assert_contains "error names the rejected disk" "$(output_text)" "/dev/sda"
+assert_contains "error gives the reason" "$(output_text)" "too small"
+assert_contains "error explains the RAM-derived minimum" "$(output_text)" "RAM + 10%"
 assert_not_contains "no partitioning happened" "$(log_text)" "sgdisk"
 lsblk() {
     mlog "lsblk $*"
     case "$*" in
         *"NAME,SIZE,TYPE,RO"*) echo "/dev/sda 500G disk 0" ;;
         *MOUNTPOINTS*) : ;;
-        *"-bno SIZE"*) echo 536870912000 ;;
+        *"-dnbo SIZE"*|*"-bno SIZE"*) echo 536870912000 ;;
+        *"-dno MAJ:MIN"*) echo "8:0" ;;
+        *"-dno TYPE"*) echo "disk" ;;
+        *"-dno RO"*) echo "0" ;;
+        *"-dno SERIAL"*) echo "TEST-SERIAL-001" ;;
+        *"-dno WWN"*) echo "TEST-WWN-001" ;;
         *"-dno MODEL"*) echo "TestDisk" ;;
     esac
 }
@@ -321,7 +379,10 @@ t_section "Abort: wipe confirmation must match disk exactly"
 build_answers btrfs yes gnome yes "" "/dev/wrong-disk"
 prep_target
 mock_setup
-rc=0; ( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" ) || rc=$?
+set +e
+( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" )
+rc=$?
+set -e
 cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
 assert_rc "installer aborts on mismatched confirmation" 1 "${rc}"
 assert_not_contains "no partitioning on mismatch" "$(log_text)" "sgdisk"
@@ -331,8 +392,11 @@ prep_target
 mock_setup
 {
     printf '\n'                       # welcome
+    printf 'us\n'                     # live keyboard
     printf '1\n'                      # disk
     printf '1\n'                      # fs btrfs
+    printf 'Europe/Berlin\n'
+    printf 'en_US.UTF-8\n'
     printf 'n\n'                      # no LUKS
     printf '1\n'                      # gnome
     printf 'n\n'                      # no keyd
@@ -342,17 +406,41 @@ mock_setup
     printf '\n'                       # enter for the invalid-username msgbox
     printf 'alice\n'                  # username #2: valid
     printf 'pw1234567\npw1234567\n'   # password + confirm
-    printf 'Europe/Berlin\n'
-    printf 'en_US.UTF-8\n'
-    printf 'us\n'
     printf '/dev/sda\n'
     printf '\n'                       # enter on the final "Complete" msgbox
 } > "${ANSWERS}"
 : > "${OUT}"; : > "${ERR}"
-rc=0; ( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" ) || rc=$?
+set +e
+( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" )
+rc=$?
+set -e
 cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
 assert_rc "install succeeds after re-prompt" 0 "${rc}"
 assert_contains "user 'alice' created (not 'Bad Name')" "$(log_text)" "useradd -m -s /bin/bash -G sudo,audio,video,plugdev,netdev,bluetooth alice"
+
+t_section "Post-wipe mandatory failure: no false success, log preserved, owned cleanup"
+build_answers ext4 no gnome no ""
+install_hardware_packages() { log_err "simulated hardware package failure"; return 1; }
+run_flow
+assert_ne "mandatory post-wipe failure returns nonzero" 0 "${RC}"
+assert_not_contains "failure never prints success" "$(output_text)" "Installation finished successfully!"
+assert_file_exists "failure log copied into partial target" "${MNT}/var/log/sensible-install.log"
+assert_file_contains "failure log identifies the active stage" "${MNT}/var/log/sensible-install.log" "installing hardware support"
+assert_contains "failure cleanup unmounts owned target" "$(log_text)" "umount ${MNT}"
+
+t_section "Network cancellation: exits before disk selection or wipe"
+network_ready() { return 1; }
+prep_target
+mock_setup
+printf '\nus\nn\n\n' > "${ANSWERS}" # welcome, keyboard, decline setup, cancellation msgbox
+: > "${OUT}"; : > "${ERR}"
+set +e
+( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" )
+rc=$?
+set -e
+cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
+assert_rc "offline cancellation exits 1" 1 "${rc}"
+assert_not_contains "offline cancellation never lists or partitions disks" "$(log_text)" "sgdisk"
 
 rm -rf "${WORK}"
 trap - EXIT   # drop the installer's cleanup trap before exiting the test shell

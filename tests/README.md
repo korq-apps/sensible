@@ -10,8 +10,8 @@ tests/run-tests.sh    # no root, no container, no network — plain bash
 
 | Suite | Covers |
 | :--- | :--- |
-| `common_test.sh` | MNT override, UI tool detection (whiptail/dialog/text), logging to stderr, all text-mode UI widgets (value-vs-stdout contract), keyboard layout detection, `check_root`/`check_uefi` |
-| `disk_test.sh` | Partition naming (nvme/mmcblk vs sd/vd), swap = RAM+10%, min-disk math, GPT layout (LUKS: 3 partitions, root on p3; no-LUKS: 4 with swap partition), LUKS2 argon2id branch, btrfs subvolumes incl. `@swap` + NOCOW swapfile + `resume_offset` (map-swapfile/filefrag), ext4 fast_commit, plain-swap branch, candidate filtering (min size, live medium, read-only), multi-word disk models, fallback listing |
+| `common_test.sh` | MNT override, UI tool detection (whiptail/dialog/text), logging and warning collection, text-mode widgets, network preflight, hostname/username validation, keyboard layout detection/validation/application, `check_root`/`check_uefi` |
+| `disk_test.sh` | Partition naming, swap/minimum math, GPT layouts, LUKS2, Btrfs subvolumes and swapfile resume offset, Ext4, candidate filtering, stable disk-identity revalidation, mounted-disk rejection, and installer-owned cleanup |
 | `fstab_test.sh` | All four combinations (Btrfs/Ext4 x LUKS on/off): crypttab root by LUKS header UUID (LUKS: root only), swapfile line on the encrypted root, plain swap UUID, `@swap` subvol line, tmpfs, and the blkid-empty abort guards |
 | `desktop_test.sh` | GNOME/KDE package sets, Plymouth spinner/breeze, gdm3/sddm enablement, keyd conf deployed from `configs/` (never generated — spec §11), hard-fail on missing conf |
 | `apps_test.sh` | Canonical default app set (Architecture §7), Flathub, LazyVim skel + user copy + ownership, Brave official apt origin + signed keyring, quoted whiptail checklist matching, amberol/elisa per tag, no Slack/Zoom/Steam/Snapd |
@@ -29,14 +29,16 @@ function mock that records its invocation. Asserts, per scenario:
 - Combo 3: Ext4 + LUKS, GNOME, one extra app
 - Combo 4: Ext4 + no LUKS, KDE, keyd on
 - Combo 5: Ext4 + LUKS, KDE, autologin accepted (SDDM `Session=` required)
-- Live-copy deploy path: rsync excludes keep the API directories, mountpoints exist
-- Aborts: undersized/no-disk, mismatched wipe confirmation
+- Live-copy deploy path: API mountpoints remain available while live-only installer artifacts are removed
+- Aborts: offline cancellation, undersized/no-disk, mismatched wipe confirmation, and a mandatory post-wipe failure
 - Re-prompts: invalid username rejected, valid accepted
 
 Assertions cover generated files (fstab, crypttab, sources.list, hostname,
 locale, keyboard, grub `resume=` rules, keyd, brave origin), call sequences
-(partition types/sizes, LUKS format args, group creation, sudo membership,
-package sets, theme, bootloader), and success/abort exit codes.
+(partition types/sizes, LUKS format args, network checks, live keyboard setup,
+stable disk identity, group creation, sudo membership, package sets, theme,
+bootloader, owned teardown, and preserved failure logs), plus success/abort exit
+codes.
 
 ## Testing hooks in production code (behavior-preserving)
 
@@ -44,6 +46,8 @@ package sets, theme, bootloader), and success/abort exit codes.
 - `installer/sensible-install.sh` only runs `main` when executed directly
   (`[ "${BASH_SOURCE[0]}" = "$0" ]`), so tests can source it.
 - `detect_keyboard_layout [file]` accepts an optional file argument.
+- `LIVE_KEYBOARD_FILE` and `INSTALL_LOG` redirect live-only state into the test
+  workspace.
 
 ## Not covered here (future work)
 

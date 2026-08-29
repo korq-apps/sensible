@@ -26,12 +26,12 @@ install_desktop() {
     DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y --no-install-recommends "${pkgs[@]}"
 
     log_info "Configuring Plymouth theme: ${plymouth_theme}..."
-    chroot ${MNT} plymouth-set-default-theme -R "$plymouth_theme" 2>/dev/null || true
+    chroot ${MNT} plymouth-set-default-theme -R "$plymouth_theme"
 
     if [ "$desktop_env" = "gnome" ]; then
-        chroot ${MNT} systemctl enable gdm3.service 2>/dev/null || true
+        chroot ${MNT} systemctl enable gdm3.service
     elif [ "$desktop_env" = "kde" ]; then
-        chroot ${MNT} systemctl enable sddm.service 2>/dev/null || true
+        chroot ${MNT} systemctl enable sddm.service
     fi
 
     if [ "$enable_keyd" = "true" ]; then
@@ -43,7 +43,7 @@ install_desktop() {
         fi
         mkdir -p ${MNT}/etc/keyd
         cp "$keyd_conf" ${MNT}/etc/keyd/default.conf
-        chroot ${MNT} systemctl enable keyd.service 2>/dev/null || true
+        chroot ${MNT} systemctl enable keyd.service
     fi
 
     log_success "Desktop environment ${desktop_env} configured successfully."
@@ -68,7 +68,7 @@ idle-delay=uint32 300
 lock-enabled=true
 lock-delay=uint32 0
 EOF
-        chroot ${MNT} dconf update 2>/dev/null || log_warn "dconf update failed; screen lock defaults may not apply."
+        chroot ${MNT} dconf update
     else
         log_info "Configuring KDE idle screen lock (5 min)..."
         mkdir -p ${MNT}/etc/xdg
@@ -84,8 +84,8 @@ EOF
         return 0
     fi
     if [ -z "$username" ]; then
-        log_warn "Autologin enabled but no username given; skipping."
-        return 0
+        log_err "Autologin was enabled without a username."
+        return 1
     fi
 
     if [ "$desktop_env" = "gnome" ]; then
