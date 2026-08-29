@@ -105,4 +105,17 @@ printf '# cryptroot UUID=LUKS-UUID none luks\n' > "${T}/etc/crypttab"
 OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
 assert_rc "a commented-out crypttab mapping fails" 1 "${rc}"
 
+t_section "show_failure_screen never blocks a run with no human present"
+# The suite itself runs with stdin redirected, so this is the real condition:
+# if the guard regressed, this assertion would hang rather than fail, which is
+# exactly the outcome the guard exists to prevent in CI and unattended installs.
+UI_TOOL="text"
+show_failure_screen "partitioning" 1 "/nonexistent/log" </dev/null
+assert_rc "returns immediately when stdin is not a terminal" 0 $?
+
+# Belt and braces for a caller that does have a terminal but must not prompt.
+SENSIBLE_NO_FAILURE_SCREEN=1 show_failure_screen "partitioning" 1 "/nonexistent/log" </dev/null
+assert_rc "explicit opt-out is honoured" 0 $?
+unset SENSIBLE_NO_FAILURE_SCREEN
+
 t_summary

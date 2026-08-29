@@ -45,6 +45,9 @@ cleanup() {
         if ! unmount_target; then
             log_err "Automatic cleanup was incomplete. Do not reboot until ${MNT} is unmounted and the cryptroot mapping is closed."
         fi
+        # Offered after cleanup so the log tail reflects the unmount too, and so
+        # a shell opened from here is not holding the target mounted.
+        show_failure_screen "${CURRENT_STAGE:-pre-flight}" "$exit_code" "$INSTALL_LOG" || true
     fi
 }
 
@@ -89,10 +92,15 @@ main() {
 
     log_info "Detected RAM: ${RAM_MIB} MiB. Planned Swap: ${SWAP_MIB} MiB. Min disk required: ${MIN_DISK_MIB} MiB."
 
-    # Parse candidate disks
-    mapfile -t DISK_CANDIDATES < <(list_candidate_disks)
-    if [ ${#DISK_CANDIDATES[@]} -eq 0 ]; then
-        ui_msgbox "Error: No Installable Disk" "\
+    # Parse candidate disks. Nothing qualifying is recoverable without a reboot
+    # -- a disk can be attached or resized and rescanned from here -- so offer
+    # that rather than exiting and making the user start the session again.
+    local NO_DISK_TEXT NO_DISK_CHOICE
+    while true; do
+        mapfile -t DISK_CANDIDATES < <(list_candidate_disks)
+        [ ${#DISK_CANDIDATES[@]} -gt 0 ] && break
+
+        NO_DISK_TEXT="\
 No disk qualified as an installation target.
 
 Detected block devices:
@@ -104,8 +112,27 @@ Sensible needs a disk of at least ${MIN_DISK_MIB} MiB:
 Swap is sized to RAM + 10% so the system can hibernate, so the minimum
 grows with RAM (this machine has ${RAM_MIB} MiB). In a VM, give the guest
 a bigger virtual disk, or less RAM."
-        exit 1
-    fi
+
+        # Without a terminal (tests, unattended runs) there is nobody to answer
+        # a menu, so report and fail exactly as before rather than hang.
+        if [ ! -t 0 ]; then
+            ui_msgbox "Error: No Installable Disk" "${NO_DISK_TEXT}"
+            exit 1
+        fi
+
+        NO_DISK_CHOICE=$(ui_menu "Error: No Installable Disk" "${NO_DISK_TEXT}" \
+            "rescan" "Look again (after attaching or resizing a disk)" \
+            "shell"  "Open a shell to inspect or repartition disks" \
+            "quit"   "Quit the installer")
+        case "${NO_DISK_CHOICE}" in
+            rescan) continue ;;
+            shell)
+                echo "Starting a shell. Type 'exit' to return to the installer." >&2
+                "${SHELL:-/bin/bash}" || true
+                ;;
+            *) exit 1 ;;
+        esac
+    done
 
     # 2. Disk Selection
     local TARGET_DISK
@@ -507,8 +534,9 @@ Sensible finished writing to ${TARGET_DISK}, but the result would not boot:
 
 ${BOOT_PROBLEMS}
 
-Nothing has been unmounted yet, so the target is still available at ${MNT}
-for inspection. The installer log is at ${INSTALL_LOG}.
+The disk has been written, so it is not left in its original state. The
+installer log is at ${INSTALL_LOG}, and a copy is placed on the target
+before it is unmounted.
 
 Reporting this as a successful install would only surface the problem after
 a reboot, with the installer gone."

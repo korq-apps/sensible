@@ -9,6 +9,62 @@
 # Each check asserts an artifact that must exist for the machine to boot, so a
 # missing one is reported here, in front of the person who can still fix it.
 
+# Failure screen: say what broke, show the end of the log, and offer something
+# to do about it.
+#
+# A failed install otherwise ends at a bare shell prompt with the reason already
+# scrolled off, on a machine with no installed system to boot into -- so the log
+# is only reachable by someone who knows it exists and where it lives.
+#
+# Only runs with a human present: stdin must be a terminal. Tests and any
+# unattended run feed stdin from a file, where a menu would hang the run
+# instead of failing it.
+show_failure_screen() {
+    local stage="$1" exit_code="$2" log_file="${3:-${INSTALL_LOG}}"
+    [ -t 0 ] || return 0
+    [ "${SENSIBLE_NO_FAILURE_SCREEN:-}" = "1" ] && return 0
+
+    while true; do
+        local tail_text="(no installer log was written)"
+        if [ -s "${log_file}" ]; then
+            tail_text="$(tail -n 12 "${log_file}")"
+        fi
+
+        local choice
+        choice=$(ui_menu "Installation Failed" "\
+Sensible stopped while ${stage} (exit code ${exit_code}).
+
+Last lines of the installer log:
+${tail_text}
+
+Full log: ${log_file}" \
+            "log"      "View the full installer log" \
+            "shell"    "Open a shell to investigate" \
+            "reboot"   "Reboot this machine" \
+            "poweroff" "Power off this machine")
+
+        case "${choice}" in
+            log)
+                if command -v less >/dev/null 2>&1; then
+                    less "${log_file}"
+                else
+                    # No pager: page it manually rather than flooding the screen
+                    # with a log the user cannot scroll back through.
+                    tail -n 200 "${log_file}"
+                    read -rp "Press Enter to return..." _
+                fi
+                ;;
+            shell)
+                echo "Starting a shell. Type 'exit' to return to this screen." >&2
+                "${SHELL:-/bin/bash}" || true
+                ;;
+            reboot)   command -v systemctl >/dev/null 2>&1 && systemctl reboot   || reboot;   return 0 ;;
+            poweroff) command -v systemctl >/dev/null 2>&1 && systemctl poweroff || poweroff; return 0 ;;
+            *)        return 0 ;;
+        esac
+    done
+}
+
 # Echoes one "- reason" line per problem; returns 1 if any were found.
 validate_installed_boot() {
     local root="${1:-${MNT}}"
