@@ -24,6 +24,7 @@ sh_files=(
     installer/lib/apps.sh
     installer/lib/verify.sh
     live/build.sh
+    live/build-stages.sh
     live/auto/config
     live/auto/build
     live/auto/clean

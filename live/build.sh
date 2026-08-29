@@ -61,7 +61,9 @@ IMAGE_TAG="sensible-live-builder:latest"
 echo "==> Building container image ${IMAGE_TAG}..."
 ${CONTAINER_ENGINE} build -t "${IMAGE_TAG}" -f "${REPO_ROOT}/live/Dockerfile" "${REPO_ROOT}/live"
 
-# Run live-build inside container
+# Run live-build inside the container. The stages are driven by
+# live/build-stages.sh rather than `lb build`, so the chroot's device nodes can
+# be repaired between bootstrap and package installation -- see that script.
 echo "==> Running live-build inside container..."
 ${CONTAINER_ENGINE} run --rm --privileged \
     -e SENSIBLE_VARIANT="${SENSIBLE_VARIANT}" \
@@ -69,7 +71,7 @@ ${CONTAINER_ENGINE} run --rm --privileged \
     -v "${CACHE_DIR}:/var/cache/apt/archives:rw" \
     -w /workspace/live \
     "${IMAGE_TAG}" \
-    bash -c "lb clean --purge && lb config && lb build"
+    bash /workspace/live/build-stages.sh
 
 # Locate generated ISO. live-build's output name varies by version
 # (e.g. sensible-debian-testing-amd64.hybrid.iso), so resolve by pattern.
