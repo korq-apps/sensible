@@ -37,7 +37,10 @@ install_hardware_packages() {
         firmware-sof-signed
         mesa-vulkan-drivers
         va-driver-all
-        vdpau-driver-all
+        # No vdpau-driver-all: it no longer exists in Debian Testing, and
+        # requesting it aborted the whole hardware stage with apt exit 100.
+        # VDPAU now ships inside mesa-libgallium, which mesa-vulkan-drivers
+        # already pulls in; mesa-vdpau-drivers is only a transitional package.
         network-manager
         pipewire
         wireplumber

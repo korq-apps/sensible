@@ -27,7 +27,11 @@ show_failure_screen() {
     while true; do
         local tail_text="(no installer log was written)"
         if [ -s "${log_file}" ]; then
-            tail_text="$(tail -n 12 "${log_file}")"
+            # Strip colour escapes: the log keeps the codes log_info and friends
+            # emit, and whiptail renders them literally, so an unfiltered tail
+            # reads as ^[[1;34m[INFO]^[[0m and buries the actual error.
+            tail_text="$(tail -n 12 "${log_file}" \
+                | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g; s/\x1b[()][A-B0]//g')"
         fi
 
         local choice

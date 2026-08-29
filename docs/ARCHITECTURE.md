@@ -183,7 +183,7 @@ Facts to not relearn later:
 | Firmware | `firmware-linux`, `firmware-misc-nonfree`, `firmware-iwlwifi`, `firmware-realtek`, `firmware-atheros`, `firmware-brcm80211`, `firmware-mediatek`, `firmware-sof-signed` |
 | Wi-Fi / BT | NetworkManager, `iwd` or `wpa_supplicant`, BlueZ, `libspa-0.2-bluetooth` |
 | Audio | PipeWire, WirePlumber, `pipewire-pulse`, `pipewire-audio`, `pipewire-alsa` |
-| GPU | `mesa-vulkan-drivers`, `va-driver-all`, `vdpau-driver-all`; `nvidia-driver` + `firmware-misc-nonfree` if `lspci` sees NVIDIA |
+| GPU | `mesa-vulkan-drivers`, `va-driver-all` (VDPAU comes from `mesa-libgallium` via mesa; `vdpau-driver-all` was removed from Testing); `nvidia-driver` + `firmware-misc-nonfree` if `lspci` sees NVIDIA |
 | Power | `power-profiles-daemon` (not TLP — it fights PPD and both DEs) |
 | Biometrics | `fprintd`, `libpam-fprintd`; BioPass optional — see §5 **(planned — Phase 6)** |
 | Print / scan | `cups`, `ipp-usb` (driverless IPP-over-USB), `sane-airscan`; `simple-scan` with GNOME, `skanlite` with KDE **(planned — Phase 6)** |
