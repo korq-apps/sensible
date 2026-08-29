@@ -13,8 +13,9 @@
 # accumulated text, and reported
 #     /dev/null:1: The key "/usr/bin/aspell" is unknown.
 # Bind-mounting the container's real nodes over them is permitted where mknod
-# is not, and is a no-op when the nodes are already correct (rootful docker, as
-# CI uses, creates them properly -- which is why this only ever failed locally).
+# is not, and is a no-op wherever the nodes are already correct. CI is not
+# exempt: the GitHub runners have podman and build.sh prefers it, so CI ran
+# rootless too and failed identically.
 set -e
 
 DEV_NODES="null zero full random urandom tty"
