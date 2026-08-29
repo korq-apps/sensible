@@ -6,7 +6,8 @@ lb config noauto \
     --distribution testing \
     --archive-areas "main contrib non-free non-free-firmware" \
     --binary-images iso-hybrid \
-    --bootloader grub-efi \
+    --bootloaders "syslinux grub-efi" \
+    --uefi-secure-boot enable \
     --linux-flavours amd64 \
     --linux-packages linux-image \
     --security false \

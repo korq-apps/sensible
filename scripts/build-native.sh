@@ -69,7 +69,8 @@ if [ -z "${ISO_OUTPUT}" ] || [ ! -f "${ISO_OUTPUT}" ]; then
 fi
 
 TARGET_ISO="${REPO_ROOT}/sensible-debian-testing-amd64.iso"
-[ "${ISO_OUTPUT}" != "${TARGET_ISO}" ] && cp "${ISO_OUTPUT}" "${TARGET_ISO}"
+# cp -f: replace a pre-existing target even if it is owned by another user.
+[ "${ISO_OUTPUT}" != "${TARGET_ISO}" ] && cp -f "${ISO_OUTPUT}" "${TARGET_ISO}"
 ( cd "${REPO_ROOT}" && sha256sum sensible-debian-testing-amd64.iso > sensible-debian-testing-amd64.iso.sha256 )
 
 # Hand the artifacts back to the user who invoked sudo.

@@ -3,6 +3,39 @@
 
 # Target mount point (overridable for tests; ${MNT} in production)
 MNT="${MNT:-/mnt}"
+INSTALL_WARNINGS=()
+INSTALL_LOG="${INSTALL_LOG:-/var/log/sensible-install.log}"
+INSTALL_LOG_ACTIVE="false"
+INSTALL_TEE_PID=""
+
+start_install_log() {
+    mkdir -p "$(dirname "$INSTALL_LOG")"
+    : > "$INSTALL_LOG"
+    chmod 600 "$INSTALL_LOG"
+    # Keep the terminal useful while retaining command/package output. Secrets
+    # are entered without echo and shell tracing is never enabled.
+    exec 8>&1 9>&2
+    exec > >(tee -a "$INSTALL_LOG" >&8) 2>&1
+    INSTALL_TEE_PID=$!
+    INSTALL_LOG_ACTIVE="true"
+}
+
+stop_install_log() {
+    [ "$INSTALL_LOG_ACTIVE" = "true" ] || return 0
+    exec 1>&8 2>&9
+    exec 8>&- 9>&-
+    INSTALL_LOG_ACTIVE="false"
+    wait "$INSTALL_TEE_PID"
+    INSTALL_TEE_PID=""
+}
+
+preserve_install_log() {
+    [ -f "$INSTALL_LOG" ] || return 0
+    [ -d "${MNT}" ] || return 0
+    mkdir -p "${MNT}/var/log"
+    cp "$INSTALL_LOG" "${MNT}/var/log/sensible-install.log"
+    chmod 600 "${MNT}/var/log/sensible-install.log"
+}
 
 require_id() {
     # Abort rather than continue with an empty critical identifier; such
@@ -39,11 +72,52 @@ log_err() {
     printf '\e[1;31m[ERROR]\e[0m %s\n' "$*" >&2
 }
 
+record_warning() {
+    INSTALL_WARNINGS+=("$*")
+    log_warn "$*"
+}
+
+# Size a dialog to its content instead of a fixed 12x70 box.
+#
+# whiptail silently truncates text that does not fit, so a fixed height turns a
+# long, genuinely useful message (why no disk qualified, how to switch the VM to
+# UEFI) into a clipped one -- the reader loses exactly the part that helps.
+# Accounts for wrapping, since whiptail re-wraps lines wider than the box, and
+# clamps to the terminal so the dialog never exceeds the screen.
+#
+# Echoes "HEIGHT WIDTH".
+ui_box_geometry() {
+    local text="$1" min_height="${2:-12}"
+    local term_h term_w width height rows
+    term_h=$(tput lines 2>/dev/null || echo 24)
+    term_w=$(tput cols 2>/dev/null || echo 80)
+    [ "${term_h:-0}" -lt 10 ] 2>/dev/null && term_h=24
+    [ "${term_w:-0}" -lt 40 ] 2>/dev/null && term_w=80
+
+    width=$(printf '%s\n' "$text" | awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')
+    width=$(( width + 8 ))
+    [ "$width" -lt 60 ] && width=60
+    [ "$width" -gt $(( term_w - 4 )) ] && width=$(( term_w - 4 ))
+
+    # Wrapped row count: a line wider than the text area occupies several rows.
+    rows=$(printf '%s\n' "$text" | awk -v w=$(( width - 6 )) '
+        { n = length($0); r = (n == 0 ? 1 : int((n + w - 1) / w)); total += r }
+        END { print total + 0 }')
+    height=$(( rows + 8 ))
+    [ "$height" -lt "$min_height" ] && height="$min_height"
+    [ "$height" -gt $(( term_h - 2 )) ] && height=$(( term_h - 2 ))
+
+    printf '%s %s\n' "$height" "$width"
+}
+
 ui_msgbox() {
     local title="$1"
     local text="$2"
     if [ "$UI_TOOL" = "whiptail" ] || [ "$UI_TOOL" = "dialog" ]; then
-        "$UI_TOOL" --title "$title" --msgbox "$text" 12 70
+        local geom
+        geom=$(ui_box_geometry "$text")
+        # shellcheck disable=SC2086
+        "$UI_TOOL" --title "$title" --msgbox "$text" ${geom}
     else
         echo "=== $title ===" >&2
         echo "$text" >&2
@@ -165,6 +239,108 @@ ui_checklist() {
     fi
 }
 
+network_ready() {
+    # Checking the actual Debian metadata endpoint catches disconnected links,
+    # broken DNS, captive portals, and an unavailable mirror before any wipe.
+    if curl -fsSL --connect-timeout 10 --max-time 20 \
+        -o /dev/null https://deb.debian.org/debian/dists/testing/Release \
+        >/dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
+ensure_network() {
+    while ! network_ready; do
+        if ! ui_yesno "Internet Connection Required" "\
+Sensible downloads Debian packages during installation, but it cannot reach
+the Debian package server yet.
+
+No disk has been changed. Open the network setup now, then Sensible will test
+the connection again. Choose No to leave the installer safely." "yes"; then
+            ui_msgbox "Installation Cancelled" "No changes were made. Connect to the Internet, then run sensible-install again."
+            return 1
+        fi
+
+        if command -v nmtui-connect >/dev/null 2>&1; then
+            nmtui-connect || true
+        elif command -v nmtui >/dev/null 2>&1; then
+            nmtui || true
+        else
+            ui_msgbox "Network Setup Unavailable" "NetworkManager's setup screen is unavailable. Configure the network from the shell, then run sensible-install again."
+            return 1
+        fi
+    done
+}
+
+valid_hostname() {
+    local hostname="$1"
+    [ ${#hostname} -ge 1 ] && [ ${#hostname} -le 253 ] || return 1
+    [[ "$hostname" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || return 1
+
+    local label
+    IFS='.' read -r -a labels <<< "$hostname"
+    for label in "${labels[@]}"; do
+        [ ${#label} -ge 1 ] && [ ${#label} -le 63 ] || return 1
+        [[ "$label" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$ ]] || return 1
+    done
+}
+
+valid_username() {
+    local username="$1"
+    [[ "$username" =~ ^[a-z_][a-z0-9_-]*$ ]] || return 1
+    [ ${#username} -le 32 ] || return 1
+    ! getent passwd "$username" >/dev/null 2>&1 || return 1
+    # These accounts are created by packages installed later, but do not all
+    # exist in the small live image used for preflight validation.
+    case "$username" in
+        sddm|gdm|avahi|colord|geoclue|rtkit|saned|fwupd-refresh|nm-openvpn)
+            return 1
+            ;;
+    esac
+    return 0
+}
+
+valid_timezone() {
+    local timezone="$1" zoneinfo="${2:-/usr/share/zoneinfo}" part resolved
+    [[ "$timezone" =~ ^[A-Za-z0-9._+-]+(/[A-Za-z0-9._+-]+)*$ ]] || return 1
+    IFS='/' read -r -a timezone_parts <<< "$timezone"
+    for part in "${timezone_parts[@]}"; do
+        [ "$part" != "." ] && [ "$part" != ".." ] || return 1
+    done
+    resolved=$(realpath -e "${zoneinfo}/${timezone}" 2>/dev/null) || return 1
+    [[ "$resolved" = "${zoneinfo}/"* ]] && [ -f "$resolved" ]
+}
+
+validate_keyboard_layout() {
+    local layout="$1"
+    local symbols_dir="${2:-/usr/share/X11/xkb/symbols}"
+    [[ "$layout" =~ ^[a-z0-9_-]+(,[a-z0-9_-]+)*$ ]] || return 1
+
+    local item
+    IFS=',' read -r -a layouts <<< "$layout"
+    for item in "${layouts[@]}"; do
+        [ -f "${symbols_dir}/${item}" ] || return 1
+    done
+}
+
+apply_live_keyboard() {
+    local layout="$1"
+    local keyboard_file="${2:-/etc/default/keyboard}"
+    if ! cat <<EOF > "$keyboard_file"
+# Written by sensible-install
+XKBMODEL="pc105"
+XKBLAYOUT="${layout}"
+XKBVARIANT=""
+XKBOPTIONS=""
+BACKSPACE="guess"
+EOF
+    then
+        return 1
+    fi
+    setupcon --force --keyboard-only >/dev/null 2>&1 || return 1
+}
+
 check_uefi() {
     if [ ! -d /sys/firmware/efi ]; then
         log_err "UEFI boot is required. /sys/firmware/efi was not found."
@@ -214,9 +390,9 @@ configure_keyboard() {
     local layout="$1"
     log_info "Configuring keyboard layout '${layout}' via keyboard-configuration..."
     printf 'keyboard-configuration keyboard-configuration/layoutcode select %s\n' "$layout" \
-        | chroot ${MNT} debconf-set-selections 2>/dev/null || true
-    DEBIAN_FRONTEND=noninteractive chroot ${MNT} dpkg-reconfigure -f noninteractive keyboard-configuration >/dev/null 2>&1 || true
-    cat <<EOF > ${MNT}/etc/default/keyboard
+        | chroot "${MNT}" debconf-set-selections
+    DEBIAN_FRONTEND=noninteractive chroot "${MNT}" dpkg-reconfigure -f noninteractive keyboard-configuration >/dev/null
+    cat <<EOF > "${MNT}/etc/default/keyboard"
 # Written by sensible-install
 XKBMODEL="pc105"
 XKBLAYOUT="${layout}"

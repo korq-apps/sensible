@@ -79,6 +79,53 @@ assert_eq "missing file falls back to us" "us" "$(detect_keyboard_layout "${kb}/
 assert_eq "file without XKBLAYOUT falls back to us" "us" "$(detect_keyboard_layout /dev/null)"
 rm -f "${kb}"
 
+t_section "hostname and username validation"
+valid_hostname "debian"; assert_rc "simple hostname accepted" 0 $?
+valid_hostname "living-room.pc"; assert_rc "dotted hostname accepted" 0 $?
+valid_hostname "-bad"; assert_rc "leading hyphen rejected" 1 $?
+valid_hostname "bad_name"; assert_rc "underscore rejected" 1 $?
+valid_username "root"; assert_rc "existing system account rejected" 1 $?
+valid_username "sddm"; assert_rc "future desktop service account rejected" 1 $?
+valid_username "Bad Name"; assert_rc "invalid username characters rejected" 1 $?
+valid_username "sensible_test_user_9274"; assert_rc "available username accepted" 0 $?
+
+t_section "timezone validation"
+valid_timezone "UTC"; assert_rc "UTC accepted" 0 $?
+valid_timezone "Europe/Berlin"; assert_rc "IANA timezone accepted" 0 $?
+valid_timezone "../../../etc/passwd"; assert_rc "path traversal rejected" 1 $?
+valid_timezone "/etc/passwd"; assert_rc "absolute path rejected" 1 $?
+
+t_section "keyboard layout validation and live application"
+symbols="$(mktemp -d)"
+touch "${symbols}/us" "${symbols}/de"
+validate_keyboard_layout "us" "${symbols}"; assert_rc "installed layout accepted" 0 $?
+validate_keyboard_layout "us,de" "${symbols}"; assert_rc "installed layout list accepted" 0 $?
+validate_keyboard_layout "missing" "${symbols}"; assert_rc "missing layout rejected" 1 $?
+validate_keyboard_layout '../bad' "${symbols}"; assert_rc "path-like layout rejected" 1 $?
+keyboard_out="${symbols}/keyboard"
+SETUPCON_CALLS=0
+setupcon() { SETUPCON_CALLS=$((SETUPCON_CALLS + 1)); return 0; }
+apply_live_keyboard "de" "${keyboard_out}"
+assert_file_contains "applied keyboard file carries selected layout" "${keyboard_out}" 'XKBLAYOUT="de"'
+apply_live_keyboard "us" "${symbols}" >/dev/null 2>&1
+assert_rc "keyboard file write failure is returned" 1 $?
+assert_eq "setupcon not run after keyboard write failure" "1" "${SETUPCON_CALLS}"
+rm -rf "${symbols}"
+
+t_section "network pre-flight"
+curl() { return 0; }
+network_ready; assert_rc "reachable Debian metadata passes" 0 $?
+curl() { return 22; }
+network_ready; assert_rc "failed Debian metadata request is rejected" 1 $?
+network_ready() { return 1; }
+printf 'n\n\n' | ensure_network >/dev/null 2>&1
+assert_rc "declining network setup exits safely" 1 $?
+
+t_section "warning collection"
+INSTALL_WARNINGS=()
+record_warning "optional component skipped" >/dev/null 2>&1
+assert_eq "warning retained for completion summary" "optional component skipped" "${INSTALL_WARNINGS[0]}"
+
 t_section "check_root"
 assert_rc "root passes" 0 "$(run_exiting bash -c 'source "'"${INSTALLER_DIR}"'/lib/common.sh"; id() { echo 0; }; check_root')"
 assert_rc "non-root exits 1" 1 "$(run_exiting bash -c 'source "'"${INSTALLER_DIR}"'/lib/common.sh"; id() { echo 1000; }; check_root')"
@@ -89,5 +136,34 @@ if [ -d /sys/firmware/efi ]; then
 else
     assert_rc "non-UEFI exits 1" 1 "$(run_exiting check_uefi)"
 fi
+
+t_section "ui_box_geometry: dialogs are sized to their content"
+# whiptail silently truncates text that does not fit, so the fixed 12-row box
+# clipped the long "why no disk qualified" / "how to boot UEFI" messages -
+# losing exactly the part that helps. Geometry must grow with the content.
+tput() { case "$1" in lines) echo 40 ;; cols) echo 100 ;; esac; }
+
+LONG_MSG="$(printf 'remediation line %s\n' $(seq 1 15))"
+read -r GH GW <<<"$(ui_box_geometry "${LONG_MSG}")"
+assert_eq "15-line message gets more than the old 12 rows" 1 "$([ "${GH}" -gt 12 ] && echo 1 || echo 0)"
+assert_eq "and still fits the terminal" 1 "$([ "${GH}" -le 38 ] && echo 1 || echo 0)"
+
+read -r SH SW <<<"$(ui_box_geometry "short")"
+assert_eq "short message keeps the 12-row minimum" 12 "${SH}"
+assert_eq "and a readable minimum width" 60 "${SW}"
+
+# A single 400-char line must be counted as the several rows it wraps into,
+# not as one row, or it is clipped just like the multi-line case.
+WRAP_MSG="$(printf 'x%.0s' $(seq 1 400))"
+read -r WH WW <<<"$(ui_box_geometry "${WRAP_MSG}")"
+assert_eq "long unbroken line is counted as wrapped rows" 1 "$([ "${WH}" -gt 12 ] && echo 1 || echo 0)"
+assert_eq "width never exceeds the terminal" 1 "$([ "${WW}" -le 96 ] && echo 1 || echo 0)"
+
+t_section "ui_box_geometry: clamps to a small terminal"
+tput() { case "$1" in lines) echo 24 ;; cols) echo 80 ;; esac; }
+read -r CH CW <<<"$(ui_box_geometry "${LONG_MSG}")"
+assert_eq "height clamped to terminal height" 1 "$([ "${CH}" -le 22 ] && echo 1 || echo 0)"
+assert_eq "width clamped to terminal width" 1 "$([ "${CW}" -le 76 ] && echo 1 || echo 0)"
+unset -f tput
 
 t_summary
