@@ -33,6 +33,25 @@ rsync -a --delete "${REPO_ROOT}/configs/" "${OPT_SENSIBLE}/configs/"
 rsync -a --delete "${REPO_ROOT}/docs/" "${OPT_SENSIBLE}/docs/"
 chmod -R +x "${OPT_SENSIBLE}/installer/" 2>/dev/null || true
 
+# Desktop variant. The ISO carries the finished system, so the desktop is
+# chosen at build time; the installer never asks.
+SENSIBLE_VARIANT="${SENSIBLE_VARIANT:-gnome}"
+case "${SENSIBLE_VARIANT}" in
+    gnome|kde) ;;
+    *) echo "Error: unknown SENSIBLE_VARIANT '${SENSIBLE_VARIANT}' (expected gnome or kde)." >&2; exit 1 ;;
+esac
+echo "==> Variant: ${SENSIBLE_VARIANT}"
+
+VARIANT_LIST="${REPO_ROOT}/live/variants/${SENSIBLE_VARIANT}.list"
+[ -f "${VARIANT_LIST}" ] || { echo "Error: no package list at ${VARIANT_LIST}." >&2; exit 1; }
+cp "${VARIANT_LIST}" "${REPO_ROOT}/live/config/package-lists/desktop.list.chroot"
+
+# Resolve every package name before building. A name that has been dropped from
+# Testing is otherwise only discovered mid-install, on the user's machine, after
+# the disk is wiped -- which is exactly how vdpau-driver-all failed.
+echo "==> Checking package names resolve against Debian Testing..."
+"${REPO_ROOT}/scripts/check-packages.sh" "${SENSIBLE_VARIANT}"
+
 # Prepare cache directory
 CACHE_DIR="${REPO_ROOT}/live/.cache/apt"
 mkdir -p "${CACHE_DIR}"
@@ -45,6 +64,7 @@ ${CONTAINER_ENGINE} build -t "${IMAGE_TAG}" -f "${REPO_ROOT}/live/Dockerfile" "$
 # Run live-build inside container
 echo "==> Running live-build inside container..."
 ${CONTAINER_ENGINE} run --rm --privileged \
+    -e SENSIBLE_VARIANT="${SENSIBLE_VARIANT}" \
     -v "${REPO_ROOT}:/workspace:rw" \
     -v "${CACHE_DIR}:/var/cache/apt/archives:rw" \
     -w /workspace/live \
@@ -55,8 +75,8 @@ ${CONTAINER_ENGINE} run --rm --privileged \
 # (e.g. sensible-debian-testing-amd64.hybrid.iso), so resolve by pattern.
 ISO_OUTPUT=""
 for candidate in \
-    "${REPO_ROOT}/live/sensible-debian-testing-amd64.iso" \
-    "${REPO_ROOT}/live/sensible-debian-testing-amd64.hybrid.iso"; do
+    "${REPO_ROOT}/live/sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.iso" \
+    "${REPO_ROOT}/live/sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.hybrid.iso"; do
     if [ -f "${candidate}" ]; then
         ISO_OUTPUT="${candidate}"
         break
@@ -73,13 +93,13 @@ if [ -z "${ISO_OUTPUT}" ]; then
 fi
 
 if [ -n "${ISO_OUTPUT}" ] && [ -f "${ISO_OUTPUT}" ]; then
-    TARGET_ISO="${REPO_ROOT}/sensible-debian-testing-amd64.iso"
+    TARGET_ISO="${REPO_ROOT}/sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.iso"
     if [ "${ISO_OUTPUT}" != "${TARGET_ISO}" ]; then
         # cp -f: replace a pre-existing target even if it is owned by
         # another user (stale artifact), instead of dying on EACCES.
         cp -f "${ISO_OUTPUT}" "${TARGET_ISO}"
     fi
-    (cd "${REPO_ROOT}" && sha256sum sensible-debian-testing-amd64.iso > sensible-debian-testing-amd64.iso.sha256)
+    (cd "${REPO_ROOT}" && sha256sum "sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.iso" > "sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.iso.sha256")
     echo "============================================================"
     echo " Build successful!"
     echo " ISO:    ${TARGET_ISO}"

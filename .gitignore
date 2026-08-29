@@ -41,3 +41,6 @@ live/.build.lock
 # Local reference clones (symlinks to sibling checkouts, machine-specific)
 /omarchy
 /omarchy-iso
+
+# Generated per build from live/variants/<variant>.list
+live/config/package-lists/desktop.list.chroot

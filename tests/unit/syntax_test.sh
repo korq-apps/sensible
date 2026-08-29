@@ -28,6 +28,7 @@ sh_files=(
     live/auto/build
     live/auto/clean
     live/config/hooks/live/0100-sensible-setup.hook.chroot
+    live/config/hooks/live/0020-live-boot-to-console.hook.chroot
     live/config/hooks/live/0100-grub-serial-timeout.hook.binary
     live/config/includes.chroot/usr/local/bin/sensible-install
     live/config/includes.chroot/etc/profile.d/99-sensible-firmware-check.sh
@@ -36,6 +37,7 @@ sh_files=(
     scripts/run-qemu.sh
     scripts/smoke-boot.sh
     scripts/build-native.sh
+    scripts/check-packages.sh
     tests/run-tests.sh
     tests/lib/harness.sh
     tests/unit/common_test.sh

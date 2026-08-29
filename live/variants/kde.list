@@ -1,0 +1,29 @@
+# Desktop variant: KDE Plasma (SENSIBLE_VARIANT=kde)
+#
+# Copied to config/package-lists/desktop.list.chroot at build time. Under the
+# offline model the ISO carries the finished system, so everything the target
+# needs must be here -- nothing is fetched during installation.
+
+# Desktop
+kde-plasma-desktop
+sddm
+
+# Applications
+firefox-esr
+vlc
+neovim
+
+# Boot stack the installer needs on the target and cannot download
+grub-efi-amd64
+grub-efi-amd64-signed
+shim-signed
+cryptsetup-initramfs
+
+# Hardware/session support
+mesa-vulkan-drivers
+va-driver-all
+power-profiles-daemon
+fwupd
+bluez
+printer-driver-all
+cups

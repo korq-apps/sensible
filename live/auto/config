@@ -1,6 +1,14 @@
 #!/bin/sh
 set -e
 
+# Desktop variant. The ISO carries the finished system under the offline model,
+# so the desktop is chosen here at build time rather than asked at install time.
+SENSIBLE_VARIANT="${SENSIBLE_VARIANT:-gnome}"
+case "${SENSIBLE_VARIANT}" in
+    gnome|kde) ;;
+    *) echo "auto/config: unknown SENSIBLE_VARIANT '${SENSIBLE_VARIANT}'" >&2; exit 1 ;;
+esac
+
 lb config noauto \
     --mode debian \
     --distribution testing \
@@ -14,10 +22,10 @@ lb config noauto \
     --updates false \
     --backports false \
     --memtest none \
-    --iso-application "Sensible Live Installer" \
+    --iso-application "Sensible Live Installer (${SENSIBLE_VARIANT})" \
     --iso-publisher "Korq <https://korq.io>" \
-    --iso-volume "SENSIBLE_LIVE" \
-    --image-name "sensible-debian-testing" \
+    --iso-volume "SENSIBLE_${SENSIBLE_VARIANT}" \
+    --image-name "sensible-${SENSIBLE_VARIANT}-debian-testing" \
     --apt-recommends true \
     --bootappend-live "boot=live components console=tty0 console=ttyS0,115200n8" \
     "${@}"

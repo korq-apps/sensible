@@ -32,9 +32,14 @@ jobs:
           shellcheck -S warning installer/sensible-install.sh installer/lib/*.sh scripts/run-qemu.sh live/build.sh
 
   build:
-    name: Build Live ISO & UEFI Smoke Test
+    name: Build Live ISO & UEFI Smoke Test (${{ matrix.variant }})
     needs: tests
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # KDE joins once its variant lands (offline rework, phase 5).
+        variant: [gnome]
     # Read-only: this job runs for pull_request and executes PR-controlled
     # build scripts, so it must never hold a token that can write the repo.
     # Publishing happens in the tag-only `release` job below.
@@ -56,7 +61,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-apt-cache-
 
+      - name: Check package names resolve against Debian Testing
+        run: |
+          chmod +x scripts/check-packages.sh
+          scripts/check-packages.sh ${{ matrix.variant }}
+
       - name: Build Live ISO in Container
+        env:
+          SENSIBLE_VARIANT: ${{ matrix.variant }}
         run: |
           chmod +x live/build.sh
           ./live/build.sh
@@ -71,15 +83,15 @@ jobs:
         # green local smoke and a green CI smoke exercise identical logic.
         run: |
           chmod +x scripts/smoke-boot.sh
-          scripts/smoke-boot.sh sensible-debian-testing-amd64.iso
+          scripts/smoke-boot.sh sensible-${{ matrix.variant }}-debian-testing-amd64.iso
 
       - name: Upload ISO and Checksum Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: sensible-debian-testing-amd64
+          name: sensible-${{ matrix.variant }}-debian-testing-amd64
           path: |
-            sensible-debian-testing-amd64.iso
-            sensible-debian-testing-amd64.iso.sha256
+            sensible-${{ matrix.variant }}-debian-testing-amd64.iso
+            sensible-${{ matrix.variant }}-debian-testing-amd64.iso.sha256
           if-no-files-found: error
           retention-days: 14
 
@@ -97,16 +109,17 @@ jobs:
       contents: write
 
     steps:
-      - name: Download built ISO artifact
+      - name: Download built ISO artifacts
         uses: actions/download-artifact@v4
         with:
-          name: sensible-debian-testing-amd64
+          pattern: sensible-*-debian-testing-amd64
+          merge-multiple: true
 
       - name: Publish Release Assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            sensible-debian-testing-amd64.iso
-            sensible-debian-testing-amd64.iso.sha256
+            sensible-*-debian-testing-amd64.iso
+            sensible-*-debian-testing-amd64.iso.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -393,6 +393,15 @@ a bigger virtual disk, or less RAM."
     # left a real file behind, so the symlink is preserved when present.
     [ -L "${MNT}/var/lib/dbus/machine-id" ] || rm -f "${MNT}/var/lib/dbus/machine-id"
 
+    # The live image boots to a console so the display manager cannot take the
+    # tty the installer runs on (0020-live-boot-to-console.hook.chroot). That
+    # default is copied along with everything else, so the installed system
+    # would come up without its desktop unless it is restored here.
+    if [ -d "${MNT}/etc/systemd/system" ]; then
+        ln -sfn /lib/systemd/system/graphical.target \
+                "${MNT}/etc/systemd/system/default.target"
+    fi
+
     # Step 4: Bind Mounts & DNS
     CURRENT_STAGE="preparing the installed system"
     log_info "Preparing chroot environment..."

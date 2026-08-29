@@ -4,7 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-ISO_PATH="${1:-${REPO_ROOT}/sensible-debian-testing-amd64.iso}"
+# Default to the variant ISO; SENSIBLE_VARIANT selects which one, and an
+# explicit path still wins. Artifacts are per-variant since the desktop is
+# chosen at build time rather than at install time.
+SENSIBLE_VARIANT="${SENSIBLE_VARIANT:-gnome}"
+ISO_PATH="${1:-${REPO_ROOT}/sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.iso}"
 DISK_PATH="${2:-${REPO_ROOT}/test-disk.qcow2}"
 DISK_SIZE="64G"
 RAM="4096"

@@ -1,0 +1,15 @@
+#!/bin/sh
+# Keep the live session on a text console for now.
+#
+# The image now carries a full desktop (offline install copies this root to the
+# target), so the display manager would otherwise start and take tty1 -- where
+# the installer autostarts. Phase 3 of the offline rework replaces this with a
+# graphical live session and an install launcher; until then the live session
+# stays a console and the desktop is only what gets copied.
+#
+# Set as the live image's default target rather than masking the display
+# manager, so the installer restores it on the target with one command
+# (systemctl set-default graphical.target) instead of unpicking a mask.
+set -e
+
+systemctl set-default multi-user.target

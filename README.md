@@ -98,7 +98,7 @@ First target is **amd64 + UEFI**. Legacy BIOS and other arches are out of scope 
 | Informal | **Lazydeb** (same thing — live ISO command alias) |
 | What it is | Debian Testing remix / on-ramp. Not a fork, not a new distro. |
 | Publisher | [Korq](https://korq.io) |
-| ISO | `sensible-debian-testing-amd64.iso` |
+| ISO | `sensible-gnome-debian-testing-amd64.iso` (GNOME, default) / `sensible-kde-...` |
 | Installer | `sensible-install` (also `lazydeb`) |
 
 The installed system hostname defaults to `debian`. The UEFI boot entry stays **Debian**. Plymouth and the live banner say **Sensible**.
@@ -129,7 +129,7 @@ The installed system hostname defaults to `debian`. The UEFI boot entry stays **
 - [Installer spec](docs/INSTALLER_SPEC.md) — prompts, partitioning, chroot
 - [Plan](docs/PLAN.md) — implementation order
 
-Build: `./live/build.sh` (podman/docker) or `sudo ./scripts/build-native.sh` (containerless, on Debian) produces `sensible-debian-testing-amd64.iso`. Verify it the way CI does with `./scripts/smoke-boot.sh` (headless UEFI boot assertion), or launch it interactively with `./scripts/run-qemu.sh`. Tests: `tests/run-tests.sh` — no root, no network.
+Build: `./live/build.sh` (podman/docker) or `sudo ./scripts/build-native.sh` (containerless, on Debian) produces `sensible-$SENSIBLE_VARIANT-debian-testing-amd64.iso` (`SENSIBLE_VARIANT=gnome`, the default, or `kde`). Verify it the way CI does with `./scripts/smoke-boot.sh` (headless UEFI boot assertion), or launch it interactively with `./scripts/run-qemu.sh`. Tests: `tests/run-tests.sh` — no root, no network.
 
 ---
 

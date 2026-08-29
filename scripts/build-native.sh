@@ -6,9 +6,12 @@
 # live-build must run as root (debootstrap, mount, chroot), so run this with:
 #     sudo scripts/build-native.sh
 #
-# The resulting sensible-debian-testing-amd64.iso (+ .sha256) is written to the
+# The resulting sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.iso (+ .sha256) is written to the
 # repo root and chowned back to the invoking user.
 set -euo pipefail
+
+# Desktop variant, matching live/build.sh. Exported so live/auto/config sees it.
+export SENSIBLE_VARIANT="${SENSIBLE_VARIANT:-gnome}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -57,8 +60,8 @@ lb build
 # Locate the generated ISO (live-build's output name varies by version).
 ISO_OUTPUT=""
 for candidate in \
-    "${REPO_ROOT}/live/sensible-debian-testing-amd64.iso" \
-    "${REPO_ROOT}/live/sensible-debian-testing-amd64.hybrid.iso" \
+    "${REPO_ROOT}/live/sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.iso" \
+    "${REPO_ROOT}/live/sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.hybrid.iso" \
     "${REPO_ROOT}/live"/*.hybrid.iso "${REPO_ROOT}/live"/*.iso; do
     if [ -f "${candidate}" ]; then ISO_OUTPUT="${candidate}"; break; fi
 done
@@ -68,10 +71,10 @@ if [ -z "${ISO_OUTPUT}" ] || [ ! -f "${ISO_OUTPUT}" ]; then
     exit 1
 fi
 
-TARGET_ISO="${REPO_ROOT}/sensible-debian-testing-amd64.iso"
+TARGET_ISO="${REPO_ROOT}/sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.iso"
 # cp -f: replace a pre-existing target even if it is owned by another user.
 [ "${ISO_OUTPUT}" != "${TARGET_ISO}" ] && cp -f "${ISO_OUTPUT}" "${TARGET_ISO}"
-( cd "${REPO_ROOT}" && sha256sum sensible-debian-testing-amd64.iso > sensible-debian-testing-amd64.iso.sha256 )
+( cd "${REPO_ROOT}" && sha256sum sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.iso > sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.iso.sha256 )
 
 # Hand the artifacts back to the user who invoked sudo.
 if [ -n "${SUDO_USER:-}" ]; then

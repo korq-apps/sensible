@@ -29,8 +29,8 @@ You need:
 Open the official [Sensible Releases page](https://github.com/korq-apps/sensible/releases)
 and download these two assets from the same release:
 
-- `sensible-debian-testing-amd64.iso`
-- `sensible-debian-testing-amd64.iso.sha256`
+- `sensible-gnome-debian-testing-amd64.iso`
+- `sensible-gnome-debian-testing-amd64.iso.sha256`
 
 Keep both files in the same folder. Verification detects an incomplete or
 changed download. A successful check should name the ISO and say `OK` or
@@ -39,20 +39,20 @@ return `True`.
 **Linux:** open a terminal in the download folder and run:
 
 ```bash
-sha256sum -c sensible-debian-testing-amd64.iso.sha256
+sha256sum -c sensible-gnome-debian-testing-amd64.iso.sha256
 ```
 
 **macOS:** open Terminal, change to the download folder, and run:
 
 ```bash
-shasum -a 256 -c sensible-debian-testing-amd64.iso.sha256
+shasum -a 256 -c sensible-gnome-debian-testing-amd64.iso.sha256
 ```
 
 **Windows:** open PowerShell in the download folder and run:
 
 ```powershell
-$expected = (Get-Content .\sensible-debian-testing-amd64.iso.sha256).Split()[0]
-$actual = (Get-FileHash .\sensible-debian-testing-amd64.iso -Algorithm SHA256).Hash
+$expected = (Get-Content .\sensible-gnome-debian-testing-amd64.iso.sha256).Split()[0]
+$actual = (Get-FileHash .\sensible-gnome-debian-testing-amd64.iso -Algorithm SHA256).Hash
 $actual -eq $expected
 ```
 

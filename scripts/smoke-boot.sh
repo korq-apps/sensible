@@ -5,7 +5,7 @@
 # systemd banner and the Sensible autologin MOTD.
 #
 # Usage:  scripts/smoke-boot.sh [ISO]
-#   ISO            path to the ISO (default: sensible-debian-testing-amd64.iso)
+#   ISO            path to the ISO (default: sensible-$SENSIBLE_VARIANT-debian-testing-amd64.iso)
 #   SMOKE_TIMEOUT  seconds to let it boot before stopping    (default: 600)
 #   SMOKE_MEM      guest RAM in MiB                           (default: 3072)
 #   SMOKE_LOG      serial log path              (default: a temp file, printed)
@@ -20,7 +20,11 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-ISO_PATH="${1:-${REPO_ROOT}/sensible-debian-testing-amd64.iso}"
+# Default to the variant ISO; SENSIBLE_VARIANT selects which one, and an
+# explicit path still wins. Artifacts are per-variant since the desktop is
+# chosen at build time rather than at install time.
+SENSIBLE_VARIANT="${SENSIBLE_VARIANT:-gnome}"
+ISO_PATH="${1:-${REPO_ROOT}/sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.iso}"
 SMOKE_TIMEOUT="${SMOKE_TIMEOUT:-600}"
 SMOKE_MEM="${SMOKE_MEM:-3072}"
 
