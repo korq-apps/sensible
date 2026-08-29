@@ -147,24 +147,46 @@ t_section "ui_box_geometry: dialogs are sized to their content"
 tput() { case "$1" in lines) echo 40 ;; cols) echo 100 ;; esac; }
 
 LONG_MSG="$(printf 'remediation line %s\n' $(seq 1 15))"
-read -r GH GW <<<"$(ui_box_geometry "${LONG_MSG}")"
+read -r GH GW _ <<<"$(ui_box_geometry "${LONG_MSG}")"
 assert_eq "15-line message gets more than the old 12 rows" 1 "$([ "${GH}" -gt 12 ] && echo 1 || echo 0)"
 assert_eq "and still fits the terminal" 1 "$([ "${GH}" -le 38 ] && echo 1 || echo 0)"
 
-read -r SH SW <<<"$(ui_box_geometry "short")"
+read -r SH SW _ <<<"$(ui_box_geometry "short")"
 assert_eq "short message keeps the 12-row minimum" 12 "${SH}"
 assert_eq "and a readable minimum width" 60 "${SW}"
 
 # A single 400-char line must be counted as the several rows it wraps into,
 # not as one row, or it is clipped just like the multi-line case.
 WRAP_MSG="$(printf 'x%.0s' $(seq 1 400))"
-read -r WH WW <<<"$(ui_box_geometry "${WRAP_MSG}")"
+read -r WH WW _ <<<"$(ui_box_geometry "${WRAP_MSG}")"
 assert_eq "long unbroken line is counted as wrapped rows" 1 "$([ "${WH}" -gt 12 ] && echo 1 || echo 0)"
 assert_eq "width never exceeds the terminal" 1 "$([ "${WW}" -le 96 ] && echo 1 || echo 0)"
 
+t_section "ui_box_geometry: reserves rows for entry fields and item lists"
+# The type-to-confirm screen carries the whole choice summary plus the
+# destruction warning plus an entry field. At the old fixed 12 rows it lost the
+# warning and the "type the disk path" instruction - the two lines that make it
+# a safety gate rather than decoration.
+CONFIRM_TEXT="$(printf 'choice %s\n' $(seq 1 14))
+WARNING: ALL DATA ON /dev/sda WILL BE PERMANENTLY DESTROYED!
+To confirm, please type the exact disk path (/dev/sda) below:"
+read -r IH IW _ <<<"$(ui_box_geometry "${CONFIRM_TEXT}" 12 2)"
+CONFIRM_ROWS=$(printf '%s\n' "${CONFIRM_TEXT}" | wc -l)
+assert_eq "confirmation box is taller than its text" 1 "$([ "${IH}" -gt "${CONFIRM_ROWS}" ] && echo 1 || echo 0)"
+assert_eq "and taller than the old fixed 12 rows" 1 "$([ "${IH}" -gt 12 ] && echo 1 || echo 0)"
+
+# A menu must reserve a row per entry, or long disk lists scroll invisibly.
+read -r MH MW ML <<<"$(ui_box_geometry "Choose the disk:" 15 8)"
+assert_eq "menu reserves a list row per entry" 8 "${ML}"
+assert_eq "menu height covers prose plus its list" 1 "$([ "${MH}" -ge $(( ML + 8 )) ] && echo 1 || echo 0)"
+
+# Non-list callers must get 0 so they never pass a stray argument to whiptail.
+read -r _ _ NL <<<"$(ui_box_geometry "plain message")"
+assert_eq "non-list dialogs report no list height" 0 "${NL}"
+
 t_section "ui_box_geometry: clamps to a small terminal"
 tput() { case "$1" in lines) echo 24 ;; cols) echo 80 ;; esac; }
-read -r CH CW <<<"$(ui_box_geometry "${LONG_MSG}")"
+read -r CH CW _ <<<"$(ui_box_geometry "${LONG_MSG}")"
 assert_eq "height clamped to terminal height" 1 "$([ "${CH}" -le 22 ] && echo 1 || echo 0)"
 assert_eq "width clamped to terminal width" 1 "$([ "${CW}" -le 76 ] && echo 1 || echo 0)"
 unset -f tput
