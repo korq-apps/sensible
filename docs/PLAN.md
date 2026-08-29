@@ -134,6 +134,23 @@ Agreed additions that extend the v1 installer. Architecture/spec sections for th
 
 ---
 
+## Phase 7 — Offline rework (v2)
+
+The installer resolves packages at install time against a moving Testing
+archive, which is how `vdpau-driver-all` aborted the hardware stage after the
+disk was already wiped. Requiring the network also forces Wi-Fi setup into the
+installer. See [OFFLINE_REWORK.md](OFFLINE_REWORK.md) for the design record,
+measured sizes and the decision table.
+
+- [ ] Variant-aware `live-build` (`SENSIBLE_VARIANT=gnome|kde`), two ISOs, plus a build-time package-closure check that fails the build on a missing name
+- [ ] Install by copying the live root; no `apt` on the install path; de-live the copy (live-boot/live-config, live user, autologin, machine-id) and regenerate fstab/crypttab/initramfs/GRUB
+- [ ] Graphical live session with an "Install Sensible" launcher
+- [ ] Prompt rework on `gum`: four screens on GNOME (keyboard, disk, encryption, confirm), delegating account/locale/timezone to `gnome-initial-setup`
+- [ ] KDE variant, which keeps account creation in the installer (Plasma has no first-boot wizard)
+- [ ] `sensible-apps` post-install tool for Brave, Chromium and Flatpak/Flathub, which cannot run offline
+
+---
+
 ## Later (not v1)
 
 - Snapper on Btrfs (`@swap` already keeps the swapfile out of snapshot sets) + `grub-btrfs` boot-menu rollback
