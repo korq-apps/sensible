@@ -120,6 +120,29 @@ chroot() {
     if [ "${1:-}" = "id" ] && [ "${2:-}" = "-nG" ]; then
         echo "sudo audio video plugdev netdev bluetooth"
     fi
+    # Produce the boot artifacts the real commands would leave behind, so the
+    # post-install verification runs against a realistic target instead of an
+    # empty directory. A successful flow therefore also proves the gate passes.
+    case "${1:-}" in
+        apt-get)
+            mkdir -p "${MNT}/boot"
+            touch "${MNT}/boot/vmlinuz-7.1.0-amd64"
+            ;;
+        update-initramfs)
+            mkdir -p "${MNT}/boot"
+            touch "${MNT}/boot/initrd.img-7.1.0-amd64"
+            ;;
+        grub-install)
+            mkdir -p "${MNT}/boot/efi/EFI/debian"
+            touch "${MNT}/boot/efi/EFI/debian/grubx64.efi" \
+                  "${MNT}/boot/efi/EFI/debian/shimx64.efi"
+            ;;
+        update-grub)
+            mkdir -p "${MNT}/boot/grub"
+            printf "menuentry 'Debian GNU/Linux' {\n    linux /boot/vmlinuz-7.1.0-amd64 root=UUID=ROOT ro\n    initrd /boot/initrd.img-7.1.0-amd64\n}\n" \
+                > "${MNT}/boot/grub/grub.cfg"
+            ;;
+    esac
     return 0
 }
 

@@ -22,6 +22,7 @@ sh_files=(
     installer/lib/hardware.sh
     installer/lib/desktop.sh
     installer/lib/apps.sh
+    installer/lib/verify.sh
     live/build.sh
     live/auto/config
     live/auto/build
@@ -43,6 +44,7 @@ sh_files=(
     tests/unit/desktop_test.sh
     tests/unit/apps_test.sh
     tests/unit/syntax_test.sh
+    tests/unit/verify_test.sh
     tests/integration/installer_flow_test.sh
 )
 for f in "${sh_files[@]}"; do

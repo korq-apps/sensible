@@ -21,6 +21,8 @@ source "${LIB_DIR}/hardware.sh"
 source "${LIB_DIR}/desktop.sh"
 # shellcheck source=lib/apps.sh
 source "${LIB_DIR}/apps.sh"
+# shellcheck source=lib/verify.sh
+source "${LIB_DIR}/verify.sh"
 
 # Trap errors for cleanup
 CURRENT_STAGE="pre-flight"
@@ -493,7 +495,28 @@ EOF
     chroot ${MNT} update-initramfs -u -k all
     chroot ${MNT} update-grub
 
-    # Step 11: Flush and preserve the log before target teardown.
+    # Step 11: Verify the installed system can actually boot. Everything above
+    # can succeed command-by-command and still leave an unbootable machine, and
+    # that only shows up after the reboot, with the installer gone.
+    CURRENT_STAGE="verifying the installed system can boot"
+    local BOOT_PROBLEMS
+    if ! BOOT_PROBLEMS=$(validate_installed_boot "${MNT}" "${ENABLE_LUKS}"); then
+        log_err "Post-install verification failed; the installed system would not boot."
+        ui_msgbox "Error: Installed System Cannot Boot" "\
+Sensible finished writing to ${TARGET_DISK}, but the result would not boot:
+
+${BOOT_PROBLEMS}
+
+Nothing has been unmounted yet, so the target is still available at ${MNT}
+for inspection. The installer log is at ${INSTALL_LOG}.
+
+Reporting this as a successful install would only surface the problem after
+a reboot, with the installer gone."
+        exit 1
+    fi
+    log_success "Post-install verification passed: kernel, initramfs, GRUB, and fstab are in place."
+
+    # Step 12: Flush and preserve the log before target teardown.
     CURRENT_STAGE="finalizing the installer log"
     stop_install_log
     preserve_install_log || record_warning "The installer log could not be copied to the installed system."
