@@ -1,5 +1,26 @@
 # Plan
 
+## Where we are
+
+Phases 1-5 are implemented. The project has since pivoted to an **offline
+installer** (Phase 7, design record in [OFFLINE_REWORK.md](OFFLINE_REWORK.md)),
+which supersedes parts of the earlier phases: the installer no longer resolves
+packages at install time, the desktop is chosen when the ISO is built rather
+than asked, and third-party software leaves the install path entirely.
+
+| | Status |
+| :--- | :--- |
+| Phase 7.1 variant build + package gate | **done** — GNOME ISO builds at 2.33 GB, 1529 packages |
+| Phase 7.2 copy install | **next** |
+| Phase 7.3-7.6 live session, prompts, KDE, post-install tool | planned |
+| Release gate | blocked on 7.2-7.5 landing |
+| Phase 6 extras | re-scoped below: baked into the ISO, or moved to the post-install tool |
+
+**Next step:** Phase 7.2 — install by copying the live root, de-live the copy,
+and remove every `apt` call from the install path.
+
+---
+
 Sensible (aka Lazydeb) implementation order. Architecture and installer spec
 are living sources of truth, not frozen contracts: update them whenever a
 beginner-journey, safety, reliability, or verified platform constraint requires
@@ -119,18 +140,32 @@ to defer or waive this release gate.
 
 ---
 
-## Phase 6 — Sensible extras (planned, not implemented)
+## Phase 6 — Sensible extras (re-scoped for offline)
 
-Agreed additions that extend the v1 installer. Architecture/spec sections for these are marked **(planned — Phase 6)**; nothing below exists in `installer/` yet.
+These were designed for a network installer that could `apt install` per-user
+choices mid-run. Offline changes what each one *is*: anything from Debian is
+**baked into the ISO** at build time (it costs image size, not install time,
+and the package gate proves it resolves), anything third-party or optional
+moves to the **post-install tool**, and the checkbox questions disappear
+because the answer is decided when the image is built.
 
-- [ ] Fingerprint login: `fprintd` + `libpam-fprintd` always installed (Debian main; enrollment via GNOME/KDE settings, dormant without a reader)
-- [ ] BioPass face login checkbox (off): pinned `.deb` + SHA256 from [TickLabVN/biopass](https://github.com/TickLabVN/biopass), PAM via `pam-auth-update`; biometrics never unlock LUKS, and fingerprint login leaves the keyring locked — both documented
-- [ ] oh-my-bash for all users: pinned clone → `/usr/share/oh-my-bash`, `configs/omb-bashrc` → `/etc/skel/.bashrc` (wires zoxide/fzf/`batcat`/`fdfind`/eza); requires moving skel population before `useradd -m` (today LazyVim is copied into the user home as a workaround)
-- [ ] JetBrainsMono Nerd Font: pinned nerd-fonts release + SHA256 (Debian packages none; LazyVim and prompt themes want one)
-- [ ] git defaults: `configs/gitconfig` → `/etc/gitconfig`; optional full-name/email prompts → GECOS + first user's `~/.gitconfig` (no packaged libsecret credential helper exists — do not invent one)
+Nothing below exists in `installer/` yet. Architecture/spec sections are marked
+**(planned — Phase 6)**.
+
+**Bake into the ISO** (Debian packages, no question asked):
+
+- [ ] Fingerprint login: `fprintd` + `libpam-fprintd` (Debian main; enrollment via GNOME/KDE settings, dormant without a reader). Already unconditional, so it simply joins the variant package list
+- [ ] oh-my-bash for all users: pinned clone → `/usr/share/oh-my-bash`, `configs/omb-bashrc` → `/etc/skel/.bashrc` (wires zoxide/fzf/`batcat`/`fdfind`/eza). **Offline:** fetched during the ISO build, not the install, so the pin is verified once on our machine; `/etc/skel` is populated in the image, which also removes the `useradd -m` ordering problem the network design had
+- [ ] JetBrainsMono Nerd Font: pinned nerd-fonts release + SHA256 (Debian packages none). **Offline:** downloaded and checksummed at ISO build time; a rotted pin fails our build instead of a user's install
+- [ ] git defaults: `configs/gitconfig` → `/etc/gitconfig` in the image. The name/email prompts are dropped: on GNOME the first-boot wizard already collects a full name, and asking again is the kind of question the rework removes (no packaged libsecret credential helper exists — do not invent one)
 - [ ] `ufw` enabled, deny incoming / allow outgoing (config-file enable, never `ufw enable` in chroot); KDE Connect ports 1714–1764 tcp/udp allowed on KDE
 - [ ] Printing/scanning: `cups` + `ipp-usb` + `sane-airscan`; `simple-scan` (GNOME) / `skanlite` (KDE)
-- [ ] Developer tools checkbox (off): `docker.io` + `docker-compose` + `lazygit` + `gh`; user **not** added to the docker group (root-equivalent)
+
+**Move to the post-install tool** (`sensible-apps`, online, after first boot):
+
+- [ ] Developer tools: `docker.io` + `docker-compose` + `lazygit` + `gh`; user **not** added to the docker group (root-equivalent). Was an installer checkbox, which is exactly the kind of question the offline rework removes, and these cost nothing to add after first boot
+- [ ] BioPass face login: pinned `.deb` + SHA256 from [TickLabVN/biopass](https://github.com/TickLabVN/biopass), PAM via `pam-auth-update`. Third-party and young, so it does not belong in the offline image; biometrics never unlock LUKS and fingerprint login leaves the keyring locked — both must be stated where it is offered
+- [ ] Brave, Chromium, Flatpak/Flathub — third-party origins, already moved here by the offline decision
 
 ---
 
@@ -142,12 +177,64 @@ disk was already wiped. Requiring the network also forces Wi-Fi setup into the
 installer. See [OFFLINE_REWORK.md](OFFLINE_REWORK.md) for the design record,
 measured sizes and the decision table.
 
-- [ ] Variant-aware `live-build` (`SENSIBLE_VARIANT=gnome|kde`), two ISOs, plus a build-time package-closure check that fails the build on a missing name
-- [ ] Install by copying the live root; no `apt` on the install path; de-live the copy (live-boot/live-config, live user, autologin, machine-id) and regenerate fstab/crypttab/initramfs/GRUB
+- [x] Variant-aware `live-build` (`SENSIBLE_VARIANT=gnome|kde`), two ISOs, plus a build-time package-closure check that fails the build on a missing name. Also fixed the chroot device nodes rootless podman cannot create, which silently made `/dev/null` a regular file
+- [ ] **Install by copying the live root** (next). No `apt` on the install path at all. Concretely:
+  - take the live-root copy branch unconditionally and delete the `debootstrap` fallback, so there is one deploy path rather than two that diverge
+  - de-live the copy in the chroot: purge `live-boot`/`live-config`, remove the live `user` and its passwordless sudo drop-in, drop the getty autologin drop-ins, truncate `/etc/machine-id`, restore `graphical.target`
+  - regenerate what is layout-specific: `fstab`, `crypttab`, the initramfs (so `cryptsetup` support is present), and GRUB on the target ESP
+  - drop the hardware/desktop/apps package stages, whose names are now fixed when the ISO is built
+  - keep `validate_installed_boot` as the gate; it already asserts the artifacts this path must produce
 - [ ] Graphical live session with an "Install Sensible" launcher
 - [ ] Prompt rework on `gum`: four screens on GNOME (keyboard, disk, encryption, confirm), delegating account/locale/timezone to `gnome-initial-setup`
 - [ ] KDE variant, which keeps account creation in the installer (Plasma has no first-boot wizard)
 - [ ] `sensible-apps` post-install tool for Brave, Chromium and Flatpak/Flathub, which cannot run offline
+
+---
+
+## Loose ends
+
+Small, real, and not owned by any phase.
+
+- [ ] **Concurrency guard on the build.** Two `./live/build.sh` runs share
+      `live/` and destroy each other: the second one's pre-clean deletes the
+      first's chroot mid-debootstrap. This happened during development and cost
+      two builds. A `flock` on `live/.build.lock` was written and tested, then
+      lost in a concurrent edit; `.gitignore` still carries the lock file.
+      A race that does not crash can also produce a half-populated ISO.
+- [ ] **Reduce the boot matrix.** With the filesystem choice fixed to Btrfs and
+      swap always a file, the release gate's "four-layout" matrix collapses to
+      LUKS on/off per variant. Update the gate rather than testing layouts the
+      installer can no longer produce.
+- [ ] **Retire the `resume=` claim where Secure Boot is on.** Hibernation is
+      configured and works with SB off, but the kernel refuses it under
+      lockdown. The installed system should say so rather than appearing to
+      support hibernation it will decline.
+
+---
+
+## Adopted from Omarchy
+
+Reviewed in this session; the design record is in
+[OFFLINE_REWORK.md](OFFLINE_REWORK.md). Landed already: dialogs sized to their
+content (the type-to-confirm summary was being truncated), an actionable
+failure screen with a log tail and recovery menu, errors that offer the fix
+rather than a dead end, and post-install boot verification.
+
+Worth taking, not yet taken:
+
+- [ ] **One sourceable form module** holding every question with its validation,
+      shared by the installer and any first-boot path so wording and rules
+      cannot drift. This is the natural home for back-navigation
+- [ ] **Back-navigation** via an explicit status protocol (`0` ok / `1` back /
+      `130` side-channel), so a wrong answer on screen 3 does not mean starting
+      over
+- [ ] **A step runner** (`run_logged`-style): each step in its own `bash -eE`
+      child with stdin closed, a machine-parseable Starting/Completed/Failed
+      grammar, and a debug switch — a progress display can then read the log
+- [ ] **Acceptance testing that boots the installed disk**, not just the live
+      medium. Omarchy drives QEMU via QMP with OCR and virtual keystrokes;
+      `validate_installed_boot` asserts the artifacts, but nothing yet proves
+      them against real firmware
 
 ---
 
