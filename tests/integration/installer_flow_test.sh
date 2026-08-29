@@ -99,15 +99,17 @@ lspci() {
         echo "00:02.0 VGA compatible controller: Intel Corporation UHD Graphics"
     fi
 }
-# Deterministic identifier map; /dev/sda3 is LUKS root or plain swap
-# depending on the current run's ENABLE_LUKS (visible via dynamic scoping).
+# Deterministic identifier map; /dev/sda3 is the root partition in both modes
+# (the LUKS container when encrypted, the plain root filesystem otherwise).
 blkid() {
     local type="$2" dev="${*: -1}"
     case "${dev}:${type}" in
         /dev/sda1:UUID)     echo "EFI-FS-UUID-1111" ;;
         /dev/sda2:UUID)     echo "BOOT-FS-UUID-2222" ;;
-        /dev/sda3:UUID)     if [ "${ENABLE_LUKS:-false}" = "true" ]; then echo "ROOTPART-FS-UUID-4444"; else echo "SWAP-FS-UUID-3333"; fi ;;
-        /dev/sda4:UUID)     echo "ROOTPART-FS-UUID-4444" ;;
+        # Partition 3 is the root in both modes now: the LUKS container when
+        # encryption is on, the plain root filesystem when it is off. There is
+        # no swap partition to map, in either mode.
+        /dev/sda3:UUID)     echo "ROOTPART-FS-UUID-4444" ;;
         /dev/mapper/cryptroot:UUID) echo "ROOTFS-FS-UUID-5555" ;;
     esac
 }
@@ -256,7 +258,7 @@ assert_contains "btrfs on mapper" "$(log_text)" "mkfs.btrfs -f -L ROOT /dev/mapp
 assert_contains "subvol @swap created" "$(log_text)" "btrfs subvolume create ${MNT}/@swap"
 assert_contains "@swap mounted" "$(log_text)" "mount -o noatime,subvol=@swap /dev/mapper/cryptroot ${MNT}/swap"
 assert_contains "swapfile created NOCOW, RAM+10%" "$(log_text)" "chattr +C ${MNT}/swap/swapfile"
-assert_contains "swapfile sized 9011M" "$(log_text)" "fallocate -l 9011M ${MNT}/swap/swapfile"
+assert_contains "swapfile mirrors RAM (8192M)" "$(log_text)" "fallocate -l 8192M ${MNT}/swap/swapfile"
 assert_contains "swapfile formatted" "$(log_text)" "mkswap ${MNT}/swap/swapfile"
 assert_file_contains "crypttab: cryptroot by header UUID only" "${MNT}/etc/crypttab" "cryptroot UUID=ROOTPART-FS-UUID-4444 none luks,discard"
 assert_file_not_contains "no cryptswap (swapfile design)" "${MNT}/etc/crypttab" "cryptswap"
@@ -284,16 +286,17 @@ build_answers btrfs no kde no "native_media"
 MOCK_NVIDIA=1
 run_flow
 assert_common_success
-assert_contains "p4 typed plain 8300" "$(log_text)" "sgdisk -n 4:0:0 -t 4:8300"
-assert_contains "swap partition sized RAM+10%" "$(log_text)" "sgdisk -n 3:0:+9011M -t 3:8200"
-assert_contains "plain swap formatted" "$(log_text)" "mkswap -L SWAP /dev/sda3"
+assert_contains "p3 typed plain 8300" "$(log_text)" "sgdisk -n 3:0:0 -t 3:8300"
+assert_not_contains "no swap partition without LUKS" "$(log_text)" "8200"
+assert_not_contains "no swap partition formatted" "$(log_text)" "mkswap -L SWAP"
 assert_not_contains "no cryptsetup without LUKS" "$(log_text)" "luksFormat"
-assert_contains "btrfs on raw partition" "$(log_text)" "mkfs.btrfs -f -L ROOT /dev/sda4"
-assert_not_contains "no swapfile without LUKS" "$(log_text)" "swap/swapfile"
+assert_contains "btrfs on raw partition" "$(log_text)" "mkfs.btrfs -f -L ROOT /dev/sda3"
+# The swapfile is now created in both modes; it is simply unencrypted here.
+assert_contains "swapfile created without LUKS too" "$(log_text)" "swap/swapfile"
 assert_file_contains "crypttab placeholder" "${MNT}/etc/crypttab" "No encrypted volumes configured"
-assert_file_contains "fstab: plain swap by UUID" "${MNT}/etc/fstab" "UUID=SWAP-FS-UUID-3333 none swap sw 0 0"
-assert_file_contains "resume=UUID for partition swap" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=SWAP-FS-UUID-3333"
-assert_file_contains "initramfs RESUME set" "${MNT}/etc/initramfs-tools/conf.d/resume" "RESUME=UUID=SWAP-FS-UUID-3333"
+assert_file_contains "fstab: swapfile, not a partition" "${MNT}/etc/fstab" "/swap/swapfile none swap sw 0 0"
+assert_file_contains "resume points at the root fs, not a swap partition" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTPART-FS-UUID-4444"
+assert_file_contains "initramfs RESUME points at the root fs" "${MNT}/etc/initramfs-tools/conf.d/resume" "RESUME=UUID=ROOTPART-FS-UUID-4444"
 assert_file_not_exists "no initramfs keymap override without LUKS" "${MNT}/etc/initramfs-tools/initramfs.conf"
 assert_file_contains "nvidia-drm.modeset=1 on NVIDIA (Wayland needs KMS)" "${MNT}/etc/default/grub.d/installer.cfg" "nvidia-drm.modeset=1"
 assert_contains "KDE packages" "$(log_text)" "kde-plasma-desktop sddm plasma-discover plasma-discover-backend-flatpak plymouth-theme-breeze"
@@ -326,9 +329,12 @@ build_answers ext4 no kde yes ""
 MOCK_NVIDIA=0
 run_flow
 assert_common_success
-assert_contains "ext4 on raw partition" "$(log_text)" "mkfs.ext4 -F -L ROOT -O fast_commit /dev/sda4"
-assert_file_contains "plain swap UUID" "${MNT}/etc/fstab" "UUID=SWAP-FS-UUID-3333 none swap sw 0 0"
-assert_file_contains "resume=UUID set" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=SWAP-FS-UUID-3333"
+assert_contains "ext4 on raw partition" "$(log_text)" "mkfs.ext4 -F -L ROOT -O fast_commit /dev/sda3"
+assert_file_contains "swapfile, not a swap partition" "${MNT}/etc/fstab" "/swapfile none swap sw 0 0"
+# resume names the root filesystem plus the file offset in both modes; an
+# unencrypted install no longer has a swap partition to resume from.
+assert_file_contains "resume=UUID is the root fs" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTPART-FS-UUID-4444"
+assert_file_contains "resume_offset present without LUKS too" "${MNT}/etc/default/grub.d/installer.cfg" "resume_offset="
 assert_file_contains "keyd conf deployed" "${MNT}/etc/keyd/default.conf" "v = S-insert"
 
 t_section "Combo 5: Ext4 + LUKS, KDE, autologin accepted (SDDM needs Session=)"
@@ -381,7 +387,7 @@ assert_contains "no-candidates error surfaced" "$(output_text)" "No disk qualifi
 # so an undersized VM disk is distinguishable from having no disk at all.
 assert_contains "error names the rejected disk" "$(output_text)" "/dev/sda"
 assert_contains "error gives the reason" "$(output_text)" "too small"
-assert_contains "error explains the RAM-derived minimum" "$(output_text)" "RAM + 10%"
+assert_contains "error explains the RAM-derived minimum" "$(output_text)" "swapfile mirrors RAM"
 assert_not_contains "no partitioning happened" "$(log_text)" "sgdisk"
 lsblk() {
     mlog "lsblk $*"

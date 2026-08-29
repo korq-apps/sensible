@@ -11,9 +11,10 @@ get_system_ram_mb() {
 }
 
 calc_swap_mb() {
-    local ram_mb
-    ram_mb=$(get_system_ram_mb)
-    echo $((ram_mb + ram_mb / 10))
+    # Swap mirrors RAM: it is a swapfile inside the root filesystem, so it
+    # costs root space rather than a partition, and matching RAM is what makes
+    # hibernation possible at all.
+    get_system_ram_mb
 }
 
 calc_min_disk_mb() {
@@ -197,19 +198,18 @@ partition_disk() {
     sgdisk --zap-all "$disk" >/dev/null 2>&1 || true
     wipefs --all --force "$disk" >/dev/null 2>&1 || true
 
+    # One layout in both modes: EFI, BOOT, ROOT. Swap is always a swapfile
+    # inside the root filesystem, never a partition -- so it inherits the
+    # root's encryption instead of needing a separate key, it can be resized
+    # later without touching the partition table, and enabling encryption does
+    # not change the partition layout at all.
+    log_info "Creating GPT layout (EFI: 1024M, BOOT: 1024M, ROOT+swapfile: rest)..."
+    sgdisk -n 1:0:+1024M -t 1:ef00 -c 1:"EFI System Partition" "$disk"
+    sgdisk -n 2:0:+1024M -t 2:8300 -c 2:"Linux Boot" "$disk"
     if [ "$enable_luks" = "true" ]; then
-        # LUKS: no swap partition — swap lives in a swapfile inside the
-        # encrypted root, which enables hibernation (resume_offset).
-        log_info "Creating GPT layout (EFI: 1024M, BOOT: 1024M, ROOT+swapfile: rest)..."
-        sgdisk -n 1:0:+1024M -t 1:ef00 -c 1:"EFI System Partition" "$disk"
-        sgdisk -n 2:0:+1024M -t 2:8300 -c 2:"Linux Boot" "$disk"
         sgdisk -n 3:0:0 -t 3:8309 -c 3:"Linux LUKS" "$disk"
     else
-        log_info "Creating GPT layout (EFI: 1024M, BOOT: 1024M, SWAP: ${swap_mb}M, ROOT: rest)..."
-        sgdisk -n 1:0:+1024M -t 1:ef00 -c 1:"EFI System Partition" "$disk"
-        sgdisk -n 2:0:+1024M -t 2:8300 -c 2:"Linux Boot" "$disk"
-        sgdisk -n 3:0:+"${swap_mb}"M -t 3:8200 -c 3:"Linux Swap" "$disk"
-        sgdisk -n 4:0:0 -t 4:8300 -c 4:"Linux Root" "$disk"
+        sgdisk -n 3:0:0 -t 3:8300 -c 3:"Linux Root" "$disk"
     fi
 
     partprobe "$disk" 2>/dev/null || true
@@ -230,8 +230,10 @@ resume_offset_of() {
 }
 
 create_swapfile() {
-    # Swapfile used for both runtime swap and hibernation. With LUKS it lives
-    # inside the encrypted root, so resume works and swap stays encrypted.
+    # Swap is always a swapfile inside the root filesystem, in both modes.
+    # With LUKS that means it is encrypted with the root and needs no key of
+    # its own; without it, it still avoids a fixed partition and can be resized
+    # later. Doubles as the hibernation image (see resume_offset).
     # Btrfs: dedicated @swap subvolume, NOCOW, not compressed, not snapshotted.
     local fs_type="$1" swap_mb="$2"
 
@@ -265,13 +267,8 @@ format_and_mount() {
 
     EFI_PART=$(get_partition_name "$disk" 1)
     BOOT_PART=$(get_partition_name "$disk" 2)
-    if [ "$enable_luks" = "true" ]; then
-        ROOT_PART=$(get_partition_name "$disk" 3)
-        SWAP_PART=""
-    else
-        SWAP_PART=$(get_partition_name "$disk" 3)
-        ROOT_PART=$(get_partition_name "$disk" 4)
-    fi
+    ROOT_PART=$(get_partition_name "$disk" 3)
+    SWAP_PART=""
 
     log_info "Formatting EFI (${EFI_PART}) and BOOT (${BOOT_PART})..."
     mkfs.vfat -F32 -n EFI "$EFI_PART"
@@ -296,8 +293,6 @@ format_and_mount() {
         TARGET_ROOT="/dev/mapper/cryptroot"
     else
         TARGET_ROOT="$ROOT_PART"
-        log_info "Formatting plaintext SWAP on ${SWAP_PART}..."
-        mkswap -L SWAP "$SWAP_PART"
     fi
 
     mkdir -p ${MNT}
@@ -329,9 +324,9 @@ format_and_mount() {
         mkdir -p ${MNT}/boot
     fi
 
-    if [ "$enable_luks" = "true" ]; then
-        create_swapfile "$fs_type" "$swap_mb"
-    fi
+    # Always, not only under LUKS: swap is a swapfile in both modes now, so
+    # there is no partition to fall back to when encryption is off.
+    create_swapfile "$fs_type" "$swap_mb"
 
     mount -o "noatime" "$BOOT_PART" ${MNT}/boot
     mkdir -p ${MNT}/boot/efi

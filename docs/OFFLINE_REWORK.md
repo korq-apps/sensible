@@ -35,7 +35,7 @@ wiped disk on the user's.
 | Identity setup | Delegate to `gnome-initial-setup` on GNOME | Installer drops user/name/timezone/locale prompts on the GNOME variant |
 | Third-party apps | Out of the installer, into a post-install tool | Brave/Chromium/Flatpak need network and third-party origins; they cannot run offline |
 | TUI toolkit | `gum` | In Testing `main`, depends only on `libc6` (~21 MB) |
-| Swap | Policy unchanged | Minimum disk still scales with RAM — see Open questions |
+| Swap | Swapfile inside root, mirroring RAM; no swap partition | Encryption no longer changes the partition layout; minimum disk still scales with RAM |
 
 ### Measured sizes (Debian Testing, amd64)
 
@@ -139,15 +139,11 @@ Each phase leaves the tree releasable.
 
 ## Open questions
 
-- **Swap.** The instruction was "swapfile mirrors RAM size, created during
-  install". This is recorded as *policy unchanged*: RAM + 10%, a swapfile
-  inside the encrypted root when LUKS is on and a swap partition otherwise.
-  Two readings differ and should be settled before Phase 2:
-  *(a)* keep exactly that, or *(b)* always use a swapfile sized to RAM and drop
-  the swap partition entirely, which removes a partition from the layout and
-  makes swap resizable later.
-  Either way the minimum disk stays RAM-dependent (~30 GiB at 8 GiB RAM), so
-  **test VMs need ~40 GiB**.
+- ~~Swap.~~ **Settled:** no swap partition. Swap is a swapfile inside the root
+  filesystem in both modes, sized to mirror RAM, so it is encrypted with the
+  root when LUKS is on and the partition layout is identical either way. The
+  minimum disk stays RAM-dependent (~30 GiB at 8 GiB RAM), so **test VMs need
+  ~40 GiB**.
 - Whether the KDE variant should also delegate identity setup to
   `plasma-welcome` (it does not create accounts today) or keep the installer
   path permanently.

@@ -44,7 +44,7 @@ suite (`tests/`) can run the full flow unprivileged against a temp directory.
 | Target disk | none | Show path/size/model; record major:minor, byte size, serial and WWN; exclude every in-use disk and revalidate before wipe |
 | Filesystem | Btrfs | Btrfs or Ext4 |
 | LUKS2 | Yes | If yes: passphrase twice, min 8 characters |
-| Swap | RAM + 10% | Shown, not editable in v1 |
+| Swap | Swapfile inside root, mirroring RAM | Shown, not editable in v1 |
 | Desktop | GNOME | GNOME or KDE Plasma |
 | Mac clipboard (`keyd`) | On for GNOME, off for KDE | Super+C/V/X only |
 | Extra browsers | none | Chromium; Brave (official apt origin) |
@@ -110,12 +110,12 @@ wipefs --all --force "$DISK"
 sgdisk -n 1:0:+1024M -t 1:ef00 -c 1:"EFI System Partition" "$DISK"
 sgdisk -n 2:0:+1024M -t 2:8300 -c 2:"Linux Boot" "$DISK"
 
+# p3 is the root in both modes; swap is always a swapfile inside it, so only
+# the partition type differs.
 if [ "$ENABLE_LUKS" = true ]; then
-  # No swap partition: swap is a swapfile inside the encrypted root.
   sgdisk -n 3:0:0 -t 3:8309 -c 3:"Linux LUKS" "$DISK"
 else
-  sgdisk -n 3:0:+"${SWAP_MIB}"M -t 3:8200 -c 3:"Linux Swap" "$DISK"
-  sgdisk -n 4:0:0 -t 4:8300 -c 4:"Linux Root" "$DISK"
+  sgdisk -n 3:0:0 -t 3:8300 -c 3:"Linux Root" "$DISK"
 fi
 
 partprobe "$DISK"
@@ -283,11 +283,12 @@ tmpfs                /tmp         tmpfs  defaults,nosuid,nodev                  
 
 Ext4 + LUKS: one `/` line (`ext4  noatime,errors=remount-ro,discard  0 1`), same boot/efi/tmpfs, swap line is `/swapfile none swap sw 0 0`.
 
-No LUKS, either filesystem: the swap line is `UUID=<SWAP_UUID> none swap sw 0 0`
-(the dedicated swap partition) and there is no swapfile line. On Btrfs the
-`@swap` subvolume is still created, mounted at `/swap`, and still gets its
-`subvol=@swap` fstab entry — only the swapfile inside it is absent, so that
-enabling LUKS later does not require reshaping the subvolume layout.
+No LUKS, either filesystem: the swap line is identical to the encrypted case —
+`/swapfile` on Ext4, `/swap/swapfile` on Btrfs — because swap is a file inside
+the root filesystem in both modes. There is no swap partition and no
+`UUID=<SWAP_UUID>` entry. On Btrfs the `@swap` subvolume is created and mounted
+at `/swap` either way; encryption changes only whether the filesystem holding
+it is encrypted.
 
 ---
 

@@ -43,7 +43,7 @@ The live session is **not** a desktop. No GNOME/KDE on the ISO in v1. Banner and
 `installer/sensible-install.sh` against the spec. Success = reboot into a text or DE-less system with the chosen disk layout.
 
 - [x] Pre-flight: UEFI, disk list, RAM, minimum size, type-to-confirm wipe
-- [x] Four combinations: Btrfs/Ext4 × LUKS on/off, fixed 1 GiB EFI + 1 GiB BOOT + RAM+10% swap (swapfile inside the LUKS root when encrypted)
+- [x] Four combinations: Btrfs/Ext4 × LUKS on/off, fixed 1 GiB EFI + 1 GiB BOOT + root; swap is a swapfile inside root mirroring RAM in both modes (encrypted with the root when LUKS is on)
 - [x] crypttab/fstab as in the spec (UUID fstab; LUKS: swapfile on encrypted root; `resume=`/`resume_offset=` for both modes)
 - [x] User, hostname, locale, keyboard, timezone
 - [x] GRUB EFI + `cryptsetup-initramfs` + Plymouth hook (theme can stay `spinner` until Phase 4)

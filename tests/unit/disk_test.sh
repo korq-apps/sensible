@@ -15,8 +15,8 @@ assert_eq "mmcblk0"  "/dev/mmcblk0p4" "$(get_partition_name /dev/mmcblk0 4)"
 t_section "swap and minimum disk math (RAM mock)"
 free() { printf '              total        used        free\nMem:           8192        1024        7168\n'; }
 assert_eq "RAM detection" "8192" "$(get_system_ram_mb)"
-assert_eq "swap = RAM + 10%" "9011" "$(calc_swap_mb)"
-assert_eq "min disk = 2048 + swap + 20480" "31539" "$(calc_min_disk_mb)"
+assert_eq "swap mirrors RAM" "8192" "$(calc_swap_mb)"
+assert_eq "min disk = 2048 + swap + 20480" "30720" "$(calc_min_disk_mb)"
 
 t_section "partition_disk: GPT layout per spec"
 mock_setup
@@ -35,9 +35,10 @@ assert_not_contains "no swap partition with LUKS" "$(cat "${MOCK_LOG}")" "8200"
 assert_not_contains "no p4 with LUKS" "$(cat "${MOCK_LOG}")" "-n 4:0:0"
 
 mock_reset
-partition_disk /dev/sda 9011 false
-assert_contains "p3 swap (8200)"      "$(cat "${MOCK_LOG}")" "sgdisk -n 3:0:+9011M -t 3:8200"
-assert_contains "p4 plain root type 8300" "$(cat "${MOCK_LOG}")" "sgdisk -n 4:0:0 -t 4:8300"
+partition_disk /dev/sda 8192 false
+assert_contains "p3 plain root type 8300" "$(cat "${MOCK_LOG}")" "sgdisk -n 3:0:0 -t 3:8300"
+assert_not_contains "no swap partition without LUKS either" "$(cat "${MOCK_LOG}")" "8200"
+assert_not_contains "no p4 without LUKS" "$(cat "${MOCK_LOG}")" "-n 4:0:0"
 mock_teardown
 
 t_section "format_and_mount: LUKS on, btrfs (swapfile on @swap subvol)"
@@ -106,12 +107,13 @@ cryptsetup()  { mlog "cryptsetup $*"; }
 mount()       { mlog "mount $*"; }
 btrfs()       { mlog "btrfs $*"; }
 
-format_and_mount /dev/sda ext4 false "" 9011
-assert_contains "plain swap formatted" "$(cat "${MOCK_LOG}")" "mkswap -L SWAP /dev/sda3"
+format_and_mount /dev/sda ext4 false "" 8192
+assert_not_contains "no swap partition is formatted" "$(cat "${MOCK_LOG}")" "mkswap -L SWAP"
+assert_contains "a swapfile is created instead" "$(cat "${MOCK_LOG}")" "mkswap ${MNT}/swapfile"
 assert_not_contains "no cryptsetup without LUKS" "$(cat "${MOCK_LOG}")" "cryptsetup"
-assert_eq "TARGET_ROOT is raw partition" "/dev/sda4" "${TARGET_ROOT}"
-assert_contains "ext4 fast_commit" "$(cat "${MOCK_LOG}")" "mkfs.ext4 -F -L ROOT -O fast_commit /dev/sda4"
-assert_contains "ext4 mount options" "$(cat "${MOCK_LOG}")" "mount -o noatime,errors=remount-ro,discard /dev/sda4 ${MNT}"
+assert_eq "TARGET_ROOT is raw partition" "/dev/sda3" "${TARGET_ROOT}"
+assert_contains "ext4 fast_commit" "$(cat "${MOCK_LOG}")" "mkfs.ext4 -F -L ROOT -O fast_commit /dev/sda3"
+assert_contains "ext4 mount options" "$(cat "${MOCK_LOG}")" "mount -o noatime,errors=remount-ro,discard /dev/sda3 ${MNT}"
 assert_not_contains "no btrfs without btrfs fs" "$(cat "${MOCK_LOG}")" "subvolume"
 mock_teardown
 rm -rf "${TMP_MNT}"

@@ -107,11 +107,11 @@ Detected block devices:
 $(explain_no_candidates "${MIN_DISK_MIB}")
 
 Sensible needs a disk of at least ${MIN_DISK_MIB} MiB:
-  1 GiB EFI + 1 GiB /boot + ${SWAP_MIB} MiB swap + 20 GiB root
+  1 GiB EFI + 1 GiB /boot + 20 GiB root + a ${SWAP_MIB} MiB swapfile in it
 
-Swap is sized to RAM + 10% so the system can hibernate, so the minimum
-grows with RAM (this machine has ${RAM_MIB} MiB). In a VM, give the guest
-a bigger virtual disk, or less RAM."
+The swapfile mirrors RAM so the system can hibernate, so the minimum grows
+with RAM (this machine has ${RAM_MIB} MiB). In a VM, give the guest a bigger
+virtual disk, or less RAM."
 
         # Without a terminal (tests, unattended runs) there is nobody to answer
         # a menu, so report and fail exactly as before rather than hang.
@@ -150,7 +150,7 @@ a bigger virtual disk, or less RAM."
     DISK_SIZE_BYTES=$(disk_property "$TARGET_DISK" SIZE)
     DISK_SIZE_MIB=$(awk -v bytes="${DISK_SIZE_BYTES:-0}" 'BEGIN { print int(bytes / 1048576) }')
     if [ -z "$DISK_SIZE_MIB" ] || [ "$DISK_SIZE_MIB" -lt "$MIN_DISK_MIB" ]; then
-        ui_msgbox "Error: Disk Too Small" "${TARGET_DISK} is ${DISK_SIZE_MIB:-unknown} MiB.\nSensible requires at least ${MIN_DISK_MIB} MiB:\n1 GiB EFI + 1 GiB BOOT + ${SWAP_MIB} MiB swap + 20 GiB root."
+        ui_msgbox "Error: Disk Too Small" "${TARGET_DISK} is ${DISK_SIZE_MIB:-unknown} MiB.\nSensible requires at least ${MIN_DISK_MIB} MiB:\n1 GiB EFI + 1 GiB BOOT + 20 GiB root + a ${SWAP_MIB} MiB swapfile in it."
         log_err "Selected disk ${TARGET_DISK} is too small: ${DISK_SIZE_MIB:-unknown} MiB < ${MIN_DISK_MIB} MiB."
         exit 1
     fi
@@ -496,8 +496,10 @@ GRUB_GFXPAYLOAD_LINUX=keep
 EOF
 
     # Hibernation: point the kernel at the swap that holds the resume image.
-    # LUKS:  swapfile inside the encrypted root (resume_offset in 4K pages).
-    # no-LUKS: dedicated plaintext swap partition.
+    # Swap is a swapfile inside the root filesystem in both modes, so resume is
+    # always the root UUID plus the file's offset -- there is no swap partition
+    # to name. Note the kernel refuses hibernation under Secure Boot lockdown;
+    # this is configured so it works when Secure Boot is off.
     mkdir -p ${MNT}/etc/initramfs-tools/conf.d
     if [ "$ENABLE_LUKS" = "true" ]; then
         # The Plymouth passphrase dialog decodes keys with the initramfs keymap;
@@ -508,19 +510,13 @@ EOF
         else
             echo 'KEYMAP=y' >> ${MNT}/etc/initramfs-tools/initramfs.conf
         fi
-
-        local ROOTFS_UUID
-        ROOTFS_UUID=$(blkid -s UUID -o value "$TARGET_ROOT")
-        require_id "ROOT filesystem UUID" "$ROOTFS_UUID"
-        sed -i "s|quiet splash loglevel=3|quiet splash loglevel=3 resume=UUID=${ROOTFS_UUID} resume_offset=${RESUME_OFFSET}|" ${MNT}/etc/default/grub.d/installer.cfg
-        echo "RESUME=UUID=${ROOTFS_UUID}" > ${MNT}/etc/initramfs-tools/conf.d/resume
-    else
-        local SWAP_UUID
-        SWAP_UUID=$(blkid -s UUID -o value "$SWAP_PART")
-        require_id "SWAP filesystem UUID" "$SWAP_UUID"
-        sed -i "s|quiet splash loglevel=3|quiet splash loglevel=3 resume=UUID=${SWAP_UUID}|" ${MNT}/etc/default/grub.d/installer.cfg
-        echo "RESUME=UUID=${SWAP_UUID}" > ${MNT}/etc/initramfs-tools/conf.d/resume
     fi
+
+    local ROOTFS_UUID
+    ROOTFS_UUID=$(blkid -s UUID -o value "$TARGET_ROOT")
+    require_id "ROOT filesystem UUID" "$ROOTFS_UUID"
+    sed -i "s|quiet splash loglevel=3|quiet splash loglevel=3 resume=UUID=${ROOTFS_UUID} resume_offset=${RESUME_OFFSET}|" ${MNT}/etc/default/grub.d/installer.cfg
+    echo "RESUME=UUID=${ROOTFS_UUID}" > ${MNT}/etc/initramfs-tools/conf.d/resume
 
     # Secure Boot chain: shim (MS-signed) -> Debian-signed GRUB -> signed kernel.
     # Works with Secure Boot on and off, so it is always used.

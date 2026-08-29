@@ -35,17 +35,22 @@ The live image is an **installer appliance**, not a full desktop. That keeps ISO
 
 ## 2. Disk layout
 
-GPT table, no LVM. LUKS and no-LUKS differ in exactly one thing: where swap lives.
+GPT table, no LVM. LUKS and no-LUKS differ in exactly one thing: the root
+partition's type. Swap is a swapfile inside the root filesystem in both modes,
+never a partition, so encryption does not change the layout.
 
 ```
 /dev/nvme0n1 (example)                          LUKS on            LUKS off
 ├── p1  1 GiB    EF00   FAT32    /boot/efi     yes                yes
 ├── p2  1 GiB    8300   Ext4     /boot          yes                yes
-├── p3  RAM+10%  8200   swap     (plain)        —                  yes
-└── pN  rest     8309/8300        /              p3, LUKS2          p4
+└── p3  rest     8309/8300        /              LUKS2             plain
 ```
 
-Sizes are fixed for v1: EFI **1024 MiB**, BOOT **1024 MiB**, SWAP **detected RAM + 10%**, ROOT **remainder**. 1 GiB `/boot` is enough for a few Testing kernels plus initramfs; we are not leaving this as a 1–2 GiB range in the installer.
+Sizes are fixed for v1: EFI **1024 MiB**, BOOT **1024 MiB**, ROOT **remainder**,
+with a swapfile inside root **mirroring detected RAM**. Keeping swap in a file
+means it inherits the root's encryption without a key of its own, can be resized
+without touching the partition table, and leaves the layout identical either
+way. 1 GiB `/boot` is enough for a few Testing kernels plus initramfs; we are not leaving this as a 1–2 GiB range in the installer.
 
 ### Btrfs
 

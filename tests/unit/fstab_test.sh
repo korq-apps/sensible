@@ -10,15 +10,16 @@ TMP_MNT="$(mktemp -d)"
 MNT="${TMP_MNT}"
 mkdir -p "${MNT}/etc"
 
-# Deterministic identifier map: /dev/sda3 is the LUKS root partition when
-# ENABLE_LUKS=true (header UUID) and the plain swap partition otherwise.
+# Deterministic identifier map. /dev/sda3 is the root partition in both modes.
 blkid() {
     local type="$2" dev="${*: -1}"
     case "${dev}:${type}" in
         /dev/sda1:UUID)     echo "EFI-FS-UUID-1111" ;;
         /dev/sda2:UUID)     echo "BOOT-FS-UUID-2222" ;;
-        /dev/sda3:UUID)     if [ "${ENABLE_LUKS:-false}" = "true" ]; then echo "ROOTPART-FS-UUID-4444"; else echo "SWAP-FS-UUID-3333"; fi ;;
-        /dev/sda4:UUID)     echo "ROOTPART-FS-UUID-4444" ;;
+        # Partition 3 is the root in both modes now: the LUKS container when
+        # encryption is on, the plain root filesystem when it is off. There is
+        # no swap partition to map, in either mode.
+        /dev/sda3:UUID)     echo "ROOTPART-FS-UUID-4444" ;;
         /dev/mapper/cryptroot:UUID) echo "ROOTFS-FS-UUID-5555" ;;
     esac
 }
@@ -40,16 +41,20 @@ assert_file_contains "fstab tmpfs /tmp"           "${MNT}/etc/fstab" "tmpfs     
 
 t_section "Ext4 + no LUKS"
 ENABLE_LUKS=false
-generate_crypttab_and_fstab /dev/sda4 /dev/sda2 /dev/sda1 /dev/sda3 /dev/sda4 ext4 false
+generate_crypttab_and_fstab /dev/sda3 /dev/sda2 /dev/sda1 "" /dev/sda3 ext4 false
 assert_file_contains "crypttab placeholder only" "${MNT}/etc/crypttab" "# /etc/crypttab: No encrypted volumes configured."
-assert_file_contains "fstab plain swap by UUID"  "${MNT}/etc/fstab" "UUID=SWAP-FS-UUID-3333 none swap sw 0 0"
+# Swap is a swapfile in the root filesystem in both modes now, so an
+# unencrypted install must not reference a swap partition either.
+assert_file_contains "fstab swapfile, not a partition" "${MNT}/etc/fstab" "/swapfile none swap sw 0 0"
+assert_file_not_contains "no swap partition UUID" "${MNT}/etc/fstab" "UUID=SWAP-FS-UUID-3333"
 assert_file_contains "fstab root uses partition fs UUID" "${MNT}/etc/fstab" "UUID=ROOTPART-FS-UUID-4444  /            ext4   noatime,errors=remount-ro,discard                                     0 1"
 assert_file_not_contains "no btrfs subvols"      "${MNT}/etc/fstab" "subvol="
 
-t_section "Btrfs + no LUKS swaps the swap line, keeps subvols"
+t_section "Btrfs + no LUKS keeps the swapfile line and the subvols"
 ENABLE_LUKS=false
-generate_crypttab_and_fstab /dev/sda4 /dev/sda2 /dev/sda1 /dev/sda3 /dev/sda4 btrfs false
-assert_file_contains "plain swap UUID" "${MNT}/etc/fstab" "UUID=SWAP-FS-UUID-3333 none swap sw 0 0"
+generate_crypttab_and_fstab /dev/sda3 /dev/sda2 /dev/sda1 "" /dev/sda3 btrfs false
+assert_file_contains "btrfs swapfile on @swap" "${MNT}/etc/fstab" "/swap/swapfile none swap sw 0 0"
+assert_file_not_contains "no swap partition UUID" "${MNT}/etc/fstab" "UUID=SWAP-FS-UUID-3333"
 assert_file_not_contains "no mapper swap" "${MNT}/etc/fstab" "cryptswap"
 assert_file_contains "subvol=@ kept" "${MNT}/etc/fstab" "subvol=@home"
 

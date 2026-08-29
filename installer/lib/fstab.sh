@@ -38,19 +38,14 @@ EOF
 EOF
     fi
 
-    # Swap: with LUKS it is the swapfile on the encrypted root (hibernation
-    # works); without LUKS it is the dedicated plaintext swap partition.
+    # Swap is a swapfile inside the root filesystem in both modes, so the entry
+    # never references a partition. Under LUKS that file is encrypted with the
+    # root; the layout is otherwise identical either way.
     local SWAP_FSTAB_LINE
-    if [ "$enable_luks" = "true" ]; then
-        if [ "$fs_type" = "btrfs" ]; then
-            SWAP_FSTAB_LINE="/swap/swapfile none swap sw 0 0"
-        else
-            SWAP_FSTAB_LINE="/swapfile none swap sw 0 0"
-        fi
+    if [ "$fs_type" = "btrfs" ]; then
+        SWAP_FSTAB_LINE="/swap/swapfile none swap sw 0 0"
     else
-        SWAP_UUID=$(blkid -s UUID -o value "$swap_part")
-        require_id "SWAP filesystem UUID" "$SWAP_UUID"
-        SWAP_FSTAB_LINE="UUID=${SWAP_UUID} none swap sw 0 0"
+        SWAP_FSTAB_LINE="/swapfile none swap sw 0 0"
     fi
 
     log_info "Generating /etc/fstab..."

@@ -31,7 +31,7 @@ Two filesystems, each with optional LUKS2. One GPT layout — no LVM:
 | :--- | :--- | :--- | :--- |
 | EFI | 1 GiB | FAT32 | `/boot/efi` |
 | BOOT | 1 GiB | Ext4 | `/boot` (always unencrypted) |
-| SWAP | physical RAM + 10% | swap | plain partition without LUKS; **with LUKS it is a swapfile inside the encrypted root** — hibernation works in both modes (Secure Boot lockdown blocks it; see [Architecture](docs/ARCHITECTURE.md#3-swap-luks-and-hibernation)) |
+| *(swap)* | mirrors physical RAM | swapfile | **a swapfile inside the root filesystem, never a partition** — encrypted with the root when LUKS is on. Hibernation works in both modes (Secure Boot lockdown blocks it; see [Architecture](docs/ARCHITECTURE.md#3-swap-luks-and-hibernation)) |
 | ROOT | rest of disk | Btrfs **or** Ext4, optional LUKS2 | `/` |
 
 - **Btrfs**: subvolumes `@`, `@home`, `@snapshots`, `@var_log` (Snapper/Timeshift-ready; snapshot tools themselves are optional later).
