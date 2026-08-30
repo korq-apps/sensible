@@ -31,14 +31,50 @@ OMARCHY_FORM_ABORT=2
 
 # Terminal measurement - gum draws on /dev/tty
 SENSIBLE_LOGO_TEXT="Sensible"
-# Width of the logo/splash for centering (approx, overridden if logo file exists)
+# A shared content column keeps the logo, copy, and controls visually related.
+# It is clamped on small consoles.
 SENSIBLE_LOGO_WIDTH=40
+SENSIBLE_CONTENT_WIDTH=72
+SENSIBLE_STTY_STATE=""
+INSTALL_PROGRESS_STARTED_AT=0
+INSTALL_PROGRESS_TOTAL=1
+
+# Gum talks to the controlling terminal directly. Login shells and sudo can
+# inherit non-TTY standard descriptors while still having a perfectly usable
+# /dev/tty, so probe that device without exposing open errors.
+_ui_has_controlling_tty() {
+    [ -c /dev/tty ] && ( : </dev/tty ) 2>/dev/null
+}
+
+# Linux VTs answer cursor-position probes from Gum/Bubble Tea. With ECHOCTL
+# enabled, the line discipline visibly echoes those replies as ^[[15;1R.
+# Keep normal character echoing, but hide control replies for the installer
+# session and restore the original terminal state when it exits.
+prepare_terminal() {
+    _ui_has_controlling_tty || return 0
+    [ -z "$SENSIBLE_STTY_STATE" ] || return 0
+    SENSIBLE_STTY_STATE=$(stty -g </dev/tty 2>/dev/null || true)
+    stty -echoctl </dev/tty 2>/dev/null || true
+}
+
+restore_terminal() {
+    [ -n "$SENSIBLE_STTY_STATE" ] || return 0
+    stty "$SENSIBLE_STTY_STATE" </dev/tty 2>/dev/null || true
+    SENSIBLE_STTY_STATE=""
+}
 
 measure_terminal() {
-    # Use tput/stty without forcing /dev/tty (which blocks when no TTY)
-    if [ -t 0 ] || [ -t 2 ]; then
-        TERM_WIDTH=$(stty size 2>/dev/null | awk '{print $2}')
-        TERM_HEIGHT=$(stty size 2>/dev/null | awk '{print $1}')
+    # sudo/login can leave standard descriptors detached while /dev/tty is
+    # still the real interactive console. Measure that console first.
+    local tty_size=""
+    if _ui_has_controlling_tty; then
+        tty_size=$(stty size </dev/tty 2>/dev/null || true)
+        TERM_HEIGHT=${tty_size%% *}
+        TERM_WIDTH=${tty_size##* }
+    elif [ -t 0 ] || [ -t 2 ]; then
+        tty_size=$(stty size 2>/dev/null || true)
+        TERM_HEIGHT=${tty_size%% *}
+        TERM_WIDTH=${tty_size##* }
     else
         TERM_WIDTH=""
         TERM_HEIGHT=""
@@ -55,8 +91,15 @@ measure_terminal() {
         [ "$SENSIBLE_LOGO_WIDTH" -lt 20 ] && SENSIBLE_LOGO_WIDTH=40
     fi
 
-    PADDING_LEFT=$(((TERM_WIDTH - SENSIBLE_LOGO_WIDTH) / 2))
+    LAYOUT_WIDTH=$SENSIBLE_CONTENT_WIDTH
+    (( LAYOUT_WIDTH < SENSIBLE_LOGO_WIDTH )) && LAYOUT_WIDTH=$SENSIBLE_LOGO_WIDTH
+    (( LAYOUT_WIDTH > TERM_WIDTH - 4 )) && LAYOUT_WIDTH=$((TERM_WIDTH - 4))
+    (( LAYOUT_WIDTH < 20 )) && LAYOUT_WIDTH=20
+
+    PADDING_LEFT=$(((TERM_WIDTH - LAYOUT_WIDTH) / 2))
     (( PADDING_LEFT < 0 )) && PADDING_LEFT=0
+    LOGO_PADDING_LEFT=$((PADDING_LEFT + (LAYOUT_WIDTH - SENSIBLE_LOGO_WIDTH) / 2))
+    (( LOGO_PADDING_LEFT < 0 )) && LOGO_PADDING_LEFT=0
     PADDING_LEFT_SPACES=$(printf "%*s" "$PADDING_LEFT" "")
 
     PADDING="0 0 0 $PADDING_LEFT"
@@ -69,109 +112,188 @@ measure_terminal() {
 }
 measure_terminal
 
-# Wait for terminal to settle (framebuffer/KMS late in VMs)
-wait_for_stable_terminal() {
-    local width last="" stable=0 waited=0
-    while (( waited < 5000 )); do
-        if [ -t 0 ] || [ -t 2 ]; then
-            width=$(stty size 2>/dev/null | awk '{print $2}')
-        else
-            width=$TERM_WIDTH
-        fi
-        [[ $width =~ ^[0-9]+$ ]] || width=0
-        if [[ $width == "$last" ]] && (( width >= SENSIBLE_LOGO_WIDTH )); then
-            (( ++stable >= 3 )) && break
-        else
-            stable=0
-        fi
-        last=$width
-        sleep 0.2
-        (( waited += 200 ))
-    done
-}
-
 # Gum color theme (subtle, matches Sensible branding)
 export GUM_CONFIRM_PROMPT_FOREGROUND="6"
 export GUM_CONFIRM_SELECTED_FOREGROUND="0"
 export GUM_CONFIRM_SELECTED_BACKGROUND="2"
 export GUM_CONFIRM_UNSELECTED_FOREGROUND="7"
 export GUM_CONFIRM_UNSELECTED_BACKGROUND="0"
+export GUM_FILTER_INDICATOR_FOREGROUND="2"
+export GUM_FILTER_MATCH_FOREGROUND="2"
+export GUM_FILTER_PROMPT_FOREGROUND="8"
+export GUM_FILTER_PLACEHOLDER_FOREGROUND="8"
+
+# Styling is presentation, never installation control flow. Always render it
+# on the console rather than stdout (which may carry a selected value), and do
+# not abort the installer if a terminal rejects a cosmetic capability query.
+ui_style() {
+    gum style "$@" >/dev/tty 2>&1 || true
+}
+
+ui_blank() {
+    if _ui_has_controlling_tty; then
+        printf '\n' >/dev/tty
+    else
+        printf '\n' >&2
+    fi
+}
+
+installer_edition_label() {
+    case "${DESKTOP_CHOICE:-${SENSIBLE_VARIANT:-gnome}}" in
+        kde) printf 'KDE Plasma edition' ;;
+        *)   printf 'GNOME edition' ;;
+    esac
+}
+
+render_logo() {
+    local top_padding="${1:-1}" logo=""
+    if [ -n "${SENSIBLE_LOGO_PATH:-}" ] && [ -f "$SENSIBLE_LOGO_PATH" ]; then
+        logo=$(<"$SENSIBLE_LOGO_PATH")
+    elif [ -f /usr/share/sensible/logo.txt ]; then
+        logo=$(</usr/share/sensible/logo.txt)
+    else
+        logo="Sensible"
+    fi
+    ui_style --foreground 2 --padding "${top_padding} 0 0 $LOGO_PADDING_LEFT" "$logo"
+}
+
+centered_style() {
+    ui_style --width "$LAYOUT_WIDTH" --align center --padding "0 0 0 $PADDING_LEFT" "$@"
+}
 
 clear_logo() {
     measure_terminal
+    local edition installer_caption
+    edition=$(installer_edition_label)
+    installer_caption="Debian Testing  •  ${edition}"
     # Only clear and use gum when we have a real TTY; tests pipe input
     if _ui_use_gum; then
-        printf "\033[H\033[2J"
-        if [ -n "${SENSIBLE_LOGO_PATH:-}" ] && [ -f "$SENSIBLE_LOGO_PATH" ]; then
-            gum style --foreground 2 --padding "1 0 0 $PADDING_LEFT" "$(<"$SENSIBLE_LOGO_PATH")" 2>/dev/tty || true
-        elif [ -f /usr/share/sensible/logo.txt ]; then
-            gum style --foreground 2 --padding "1 0 0 $PADDING_LEFT" "$(</usr/share/sensible/logo.txt)" 2>/dev/tty || true
-        else
-            gum style --foreground 2 --padding "1 0 0 $PADDING_LEFT" --bold "Sensible" --foreground 7 "  (aka Lazydeb)" 2>/dev/tty || true
-        fi
+        printf "\033[H\033[2J" >/dev/tty
+        render_logo 1
+        centered_style --foreground 8 "${installer_caption}" || true
+        printf '\n' >/dev/tty
     else
         # Text/whiptail mode: simple header
         if [ -t 2 ]; then
-            printf "%sSensible (aka Lazydeb) — Debian Testing\n" "$PADDING_LEFT_SPACES" >&2
+            printf "%sSensible Installer — %s\n" "$PADDING_LEFT_SPACES" "${installer_caption}" >&2
         fi
     fi
 }
 
-# Vertically centered greeter (static, no animation - animation optional)
-greeter() {
+welcome_screen() {
+    _ui_use_gum || return 0
+
     measure_terminal
-    local rows logo_h content_h top cols
-    cols=$TERM_WIDTH
-    rows=$(stty size 2>/dev/null </dev/tty | awk '{print $1}')
-    [[ $rows =~ ^[0-9]+$ ]] || rows=${LINES:-24}
+    local edition top_padding
+    edition=$(installer_edition_label)
+    top_padding=$(((TERM_HEIGHT - 18) / 2))
+    (( top_padding < 1 )) && top_padding=1
 
-    if [ -f "${SENSIBLE_LOGO_PATH:-}" ]; then
-        logo_h=$(wc -l <"$SENSIBLE_LOGO_PATH")
-    elif [ -f /usr/share/sensible/logo.txt ]; then
-        logo_h=$(wc -l </usr/share/sensible/logo.txt)
-    else
-        logo_h=2
-    fi
+    printf "\033[?25l\033[H\033[2J" >/dev/tty
+    render_logo "$top_padding"
+    printf '\n' >/dev/tty
+    centered_style --bold "Welcome to Sensible" || true
+    centered_style --foreground 8 "Debian Testing  •  ${edition}" || true
+    printf '\n' >/dev/tty
+    printf '\n\n' >/dev/tty
+    centered_style --bold --foreground 2 "Press Enter to start" || true
 
-    content_h=$((logo_h + 4))
-    top=$(((rows - content_h) / 2))
-    (( top < 0 )) && top=0
-
-    printf '\033[?25l\033[H\033[2J'
-    clear_logo
-    echo
-    local tagline="A clean Debian Testing desktop — installer wipes one disk, nothing else"
-    local tpad=$(((cols - ${#tagline}) / 2)); (( tpad < 0 )) && tpad=0
-    printf "%*s%s\n" "$tpad" "" "$tagline"
-    echo
-    local hint="Press Return to start"
-    local hpad=$(((cols - ${#hint}) / 2)); (( hpad < 0 )) && hpad=0
-    printf "\033[2m%*s%s\033[0m\n" "$hpad" "" "$hint"
-
-    # Wait for Return (or any key) - non-blocking in tests
-    if [ -t 0 ]; then
-        IFS= read -r _ </dev/tty || true
-    fi
-    printf '\033[0m\033[H\033[2J\033[?25h'
+    IFS= read -r _ </dev/tty || true
+    printf "\033[?25h\033[H\033[2J" >/dev/tty
 }
 
 step() {
     clear_logo
-    echo >&2
     if _ui_use_gum; then
-        gum style --padding "0 0 0 $PADDING_LEFT" "$1" 2>/dev/tty || printf "%s%s\n" "$PADDING_LEFT_SPACES" "$1" >&2
+        ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" "$1"
+        ui_blank
     else
+        echo >&2
         printf "%s%s\n" "$PADDING_LEFT_SPACES" "$1" >&2
+        echo >&2
     fi
-    echo >&2
 }
 
 say() {
     if _ui_use_gum; then
-        gum style --padding "0 0 0 $PADDING_LEFT" "$@" 2>/dev/tty || printf "%s%s\n" "$PADDING_LEFT_SPACES" "$*" >&2
+        ui_style --padding "0 0 0 $PADDING_LEFT" "$@"
     else
-        printf "%s%s\n" "$PADDING_LEFT_SPACES" "$*" >&2
+        _say_plain "$@"
     fi
+}
+
+format_elapsed_time() {
+    local elapsed="${1:-0}"
+    (( elapsed < 0 )) && elapsed=0
+    printf '%dm %02ds\n' "$((elapsed / 60))" "$((elapsed % 60))"
+}
+
+install_progress_start() {
+    INSTALL_PROGRESS_STARTED_AT=$(date +%s)
+    INSTALL_PROGRESS_TOTAL="${1:-1}"
+}
+
+install_progress_elapsed() {
+    local now
+    now=$(date +%s)
+    format_elapsed_time "$((now - INSTALL_PROGRESS_STARTED_AT))"
+}
+
+install_progress_update() {
+    local current="$1" stage="$2"
+    [ "${SENSIBLE_DEBUG:-0}" != "1" ] || return 0
+    _ui_use_gum || return 0
+
+    local width=34 filled empty percent bar_done bar_left elapsed
+    (( INSTALL_PROGRESS_TOTAL > 0 )) || INSTALL_PROGRESS_TOTAL=1
+    (( current < 0 )) && current=0
+    (( current > INSTALL_PROGRESS_TOTAL )) && current=$INSTALL_PROGRESS_TOTAL
+    filled=$((current * width / INSTALL_PROGRESS_TOTAL))
+    empty=$((width - filled))
+    percent=$((current * 100 / INSTALL_PROGRESS_TOTAL))
+    printf -v bar_done '%*s' "$filled" ''
+    printf -v bar_left '%*s' "$empty" ''
+    bar_done=${bar_done// /#}
+    bar_left=${bar_left// /-}
+    elapsed=$(install_progress_elapsed)
+
+    clear_logo
+    ui_style --padding "0 0 0 $PADDING_LEFT" --bold "Installing Sensible"
+    echo >/dev/tty
+    ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 2 \
+        "[${bar_done}${bar_left}] ${percent}%"
+    ui_style --padding "0 0 0 $PADDING_LEFT" "$stage"
+    ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 8 "Elapsed: ${elapsed}"
+    echo >/dev/tty
+    ui_blank
+}
+
+# Render Gum-styled messages cleanly when the terminal cannot run Gum. Do not
+# expose presentation flags such as "--foreground 8" as installer copy.
+_say_plain() {
+    local -a words=()
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --foreground|--background|--border-foreground|--border-background|--align|--width|--height|--margin|--padding)
+                shift
+                [ "$#" -gt 0 ] && shift
+                ;;
+            --bold|--faint|--italic|--strikethrough|--underline)
+                shift
+                ;;
+            --)
+                shift
+                words+=("$@")
+                break
+                ;;
+            *)
+                words+=("$1")
+                shift
+                ;;
+        esac
+    done
+    printf "%s%s\n" "$PADDING_LEFT_SPACES" "${words[*]}" >&2
 }
 
 notice() {
@@ -188,9 +310,8 @@ notice() {
 
 # ── Legacy whiptail-compatible wrappers (now gum-first) ──
 
-# Detect if running under test (no TTY) - fall back to text
 _ui_use_gum() {
-    [ "${UI_TOOL:-}" = "gum" ] && [ -t 0 ] 2>/dev/null && [ -t 2 ] 2>/dev/null
+    [ "${UI_TOOL:-}" = "gum" ] && _ui_has_controlling_tty
 }
 
 ui_msgbox() {
@@ -201,13 +322,13 @@ ui_msgbox() {
     text=$(printf '%b' "$text")
     if _ui_use_gum; then
         clear_logo
-        echo
-        gum style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
-        echo
-        gum style --padding "0 0 0 $PADDING_LEFT" "$text"
-        echo
+        ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
+        ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" "$text"
+        ui_blank
         if [ -t 0 ]; then
-            gum style --padding "0 0 0 $PADDING_LEFT" --foreground 8 "Press Return to continue"
+            ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 8 "Press Return to continue"
             read -r _ </dev/tty || true
         fi
     elif [ "$UI_TOOL" = "whiptail" ] || [ "$UI_TOOL" = "dialog" ]; then
@@ -228,11 +349,11 @@ ui_yesno() {
     local title="$1" text="$2" default="${3:-yes}"
     if _ui_use_gum; then
         clear_logo
-        echo
-        gum style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
-        echo
-        gum style --padding "0 0 0 $PADDING_LEFT" "$text"
-        echo
+        ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
+        ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" "$text"
+        ui_blank
         local rc
         if [ "$default" = "no" ]; then
             gum confirm --affirmative "Yes" --negative "No" --default=false "Confirm?" 2>/dev/tty
@@ -269,11 +390,11 @@ ui_inputbox() {
     local title="$1" text="$2" init_val="${3:-}"
     if _ui_use_gum; then
         clear_logo
-        echo
-        gum style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
-        echo
-        gum style --padding "0 0 0 $PADDING_LEFT" "$text"
-        echo
+        ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
+        ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" "$text"
+        ui_blank
         local res
         res=$(gum input --placeholder "$init_val" --value "$init_val" --width 50 2>/dev/tty) || res="$init_val"
         echo "$res"
@@ -293,11 +414,11 @@ ui_passwordbox() {
     local title="$1" text="$2"
     if _ui_use_gum; then
         clear_logo
-        echo
-        gum style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
-        echo
-        gum style --padding "0 0 0 $PADDING_LEFT" "$text"
-        echo
+        ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
+        ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" "$text"
+        ui_blank
         local res
         res=$(gum input --password --placeholder "Enter password" 2>/dev/tty) || res=""
         echo "$res"
@@ -318,31 +439,33 @@ ui_menu() {
     local title="$1" text="$2"
     shift 2
     local items=("$@")
+    text=$(printf '%b' "$text")
     if _ui_use_gum; then
         clear_logo
-        echo
-        gum style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
-        echo
-        gum style --padding "0 0 0 $PADDING_LEFT" "$text"
-        echo
-        # Gum choose expects one item per line; our items are "key" "desc" pairs
-        local display=() keys=()
+        ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
+        ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" "$text"
+        ui_blank
+        # Keep the rendered label and returned action separate. Parsing a
+        # styled label made the completion menu occasionally return an empty or
+        # malformed action and silently fall back to the live shell.
+        local options="" keys=()
         local i
         for ((i=0; i<${#items[@]}; i+=2)); do
-            display+=("${items[i]} — ${items[i+1]}")
             keys+=("${items[i]}")
+            options+="${items[i]} — ${items[i+1]}"$'\t'"${items[i]}"$'\n'
         done
         local chosen
-        chosen=$(printf '%s\n' "${display[@]}" | gum choose --header "" 2>/dev/tty) || return 1
-        # Map back to key
-        for ((i=0; i<${#display[@]}; i++)); do
-            if [ "${display[i]}" = "$chosen" ]; then
-                echo "${keys[i]}"
+        chosen=$(printf '%s' "$options" | \
+            gum choose --label-delimiter $'\t' --select-if-one --header "" 2>/dev/tty) || return 1
+        for ((i=0; i<${#keys[@]}; i++)); do
+            if [ "${keys[i]}" = "$chosen" ]; then
+                printf '%s\n' "$chosen"
                 return 0
             fi
         done
-        # Fallback: extract first word
-        echo "$chosen" | awk '{print $1}'
+        return 1
     elif [ "$UI_TOOL" = "whiptail" ] || [ "$UI_TOOL" = "dialog" ]; then
         local res
         res=$("$UI_TOOL" --title "$title" --menu "$text" 15 70 6 "${items[@]}" 3>&1 1>&2 2>&3)
@@ -374,11 +497,11 @@ ui_checklist() {
     local items=("$@")
     if _ui_use_gum; then
         clear_logo
-        echo
-        gum style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
-        echo
-        gum style --padding "0 0 0 $PADDING_LEFT" "$text"
-        echo
+        ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
+        ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" "$text"
+        ui_blank
         local display=() keys=()
         local i
         for ((i=0; i<${#items[@]}; i+=3)); do
@@ -416,14 +539,14 @@ ui_checklist() {
 gum_confirm_with_toggle() {
     local title="$1" text="$2" affirmative="$3" negative="$4" hint="$5"
     clear_logo
-    echo
-    [ -n "$title" ] && gum style --padding "0 0 0 $PADDING_LEFT" --bold "$title" && echo
-    gum style --padding "0 0 0 $PADDING_LEFT" "$text"
+    ui_blank
+    [ -n "$title" ] && { ui_style --padding "0 0 0 $PADDING_LEFT" --bold "$title"; ui_blank; }
+    ui_style --padding "0 0 0 $PADDING_LEFT" "$text"
     if [ -n "$hint" ]; then
-        gum style --padding "0 0 0 $PADDING_LEFT" --foreground 8 "$hint"
+        ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 8 "$hint"
     fi
-    echo
-    local rc
+    ui_blank
+        local rc
     gum confirm --affirmative "$affirmative" --negative "$negative" "Confirm?" 2>/dev/tty
     rc=$?
     return $rc

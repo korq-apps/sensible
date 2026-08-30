@@ -147,11 +147,19 @@ explain_no_candidates() {
     [ "$found" -eq 1 ] || printf '  (no block devices detected at all)\n'
 }
 
-get_disk_info() {
+block_display_property() {
+    local device="$1" property="$2" value=""
+    IFS= read -r value < <(lsblk -dno "$property" "$device" 2>/dev/null)
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s\n' "$value"
+}
+
+get_disk_identity() {
     local device="$1" size vendor model label
-    size=$(lsblk -dno SIZE "$device" 2>/dev/null)
-    vendor=$(lsblk -dno VENDOR "$device" 2>/dev/null | sed 's/ *$//')
-    model=$(lsblk -dno MODEL "$device" 2>/dev/null | sed 's/ *$//')
+    size=$(block_display_property "$device" SIZE)
+    vendor=$(block_display_property "$device" VENDOR)
+    model=$(block_display_property "$device" MODEL)
     label=""
     if [[ -n $vendor && -n $model ]]; then
         if [[ $model == *$vendor* ]]; then label="$model"; else label="$vendor $model"; fi
@@ -161,11 +169,63 @@ get_disk_info() {
     local display="$device"
     [[ -n $size ]] && display="$display ($size)"
     [[ -n $label ]] && display="$display - $label"
-    local part_summary
-    part_summary=$(lsblk -nro TYPE,NAME,FSTYPE,MOUNTPOINT "$device" 2>/dev/null | \
-        awk '$1=="part" { printf "%s%s%s", s, ($3==""?"unknown":$3), ($4==""?"":"("$4")"); s=", " }')
-    [[ -n $part_summary ]] && display+=" [$part_summary]"
-    echo "$display"
+    printf '%s\n' "$display"
+}
+
+get_volume_info() {
+    local volume="$1" type="$2"
+    local name size fstype label mountpoint display
+    name="${volume##*/}"
+    size=$(block_display_property "$volume" SIZE)
+    fstype=$(block_display_property "$volume" FSTYPE)
+    label=$(block_display_property "$volume" LABEL)
+    [ -n "$label" ] || label=$(block_display_property "$volume" PARTLABEL)
+    mountpoint=$(block_display_property "$volume" MOUNTPOINT)
+
+    display="$name"
+    [ -n "$size" ] && display+="  $size"
+    if [ -n "$fstype" ]; then
+        display+="  $fstype"
+    else
+        display+="  ${type:-volume}, no filesystem"
+    fi
+    [ -n "$label" ] && display+="  label: $label"
+    [ -n "$mountpoint" ] && display+="  mounted: $mountpoint"
+    printf '%s\n' "$display"
+}
+
+get_disk_volume_summary() {
+    local device="$1" volume type info summary=""
+    while read -r volume type; do
+        [ -n "$volume" ] || continue
+        [ "$volume" != "$device" ] || continue
+        info=$(get_volume_info "$volume" "$type")
+        [ -z "$summary" ] || summary+="; "
+        summary+="$info"
+    done < <(lsblk -nrpo NAME,TYPE "$device" 2>/dev/null)
+    printf '%s\n' "${summary:-no existing volumes}"
+}
+
+get_disk_inventory_entry() {
+    local device="$1" volume type info identity found=false entry
+    identity=$(get_disk_identity "$device")
+    entry="$identity"
+    while read -r volume type; do
+        [ -n "$volume" ] || continue
+        [ "$volume" != "$device" ] || continue
+        info=$(get_volume_info "$volume" "$type")
+        entry+=$'\n'"    - $info"
+        found=true
+    done < <(lsblk -nrpo NAME,TYPE "$device" 2>/dev/null)
+    [ "$found" = true ] || entry+=$'\n'"    - no existing volumes"
+    printf '%s\n' "$entry"
+}
+
+get_disk_info() {
+    local device="$1" identity volumes
+    identity=$(get_disk_identity "$device")
+    volumes=$(get_disk_volume_summary "$device")
+    printf '%s | %s\n' "$identity" "$volumes"
 }
 
 get_root_disk() {

@@ -51,14 +51,15 @@ cleanup() {
         fi
         show_failure_screen "${CURRENT_STAGE:-pre-flight}" "$exit_code" "$INSTALL_LOG" || true
     fi
+    restore_terminal
 }
 
 # ── Helpers for Omarchy-style flow ──
 
 abort() {
-    gum style "${1:-Aborted installation}" 2>/dev/null || log_err "${1:-Aborted}"
-    echo
-    gum style "You can retry by running: sensible-install" 2>/dev/null || true
+    ui_style "${1:-Aborted installation}"
+    ui_blank
+    ui_style "You can retry by running: sensible-install"
     exit 1
 }
 
@@ -88,7 +89,7 @@ user_form_flow() {
         fi
 
         # Summary table (like Omarchy configurator:273)
-        echo
+        ui_blank
         local summary="Field,Value
 Username,$username
 Password,$(printf "%${#password}s" | tr ' ' '*')
@@ -100,8 +101,10 @@ Email,${email_address:-[Skipped]}
 Keyboard,$keyboard"
 
         if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
-            echo -e "$summary" | gum table -s "," -p 2>/dev/tty | sed "s/^/${PADDING_LEFT_SPACES}/" 2>/dev/tty || echo "$summary"
-            echo
+            printf '%s\n' "$summary" | gum table -s "," -p 2>/dev/tty \
+                | sed "s/^/${PADDING_LEFT_SPACES}/" >/dev/tty 2>&1 \
+                || printf '%s\n' "$summary" >/dev/tty
+            ui_blank
             if gum confirm --affirmative "Yes, looks good" --negative "No, change it" "Does this look right?" 2>/dev/tty; then
                 break
             else
@@ -120,9 +123,6 @@ Keyboard,$keyboard"
 }
 
 keyboard_form() {
-    step "Let's set up your machine..."
-    say --foreground 8 "Keyboard is applied before any password is typed."
-    echo
     sensible_prompt_keyboard
     local rc=$?
     if [ $rc -ne 0 ]; then
@@ -135,6 +135,7 @@ keyboard_form() {
 }
 
 disk_form() {
+    disk=""
     step "Let's select where to install Sensible..."
     local boot_source exclude_disk
     boot_source=$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || findmnt -no SOURCE /run/live/medium 2>/dev/null || true)
@@ -168,44 +169,54 @@ disk_form() {
         fi
         # Use ui_menu for fallback
         disk=$(ui_menu "Select Target Disk" "Choose the disk where Sensible will be installed (WARNING: ENTIRE DISK WILL BE WIPED):" "${candidates[@]}")
-        echo "$disk"
-        return 0
+        [ -n "$disk" ]
+        return $?
     fi
 
-    local disk_options=""
+    local disk_options="" disk_inventory=""
     while IFS= read -r device; do
         [ -n "$device" ] || continue
-        local info
-        info=$(get_disk_info "$device")
-        disk_options+="$info"$'\n'
+        local identity inventory_entry
+        identity=$(get_disk_identity "$device")
+        inventory_entry=$(get_disk_inventory_entry "$device")
+        # Gum displays the label before the tab but returns only the device
+        # value after it. Never recover a device path by parsing styled text.
+        disk_options+="$identity"$'\t'"$device"$'\n'
+        [ -z "$disk_inventory" ] || disk_inventory+=$'\n\n'
+        disk_inventory+="$inventory_entry"
     done <<< "$filtered"
 
     local selected_display
     if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
-        selected_display=$(echo "$disk_options" | gum choose --header "Select install disk (entire disk will be wiped)" 2>/dev/tty) || return 1
+        ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 8 \
+            "Available disks and their existing volumes"
+        ui_style --padding "0 0 0 $PADDING_LEFT" "$disk_inventory"
+        echo >/dev/tty
+        selected_display=$(printf '%s' "$disk_options" | \
+            gum choose --label-delimiter $'\t' \
+                --header "Select the disk to erase and install to" 2>/dev/tty) || return 1
     else
         # Text/whiptail fallback: build candidates array
         local candidates=()
         while IFS= read -r device; do
             [ -n "$device" ] || continue
-            local info size model
-            size=$(lsblk -dno SIZE "$device" 2>/dev/null | head -n1)
-            model=$(lsblk -dno MODEL "$device" 2>/dev/null | head -n1)
-            candidates+=("$device" "${size} - ${model:-Generic_Disk}")
+            local info
+            info=$(get_disk_info "$device")
+            candidates+=("$device" "${info#"$device "}")
         done <<< "$filtered"
         selected_display=$(ui_menu "Select Target Disk" "Choose the disk where Sensible will be installed (WARNING: ENTIRE DISK WILL BE WIPED):" "${candidates[@]}")
     fi
-    disk=$(echo "$selected_display" | awk '{print $1}')
-    echo "$disk"
+    disk="$selected_display"
+    [ -n "$disk" ]
 }
 
 confirm_encryption() {
     local mode="encrypted" rc
     while true; do
         clear_logo
-        echo
+        ui_blank
         say "Everything on ${disk} will be overwritten. There is no recovery."
-        echo
+        ui_blank
         if [ "$mode" = "encrypted" ]; then
             say --foreground 8 "Press Ctrl+C for unencrypted install. Encryption recommended."
             if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
@@ -237,10 +248,21 @@ confirm_encryption() {
 }
 
 main() {
+    if [ "${1:-}" = "--debug" ]; then
+        SENSIBLE_DEBUG=1
+        shift
+    fi
     check_root
     start_install_log
     trap cleanup EXIT
+    prepare_terminal
     check_uefi
+
+    # Fixed at ISO build time and carried on the live kernel command line.
+    # Declare it before the first UI draw so every screen names the edition
+    # that will actually be installed.
+    local DESKTOP_CHOICE
+    DESKTOP_CHOICE=$(detect_install_variant)
 
     CURRENT_STAGE="pre-flight"
     if target_mount_tree_busy "$MNT"; then
@@ -248,15 +270,7 @@ main() {
         exit 1
     fi
 
-    # Terminal settle + greeter (only on real TTY, not in tests)
-    if [ -t 0 ] && command -v gum >/dev/null 2>&1; then
-        wait_for_stable_terminal
-        greeter
-    else
-        if [ -t 0 ]; then
-            ui_msgbox "Sensible Installer" "Welcome to Sensible (Lazydeb) — Debian Testing Installer.\n\nThis installer will erase one selected disk and configure a ready-to-use Debian workstation. No disk is changed until the final confirmation."
-        fi
-    fi
+    welcome_screen
 
     # ── 1. Keyboard ──
     if ! keyboard_form; then
@@ -297,13 +311,12 @@ main() {
     log_info "Detected RAM: ${RAM_MIB} MiB. Planned Swap: ${SWAP_MIB} MiB. Min disk required: ${MIN_DISK_MIB} MiB."
 
     # ── 3. Disk selection with rescan loop ──
+    CURRENT_STAGE="selecting the target disk"
     local TARGET_DISK=""
     local NO_DISK_TEXT NO_DISK_CHOICE
     while true; do
-        # Try gum-based disk_form first
         local chosen
-        chosen=$(disk_form 2>/dev/tty) || chosen=""
-        # disk_form prints chosen disk to stdout; if empty, fall back to candidate list logic
+        if disk_form; then chosen="$disk"; else chosen=""; fi
         if [ -n "$chosen" ]; then
             TARGET_DISK="$chosen"
             break
@@ -350,13 +363,15 @@ virtual disk, or less RAM."
 
     # Export for disk_form helper (confirm step)
     disk="$TARGET_DISK"
+    CURRENT_STAGE="validating the selected disk"
+    log_info "Selected target candidate ${TARGET_DISK}; validating device identity."
 
     if [ -z "$TARGET_DISK" ]; then
         log_warn "Disk selection cancelled."
         exit 1
     fi
 
-    local DISK_SIZE_MIB DISK_SIZE_BYTES DISK_MAJMIN DISK_SERIAL DISK_WWN DISK_MODEL
+    local DISK_SIZE_MIB DISK_SIZE_BYTES DISK_MAJMIN DISK_SERIAL DISK_WWN
     DISK_SIZE_BYTES=$(disk_property "$TARGET_DISK" SIZE)
     DISK_SIZE_MIB=$(awk -v bytes="${DISK_SIZE_BYTES:-0}" 'BEGIN { print int(bytes / 1048576) }')
     if [ -z "$DISK_SIZE_MIB" ] || [ "$DISK_SIZE_MIB" -lt "$MIN_DISK_MIB" ]; then
@@ -367,7 +382,6 @@ virtual disk, or less RAM."
     DISK_MAJMIN=$(disk_property "$TARGET_DISK" MAJ:MIN)
     DISK_SERIAL=$(disk_property "$TARGET_DISK" SERIAL)
     DISK_WWN=$(disk_property "$TARGET_DISK" WWN)
-    DISK_MODEL=$(disk_property "$TARGET_DISK" MODEL)
     if [ -z "$DISK_MAJMIN" ] || [ -z "$DISK_SIZE_BYTES" ]; then
         ui_msgbox "Error: Disk Identification Failed" "Sensible could not read a stable identity for ${TARGET_DISK}. No changes were made."
         exit 1
@@ -386,7 +400,7 @@ virtual disk, or less RAM."
                 break
             else
                 # User chose "No, change disk" -> re-pick disk
-                chosen=$(disk_form 2>/dev/tty) || chosen=""
+                if disk_form; then chosen="$disk"; else chosen=""; fi
                 if [ -z "$chosen" ]; then
                     log_warn "Disk selection cancelled."
                     exit 1
@@ -399,7 +413,6 @@ virtual disk, or less RAM."
                 DISK_MAJMIN=$(disk_property "$TARGET_DISK" MAJ:MIN)
                 DISK_SERIAL=$(disk_property "$TARGET_DISK" SERIAL)
                 DISK_WWN=$(disk_property "$TARGET_DISK" WWN)
-                DISK_MODEL=$(disk_property "$TARGET_DISK" MODEL)
             fi
         done
         if [ "$encrypt_installation" = "true" ]; then ENABLE_LUKS="true"; else ENABLE_LUKS="false"; fi
@@ -416,9 +429,6 @@ virtual disk, or less RAM."
 
     # Fixed choices for offline model (no prompts)
     local FS_CHOICE="btrfs"
-    local DESKTOP_CHOICE="${SENSIBLE_VARIANT:-gnome}"
-    # Validate variant
-    case "$DESKTOP_CHOICE" in gnome|kde) ;; *) DESKTOP_CHOICE="gnome" ;; esac
     local ENABLE_KEYD="false"
     [ "$DESKTOP_CHOICE" = "gnome" ] && ENABLE_KEYD="true"
     local EXTRA_APPS=""
@@ -426,9 +436,9 @@ virtual disk, or less RAM."
     local ENABLE_AUTOLOGIN="false"
     if [ "$ENABLE_LUKS" = "true" ]; then
         if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
-            clear_logo; echo
+            clear_logo; ui_blank
             say "The disk passphrase at boot will unlock the system."
-            echo
+            ui_blank
             if gum confirm --affirmative "Yes, skip login" --negative "No, ask for login" "Boot straight into the desktop (no login password)?" 2>/dev/tty; then
                 ENABLE_AUTOLOGIN="true"
             fi
@@ -441,38 +451,15 @@ virtual disk, or less RAM."
         log_info "Autologin is only offered with full disk encryption."
     fi
 
-    # ── 5. Confirmation ──
-    local SUMMARY_TEXT
-    SUMMARY_TEXT="SUMMARY OF INSTALLATION CHOICES:\n\n"
-    SUMMARY_TEXT+="• Target Disk:   ${TARGET_DISK} (${DISK_MODEL:-Unknown model})\n"
-    SUMMARY_TEXT+="• Disk Serial:   ${DISK_SERIAL:-Not reported}\n"
-    SUMMARY_TEXT+="• Filesystem:    ${FS_CHOICE}\n"
-    SUMMARY_TEXT+="• LUKS2 Encrypt: ${ENABLE_LUKS}\n"
-    SUMMARY_TEXT+="• Swap Size:     ${SWAP_MIB} MiB\n"
-    SUMMARY_TEXT+="• Desktop:       ${DESKTOP_CHOICE}\n"
-    SUMMARY_TEXT+="• Hostname:      ${HOSTNAME}\n"
-    SUMMARY_TEXT+="• Username:      ${USERNAME}\n"
-    SUMMARY_TEXT+="• Timezone:      ${TIMEZONE}\n"
-    SUMMARY_TEXT+="• Locale:        ${LOCALE}\n"
-    SUMMARY_TEXT+="• Keyboard:      ${KEYBOARD_LAYOUT}\n\n"
-    SUMMARY_TEXT+="WARNING: ALL DATA ON ${TARGET_DISK} WILL BE PERMANENTLY DESTROYED!\n"
-    SUMMARY_TEXT+="To confirm, please type the exact disk path (${TARGET_DISK}) below:"
-
-    local CONFIRM_DISK
-    if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
-        clear_logo; echo
-        gum style --padding "0 0 0 $PADDING_LEFT" --bold "DANGER: Confirm Disk Wipe"
-        echo
-        gum style --padding "0 0 0 $PADDING_LEFT" "$SUMMARY_TEXT"
-        echo
-        CONFIRM_DISK=$(gum input --placeholder "${TARGET_DISK}" --width 60 2>/dev/tty) || CONFIRM_DISK=""
-    else
-        CONFIRM_DISK=$(ui_inputbox "DANGER: Confirm Disk Wipe" "$SUMMARY_TEXT" "")
-    fi
-
-    if [ "$CONFIRM_DISK" != "$TARGET_DISK" ]; then
-        ui_msgbox "Aborted" "Confirmation did not match ${TARGET_DISK}. Installation cancelled."
-        exit 1
+    # The Gum flow already confirmed the destructive action on the selected
+    # disk in confirm_encryption(). Text-mode users get the same single yes/no
+    # safety gate here; nobody has to retype a device path they just selected.
+    if ! _ui_use_gum; then
+        if ! ui_yesno "Ready to Install" \
+            "Erase ${TARGET_DISK} and install Sensible?\n\nAll existing data on this disk will be permanently destroyed." "no"; then
+            log_warn "Installation cancelled before ${TARGET_DISK} was changed."
+            exit 1
+        fi
     fi
 
     if ! validate_target_disk "$TARGET_DISK" "$MIN_DISK_MIB" "$DISK_MAJMIN" "$DISK_SIZE_BYTES" "$DISK_SERIAL" "$DISK_WWN"; then
@@ -481,15 +468,19 @@ virtual disk, or less RAM."
     fi
 
     # === EXECUTION PHASE ===
+    install_progress_start 12
     CURRENT_STAGE="partitioning the selected disk"
+    install_progress_update 1 "Preparing ${TARGET_DISK}"
     log_info "Beginning installation onto ${TARGET_DISK}..."
 
     partition_disk "$TARGET_DISK" "$SWAP_MIB" "$ENABLE_LUKS"
 
     CURRENT_STAGE="formatting and mounting filesystems"
+    install_progress_update 2 "Creating filesystems"
     format_and_mount "$TARGET_DISK" "$FS_CHOICE" "$ENABLE_LUKS" "$LUKS_PASSPHRASE" "$SWAP_MIB"
 
     CURRENT_STAGE="deploying the Debian base system"
+    install_progress_update 3 "Copying the Debian system"
     log_info "Deploying base system..."
     local DEPLOYED_FROM_LIVE="false"
     if [ -d "${LIVE_ROOT_SENTINEL:-/lib/live}" ] || [ -f /etc/issue.sensible ]; then
@@ -562,6 +553,7 @@ virtual disk, or less RAM."
     fi
 
     CURRENT_STAGE="preparing the installed system"
+    install_progress_update 4 "Preparing the installed system"
     log_info "Preparing chroot environment..."
     for d in /dev /dev/pts /proc /sys; do
         mount --bind "$d" "${MNT}$d"
@@ -614,6 +606,7 @@ virtual disk, or less RAM."
     echo "LANG=$LOCALE" > ${MNT}/etc/default/locale
 
     CURRENT_STAGE="installing hardware support"
+    install_progress_update 5 "Configuring hardware support"
     if [ "${DEPLOYED_FROM_LIVE}" != "true" ]; then
         install_hardware_packages
     else
@@ -630,6 +623,7 @@ virtual disk, or less RAM."
     configure_keyboard "$KEYBOARD_LAYOUT"
 
     CURRENT_STAGE="installing the desktop"
+    install_progress_update 6 "Configuring the ${DESKTOP_CHOICE} desktop"
     if [ "${DEPLOYED_FROM_LIVE}" != "true" ]; then
         install_desktop "$DESKTOP_CHOICE" "$ENABLE_KEYD" "$CONFIG_DIR"
     else
@@ -650,6 +644,7 @@ virtual disk, or less RAM."
     fi
 
     CURRENT_STAGE="creating the user account"
+    install_progress_update 7 "Creating your user account"
     if chroot ${MNT} getent passwd "$USERNAME" >/dev/null 2>&1; then
         log_err "Username ${USERNAME} is reserved by an installed system package."
         exit 1
@@ -685,6 +680,7 @@ EOF
     configure_login "$DESKTOP_CHOICE" "$ENABLE_AUTOLOGIN" "$USERNAME"
 
     CURRENT_STAGE="installing applications"
+    install_progress_update 8 "Preparing applications"
     if [ "${DEPLOYED_FROM_LIVE}" != "true" ]; then
         install_default_apps "$USERNAME"
     else
@@ -702,6 +698,7 @@ EOF
         chroot ${MNT} flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
     fi
 
+    install_progress_update 9 "Removing live-environment components"
     if [ "$DEPLOYED_FROM_LIVE" = "true" ]; then
         CURRENT_STAGE="removing live-environment packages"
         # Purge the whole live stack in ONE transaction. Purging one at a time
@@ -752,6 +749,7 @@ EOF
     fi
 
     CURRENT_STAGE="installing the bootloader"
+    install_progress_update 10 "Installing the bootloader and initramfs"
     log_info "Configuring GRUB and initramfs..."
     local GRUB_CMDLINE="quiet splash loglevel=3"
     if detect_nvidia_gpu; then
@@ -797,6 +795,7 @@ EOF
     chroot ${MNT} update-grub
 
     CURRENT_STAGE="verifying the installed system can boot"
+    install_progress_update 11 "Verifying the installed system"
     local BOOT_PROBLEMS
     if ! BOOT_PROBLEMS=$(validate_installed_boot "${MNT}" "${ENABLE_LUKS}"); then
         log_err "Post-install verification failed; the installed system would not boot."
@@ -816,11 +815,14 @@ a reboot, with the installer gone."
     log_success "Post-install verification passed: kernel, initramfs, GRUB, and fstab are in place."
 
     CURRENT_STAGE="finalizing the installer log"
+    install_progress_update 12 "Finalizing the installation"
+    local INSTALL_DURATION=""
     stop_install_log
     preserve_install_log || record_warning "The installer log could not be copied to the installed system."
 
     CURRENT_STAGE="safely unmounting the installed system"
     unmount_target
+    INSTALL_DURATION=$(install_progress_elapsed)
 
     trap - EXIT
     log_success "Installation finished successfully!"
@@ -828,7 +830,8 @@ a reboot, with the installer gone."
 
 Installed to: ${TARGET_DISK}
 Desktop: ${DESKTOP_CHOICE}
-Encryption: ${ENABLE_LUKS}"
+Encryption: ${ENABLE_LUKS}
+Installed in: ${INSTALL_DURATION}"
     if [ ${#INSTALL_WARNINGS[@]} -gt 0 ]; then
         COMPLETE_TEXT+=$'\n\nCompleted with warnings:'
         local warning
@@ -855,11 +858,17 @@ What would you like to do next?" \
             # Debian live-tools runs live-medium-eject from systemd's shutdown
             # hook. Calling it here would be too early: the running squashfs
             # may still need the medium before systemd reaches final shutdown.
+            restore_terminal
             if command -v systemctl >/dev/null 2>&1 && systemctl reboot; then
-                return 0
+                # systemctl queues the reboot and returns. Keep control until
+                # systemd tears down the live session instead of exposing the
+                # autologin shell again.
+                if [ "${SENSIBLE_TEST_MODE:-0}" = "1" ]; then return 0; fi
+                while :; do sleep 60; done
             fi
             if command -v reboot >/dev/null 2>&1 && reboot; then
-                return 0
+                if [ "${SENSIBLE_TEST_MODE:-0}" = "1" ]; then return 0; fi
+                while :; do sleep 60; done
             fi
             log_err "The reboot command failed. Remove the installation media and reboot manually."
             ui_msgbox "Reboot Failed" "The installation is complete, but Sensible could not reboot this machine.\n\nRemove the installation media and reboot manually."

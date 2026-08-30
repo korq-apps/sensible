@@ -30,7 +30,7 @@ function mock that records its invocation. Asserts, per scenario:
 - Combo 4: Ext4 + no LUKS, KDE, keyd on
 - Combo 5: Ext4 + LUKS, KDE, autologin accepted (SDDM `Session=` required)
 - Live-copy deploy path: API mountpoints remain available while live-only installer artifacts are removed
-- Aborts: offline cancellation, undersized/no-disk, mismatched wipe confirmation, and a mandatory post-wipe failure
+- Aborts: offline cancellation, undersized/no-disk, declined destructive confirmation, and a mandatory post-wipe failure
 - Re-prompts: invalid username rejected, valid accepted
 
 Assertions cover generated files (fstab, crypttab, sources.list, hostname,

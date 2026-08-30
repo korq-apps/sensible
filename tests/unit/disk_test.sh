@@ -140,6 +140,38 @@ assert_contains "multi-word model kept intact" "$(printf '%s\n' "${CANDS[@]}")" 
 assert_not_contains "10G disk filtered (below 31539 MiB min)" "$(printf '%s\n' "${CANDS[@]}")" "/dev/vda"
 assert_not_contains "live medium excluded" "$(printf '%s\n' "${CANDS[@]}")" "/dev/zda"
 
+t_section "disk display: identity and existing volume details"
+lsblk() {
+    local dev="${!#}"
+    case "$*" in
+        *"-dno SIZE"*) case "$dev" in /dev/vda) echo "50G" ;; /dev/vda1) echo "1G" ;; /dev/vda2) echo "49G" ;; esac ;;
+        *"-dno VENDOR"*) [ "$dev" = /dev/vda ] && echo "QEMU" ;;
+        *"-dno MODEL"*) [ "$dev" = /dev/vda ] && echo "QEMU HARDDISK" ;;
+        *"-dno FSTYPE"*) case "$dev" in /dev/vda1) echo "vfat" ;; /dev/vda2) echo "btrfs" ;; esac ;;
+        *"-dno LABEL"*) case "$dev" in /dev/vda1) echo "EFI" ;; /dev/vda2) echo "Sensible Root" ;; esac ;;
+        *"-dno PARTLABEL"*) : ;;
+        *"-dno MOUNTPOINT"*) [ "$dev" = /dev/vda1 ] && echo "/boot/efi" ;;
+        *"NAME,TYPE"*) printf '/dev/vda disk\n/dev/vda1 part\n/dev/vda2 part\n' ;;
+    esac
+}
+DISK_ENTRY="$(get_disk_inventory_entry /dev/vda)"
+assert_contains "disk identity includes capacity" "$DISK_ENTRY" "/dev/vda (50G)"
+assert_contains "disk identity includes model without duplicate vendor" "$DISK_ENTRY" "QEMU HARDDISK"
+assert_contains "EFI volume includes name size filesystem and label" "$DISK_ENTRY" "vda1  1G  vfat  label: EFI"
+assert_contains "mounted volume includes mount point" "$DISK_ENTRY" "mounted: /boot/efi"
+assert_contains "root volume includes filesystem and spaced label" "$DISK_ENTRY" "vda2  49G  btrfs  label: Sensible Root"
+
+t_section "disk display: an empty disk is stated explicitly"
+lsblk() {
+    local dev="${!#}"
+    case "$*" in
+        *"-dno SIZE"*) echo "100G" ;;
+        *"-dno VENDOR"*|*"-dno MODEL"*) : ;;
+        *"NAME,TYPE"*) printf '%s disk\n' "$dev" ;;
+    esac
+}
+assert_contains "empty disk does not look like missing metadata" "$(get_disk_inventory_entry /dev/sdb)" "no existing volumes"
+
 t_section "list_candidate_disks: no fallback — only the live medium exists"
 mock_reset
 lsblk() {

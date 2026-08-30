@@ -1,0 +1,8 @@
+# Larger live-console typography for the text installer. This affects Linux
+# virtual consoles only; GNOME/KDE desktop font settings are independent.
+ACTIVE_CONSOLES="/dev/tty[1-6]"
+CHARMAP="UTF-8"
+CODESET="Uni3"
+FONTFACE="Terminus"
+FONTSIZE="14x28"
+VIDEOMODE=

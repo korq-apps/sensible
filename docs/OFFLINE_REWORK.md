@@ -88,7 +88,7 @@ GNOME variant — four screens:
 1. Keyboard layout (needed before any passphrase is typed)
 2. Target disk
 3. Encryption (default on) + passphrase
-4. Review and type-to-confirm
+4. Review and confirm the destructive action
 
 KDE variant adds account creation (username, password) and timezone, because
 Plasma has no equivalent first-boot wizard. This divergence is deliberate and

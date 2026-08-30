@@ -70,11 +70,11 @@ Firefox, VLC, Neovim, Flatpak, firmware, and the CLI set are always installed �
 
 ### Unattended mode (planned — Phase 6)
 
-`sensible-install --config answers.toml` reads every prompt from a file and asks nothing. Same validation as interactive mode; any missing or invalid key aborts **before** partitioning. `confirm_wipe` must repeat the disk name — the type-to-confirm safety survives automation. Primary consumer is CI: running all four disk layouts end-to-end in QEMU.
+`sensible-install --config answers.toml` reads every prompt from a file and asks nothing. Same validation as interactive mode; any missing or invalid key aborts **before** partitioning. `confirm_wipe = true` is still required as explicit destructive authorization, without making interactive users retype a device they selected and confirmed. Primary consumer is CI: running all four disk layouts end-to-end in QEMU.
 
 ```toml
 disk            = "/dev/vda"
-confirm_wipe    = "/dev/vda"        # must equal disk
+confirm_wipe    = true               # required explicit authorization
 filesystem      = "btrfs"           # btrfs | ext4
 luks            = true
 luks_passphrase = "correct-horse"

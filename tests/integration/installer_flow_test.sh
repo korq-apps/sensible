@@ -8,6 +8,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/../lib/harness.sh"
 
 source "${INSTALLER_DIR}/sensible-install.sh"
 UI_TOOL="text"
+SENSIBLE_TEST_MODE=1
 
 check_root() { :; }
 check_uefi()  { :; }
@@ -178,10 +179,10 @@ chroot() {
     return 0
 }
 
-# New flow: keyboard → username → password+confirm → hostname → timezone → locale → full_name → email → confirm user → disk → encryption → autologin → wipe confirm
+# New flow: keyboard → user → disk → encryption → autologin → final yes/no
 build_answers() {
     local luks="$1"  # yes/no
-    local confirm="${2:-/dev/sda}" username="${3:-alice}" completion_action="${4:-live}"
+    local final_confirm="${2:-yes}" username="${3:-alice}" completion_action="${4:-live}"
     local enc_answer="y" # y=encrypted, n=unencrypted
     [ "$luks" = "yes" ] && enc_answer="y" || enc_answer="n"
     {
@@ -197,7 +198,7 @@ build_answers() {
         printf '1\n'                      # disk menu -> /dev/sda (first entry)
         printf '%s\n' "${enc_answer}"     # encryption yes/no (text mode ui_yesno)
         if [ "$luks" = "yes" ]; then printf 'y\n'; fi  # autologin prompt (LUKS only)
-        printf '%s\n' "${confirm}"        # type-to-confirm wipe
+        if [ "$final_confirm" = "no" ]; then printf 'n\n'; else printf 'y\n'; fi
         if [ "${completion_action}" = "reboot" ]; then
             printf '1\n'                   # reboot/eject in completion menu
         else
@@ -232,6 +233,7 @@ assert_common_success() {
     assert_rc "main returns 0" 0 "${RC}"
     assert_contains "success logged" "$(output_text)" "Installation finished successfully!"
     assert_contains "completion action menu shown" "$(output_text)" "Installation Complete"
+    assert_contains "completion reports elapsed installation time" "$(output_text)" "Installed in:"
     assert_contains "completion offers reboot and eject" "$(output_text)" "Reboot now and eject optical installation media"
     assert_file_contains "sources.list: testing + full archive areas" "${MNT}/etc/apt/sources.list" "deb https://deb.debian.org/debian testing main contrib non-free non-free-firmware"
     assert_file_contains "hostname written" "${MNT}/etc/hostname" "sensible-box"
@@ -267,7 +269,7 @@ assert_common_success() {
 }
 
 t_section "Combo 1: Btrfs + LUKS, single password, Intel GPU"
-build_answers yes /dev/sda alice reboot
+build_answers yes yes alice reboot
 MOCK_NVIDIA=0
 run_flow
 assert_common_success
@@ -382,7 +384,7 @@ assert_contains "failure names the live-tools diversion" "$(output_text)" "live-
 assert_not_contains "diverted update-initramfs is never invoked" "$(log_text)" "update-initramfs -u -k all"
 
 t_section "Completion: failed reboot commands leave a clear manual-reboot message"
-build_answers no /dev/sda alice reboot
+build_answers no yes alice reboot
 MOCK_SYSTEMCTL_REBOOT_RC=1
 MOCK_REBOOT_RC=1
 run_flow
@@ -431,8 +433,8 @@ lsblk() {
     esac
 }
 
-t_section "Abort: wipe confirmation must match disk exactly"
-build_answers yes "/dev/wrong-disk"
+t_section "Abort: declining the final destructive confirmation changes nothing"
+build_answers yes no
 prep_target
 mock_setup
 set +e
@@ -440,8 +442,8 @@ set +e
 rc=$?
 set -e
 cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
-assert_rc "installer aborts on mismatched confirmation" 1 "${rc}"
-assert_not_contains "no partitioning on mismatch" "$(log_text)" "sgdisk"
+assert_rc "installer aborts when final confirmation is declined" 1 "${rc}"
+assert_not_contains "no partitioning after decline" "$(log_text)" "sgdisk"
 
 t_section "Password confirm mismatch re-prompts, then succeeds"
 prep_target
@@ -461,7 +463,7 @@ mock_setup
     printf '1\n'                        # disk
     printf 'y\n'                        # encryption yes
     printf 'y\n'                        # autologin
-    printf '/dev/sda\n'
+    printf 'y\n'                        # final destructive confirmation
     printf '2\n'                        # remain in live session
 } > "${ANSWERS}"
 : > "${OUT}"; : > "${ERR}"
@@ -489,7 +491,7 @@ mock_setup
     printf 'y\n'
     printf '1\n'
     printf 'n\n'                        # no encryption
-    printf '/dev/sda\n'
+    printf 'y\n'                        # final destructive confirmation
     printf '2\n'                        # remain in live session
 } > "${ANSWERS}"
 : > "${OUT}"; : > "${ERR}"

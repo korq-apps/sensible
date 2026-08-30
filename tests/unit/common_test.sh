@@ -129,6 +129,16 @@ INSTALL_WARNINGS=()
 record_warning "optional component skipped" >/dev/null 2>&1
 assert_eq "warning retained for completion summary" "optional component skipped" "${INSTALL_WARNINGS[0]}"
 
+t_section "build-time desktop variant detection"
+variant_cmdline="$(mktemp)"
+printf 'boot=live components sensible.variant=kde quiet\n' > "${variant_cmdline}"
+assert_eq "kernel command line selects KDE edition" "kde" "$(detect_install_variant "${variant_cmdline}")"
+printf 'boot=live components sensible.variant=invalid\n' > "${variant_cmdline}"
+assert_eq "invalid edition fails closed to GNOME" "gnome" "$(SENSIBLE_VARIANT=invalid detect_install_variant "${variant_cmdline}")"
+printf 'boot=live components\n' > "${variant_cmdline}"
+assert_eq "environment fallback supports build and tests" "kde" "$(SENSIBLE_VARIANT=kde detect_install_variant "${variant_cmdline}")"
+rm -f "${variant_cmdline}"
+
 t_section "check_root"
 assert_rc "root passes" 0 "$(run_exiting bash -c 'source "'"${INSTALLER_DIR}"'/lib/common.sh"; id() { echo 0; }; check_root')"
 assert_rc "non-root exits 1" 1 "$(run_exiting bash -c 'source "'"${INSTALLER_DIR}"'/lib/common.sh"; id() { echo 1000; }; check_root')"
@@ -163,13 +173,11 @@ assert_eq "long unbroken line is counted as wrapped rows" 1 "$([ "${WH}" -gt 12 
 assert_eq "width never exceeds the terminal" 1 "$([ "${WW}" -le 96 ] && echo 1 || echo 0)"
 
 t_section "ui_box_geometry: reserves rows for entry fields and item lists"
-# The type-to-confirm screen carries the whole choice summary plus the
-# destruction warning plus an entry field. At the old fixed 12 rows it lost the
-# warning and the "type the disk path" instruction - the two lines that make it
-# a safety gate rather than decoration.
+# A long form with an entry field must reserve space for both its copy and its
+# control. This protects recovery and configuration forms from being clipped.
 CONFIRM_TEXT="$(printf 'choice %s\n' $(seq 1 14))
 WARNING: ALL DATA ON /dev/sda WILL BE PERMANENTLY DESTROYED!
-To confirm, please type the exact disk path (/dev/sda) below:"
+Choose whether to continue below:"
 read -r IH IW _ <<<"$(ui_box_geometry "${CONFIRM_TEXT}" 12 2)"
 CONFIRM_ROWS=$(printf '%s\n' "${CONFIRM_TEXT}" | wc -l)
 assert_eq "confirmation box is taller than its text" 1 "$([ "${IH}" -gt "${CONFIRM_ROWS}" ] && echo 1 || echo 0)"

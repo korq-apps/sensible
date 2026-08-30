@@ -7,15 +7,27 @@ INSTALL_WARNINGS=()
 INSTALL_LOG="${INSTALL_LOG:-/var/log/sensible-install.log}"
 INSTALL_LOG_ACTIVE="false"
 INSTALL_TEE_PID=""
+INSTALL_OUTPUT_QUIET="false"
 
 start_install_log() {
     mkdir -p "$(dirname "$INSTALL_LOG")"
     : > "$INSTALL_LOG"
-    chmod 600 "$INSTALL_LOG"
-    # Keep the terminal useful while retaining command/package output. Secrets
-    # are entered without echo and shell tracing is never enabled.
+    chgrp sudo "$INSTALL_LOG" 2>/dev/null || true
+    chmod 640 "$INSTALL_LOG"
+    # The normal graphical installer keeps command/package chatter in the log
+    # and reserves the console for the progress UI. --debug and non-Gum runs
+    # still mirror everything to the terminal. Secrets are never echoed and
+    # shell tracing is never enabled.
     exec 8>&1 9>&2
-    exec > >(tee -a "$INSTALL_LOG" >&8) 2>&1
+    if [ "${SENSIBLE_DEBUG:-0}" != "1" ] \
+        && declare -F _ui_use_gum >/dev/null 2>&1 \
+        && _ui_use_gum; then
+        exec > >(tee -a "$INSTALL_LOG" >/dev/null) 2>&1
+        INSTALL_OUTPUT_QUIET="true"
+    else
+        exec > >(tee -a "$INSTALL_LOG" >&8) 2>&1
+        INSTALL_OUTPUT_QUIET="false"
+    fi
     INSTALL_TEE_PID=$!
     INSTALL_LOG_ACTIVE="true"
 }
@@ -25,6 +37,7 @@ stop_install_log() {
     exec 1>&8 2>&9
     exec 8>&- 9>&-
     INSTALL_LOG_ACTIVE="false"
+    INSTALL_OUTPUT_QUIET="false"
     wait "$INSTALL_TEE_PID"
     INSTALL_TEE_PID=""
 }
@@ -34,7 +47,8 @@ preserve_install_log() {
     [ -d "${MNT}" ] || return 0
     mkdir -p "${MNT}/var/log"
     cp "$INSTALL_LOG" "${MNT}/var/log/sensible-install.log"
-    chmod 600 "${MNT}/var/log/sensible-install.log"
+    chgrp sudo "${MNT}/var/log/sensible-install.log" 2>/dev/null || true
+    chmod 640 "${MNT}/var/log/sensible-install.log"
 }
 
 require_id() {
@@ -77,6 +91,28 @@ log_err() {
 record_warning() {
     INSTALL_WARNINGS+=("$*")
     log_warn "$*"
+}
+
+# The desktop is selected when the ISO is built, not by the installer user.
+# live-build places it on the kernel command line as sensible.variant=... so
+# the running live session can describe and configure the correct edition.
+detect_install_variant() {
+    local cmdline_file="${1:-/proc/cmdline}"
+    local variant="${SENSIBLE_VARIANT:-}"
+    local arg
+
+    if [ -r "${cmdline_file}" ]; then
+        for arg in $(<"${cmdline_file}"); do
+            case "${arg}" in
+                sensible.variant=*) variant="${arg#sensible.variant=}" ;;
+            esac
+        done
+    fi
+
+    case "${variant}" in
+        gnome|kde) printf '%s\n' "${variant}" ;;
+        *)         printf 'gnome\n' ;;
+    esac
 }
 
 # Legacy geometry kept for tests that source common.sh without ui.sh

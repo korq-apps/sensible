@@ -112,7 +112,159 @@ EOF
 
 # Detect gum vs fallback for prompts
 _setup_use_gum() {
-    [ "${UI_TOOL:-}" = "gum" ] && [ -t 0 ] 2>/dev/null && [ -t 2 ] 2>/dev/null
+    _ui_use_gum
+}
+
+# ── Searchable system choices ──
+
+list_keyboard_layout_options() {
+    local layouts_file="${SENSIBLE_XKB_LAYOUTS_FILE:-/usr/share/X11/xkb/rules/base.lst}"
+    local options=""
+    if [ -r "$layouts_file" ]; then
+        options=$(awk '
+            $1 == "!" && $2 == "layout" { in_layouts = 1; next }
+            in_layouts && $1 == "!" { exit }
+            in_layouts && NF >= 2 {
+                code = $1
+                $1 = ""
+                sub(/^[[:space:]]+/, "")
+                printf "%-10s %s\n", code, $0
+            }
+        ' "$layouts_file")
+    fi
+    if [ -n "$options" ]; then
+        printf '%s\n' "$options"
+    else
+        printf '%-10s %s\n' \
+            us 'English (US)' gb 'English (UK)' de 'German' fr 'French' \
+            es 'Spanish' it 'Italian' nl 'Dutch' pl 'Polish'
+    fi
+}
+
+list_timezone_options() {
+    local zone_file="${SENSIBLE_ZONE_TAB_FILE:-/usr/share/zoneinfo/zone1970.tab}"
+    printf '%-36s %s\n' UTC 'Coordinated Universal Time'
+    if [ -r "$zone_file" ]; then
+        awk -F '\t' '
+            !/^#/ && NF >= 3 {
+                detail = $1
+                if (NF >= 4 && $4 != "") detail = detail " — " $4
+                printf "%-36s %s\n", $3, detail
+            }
+        ' "$zone_file"
+    else
+        timedatectl list-timezones 2>/dev/null | awk 'NF { printf "%-36s IANA timezone\n", $0 }'
+    fi
+}
+
+list_locale_options() {
+    local supported="${SENSIBLE_SUPPORTED_LOCALES_FILE:-/usr/share/i18n/SUPPORTED}"
+    local locale_dir="${SENSIBLE_LOCALE_SOURCE_DIR:-/usr/share/i18n/locales}"
+
+    if [ -r "$supported" ] && compgen -G "${locale_dir}/*" >/dev/null; then
+        # Join SUPPORTED with glibc locale metadata in one awk process so users
+        # can search for "English" or "Germany", not only opaque locale codes.
+        awk '
+            FILENAME == ARGV[1] {
+                if ($2 == "UTF-8") {
+                    locale = $1
+                    source = locale
+                    sub(/\..*$/, "", source)
+                    wanted[source] = locale
+                }
+                next
+            }
+            function emit_current(    label) {
+                if (current != "" && current in wanted) {
+                    label = language
+                    if (territory != "") label = label " — " territory
+                    if (label == "") label = "UTF-8 locale"
+                    printf "%-24s %s\n", wanted[current], label
+                }
+            }
+            FNR == 1 {
+                emit_current()
+                current = FILENAME
+                sub(/^.*\//, "", current)
+                language = territory = ""
+            }
+            /^[[:space:]]*language[[:space:]]/ {
+                language = $0
+                sub(/^[^"]*"/, "", language)
+                sub(/".*$/, "", language)
+            }
+            /^[[:space:]]*territory[[:space:]]/ {
+                territory = $0
+                sub(/^[^"]*"/, "", territory)
+                sub(/".*$/, "", territory)
+            }
+            END { emit_current() }
+        ' "$supported" "${locale_dir}"/*
+    elif [ -r "$supported" ]; then
+        awk '$2 == "UTF-8" && !seen[$1]++ { printf "%-24s UTF-8 locale\n", $1 }' "$supported"
+    else
+        printf '%-24s %s\n' en_US.UTF-8 'English — United States'
+    fi
+}
+
+_options_with_default_first() {
+    local preferred="$1"
+    awk -v desired="$preferred" '
+        $1 == desired { selected = $0; next }
+        { choices[++count] = $0 }
+        END {
+            if (selected != "") print selected
+            for (i = 1; i <= count; i++) print choices[i]
+        }
+    '
+}
+
+# Search a generated option list and return only its stable key in REPLY.
+# Text/whiptail mode retains manual entry for scripted and rescue environments.
+_prompt_searchable() {
+    local title="$1" text="$2" default="$3" options_fn="$4"
+    local valid_fn="$5" err_msg="$6" fallback_text="$7"
+    local options selected value rc filter_height
+
+    options=$("$options_fn")
+    if ! _setup_use_gum || [ -z "$options" ]; then
+        _prompt_input_loop "$title" "$fallback_text" "$default" "$valid_fn" "$err_msg"
+        return $?
+    fi
+
+    while true; do
+        clear_logo
+        printf '\n' >/dev/tty
+        ui_style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
+        printf '\n' >/dev/tty
+        ui_style --width "$LAYOUT_WIDTH" --padding "0 0 0 $PADDING_LEFT" "$text"
+        printf '\n' >/dev/tty
+
+        filter_height=$((TERM_HEIGHT - 17))
+        (( filter_height > 14 )) && filter_height=14
+        (( filter_height < 6 )) && filter_height=6
+        if selected=$(printf '%s\n' "$options" | _options_with_default_first "$default" \
+            | gum filter --limit 1 --strict --height "$filter_height" \
+                --width "$LAYOUT_WIDTH" --placeholder "Type to search..." \
+                --prompt "Search: " 2>/dev/tty); then
+            rc=0
+        else
+            rc=$?
+        fi
+        [ "$rc" -eq 130 ] && return $SETUP_FORM_SIGNAL
+        [ "$rc" -ne 0 ] && return $SETUP_FORM_BACK
+
+        value=${selected%%[[:space:]]*}
+        if [ -n "$valid_fn" ] && ! "$valid_fn" "$value"; then
+            clear_logo
+            printf '\n' >/dev/tty
+            ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 1 "$err_msg"
+            sleep 1.5
+            continue
+        fi
+        REPLY="$value"
+        return $SETUP_FORM_OK
+    done
 }
 
 # Generic input with validation loop
@@ -123,11 +275,11 @@ _prompt_input_loop() {
     while true; do
         if _setup_use_gum; then
             clear_logo
-            echo
-            gum style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
-            echo
-            gum style --padding "0 0 0 $PADDING_LEFT" "$text"
-            echo
+            ui_blank
+            ui_style --padding "0 0 0 $PADDING_LEFT" --bold "$title"
+            ui_blank
+            ui_style --padding "0 0 0 $PADDING_LEFT" "$text"
+            ui_blank
             val=$(gum input --placeholder "$default" --value "$default" --width 50 2>/dev/tty) rc=$?
             # gum: 0=ok, 130=ctrl-c, 1=esc/abort (mapped to BACK)
             if [ $rc -eq 130 ]; then return $SETUP_FORM_SIGNAL; fi
@@ -140,7 +292,7 @@ _prompt_input_loop() {
         val="${val:-$default}"
         if [ -n "$valid_fn" ] && ! "$valid_fn" "$val"; then
             if _setup_use_gum; then
-                clear_logo; echo; gum style --padding "0 0 0 $PADDING_LEFT" --foreground 1 "$err_msg"
+                clear_logo; ui_blank; ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 1 "$err_msg"
                 sleep 1.5
             else
                 ui_msgbox "Invalid Input" "$err_msg"
@@ -155,12 +307,17 @@ _prompt_input_loop() {
 sensible_prompt_keyboard() {
     local current
     current=$(detect_keyboard_layout)
+    current=${current%%,*}
     while true; do
-        _prompt_input_loop "Keyboard layout" "Enter keyboard layout (e.g. us, gb, de, fr). Applied before passwords:" "$current" "validate_keyboard_layout" "Layout not found. Use codes like us, gb, de, fr, es." || return $?
+        _prompt_searchable "Keyboard layout" \
+            "Search by language, country, or layout code. The selected layout is applied before passwords." \
+            "$current" "list_keyboard_layout_options" "validate_keyboard_layout" \
+            "Layout not found. Choose another keyboard layout." \
+            "Enter keyboard layout (e.g. us, gb, de, fr):" || return $?
         local layout="$REPLY"
         if ! apply_live_keyboard "$layout" "${LIVE_KEYBOARD_FILE:-/etc/default/keyboard}"; then
             if _setup_use_gum; then
-                clear_logo; echo; gum style --padding "0 0 0 $PADDING_LEFT" --foreground 1 "Could not apply '$layout'."
+                clear_logo; ui_blank; ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 1 "Could not apply '$layout'."
                 sleep 1.5
             else
                 ui_msgbox "Keyboard Setup Failed" "Could not apply '$layout'. Choose another."
@@ -178,7 +335,7 @@ sensible_prompt_username() {
         local val="$REPLY"
         if ! valid_username "$val"; then
             if _setup_use_gum; then
-                clear_logo; echo; gum style --padding "0 0 0 $PADDING_LEFT" --foreground 1 "Invalid username. Use a-z, 0-9, -, _, starting with letter/_."
+                clear_logo; ui_blank; ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 1 "Invalid username. Use a-z, 0-9, -, _, starting with letter/_."
                 sleep 1.5
             else
                 ui_msgbox "Invalid Username" "Use up to 32 lowercase letters, numbers, hyphens, or underscores, starting with a letter or underscore."
@@ -196,11 +353,11 @@ sensible_prompt_password() {
     local pw1 pw2 rc
     while true; do
         if _setup_use_gum; then
-            clear_logo; echo
-            gum style --padding "0 0 0 $PADDING_LEFT" --bold "Password"
-            echo
-            gum style --padding "0 0 0 $PADDING_LEFT" "Enter password for ${username:-user} (min 8 chars). Also used for disk encryption if enabled."
-            echo
+            clear_logo; ui_blank
+            ui_style --padding "0 0 0 $PADDING_LEFT" --bold "Password"
+            ui_blank
+            ui_style --padding "0 0 0 $PADDING_LEFT" "Enter password for ${username:-user} (min 8 chars). Also used for disk encryption if enabled."
+            ui_blank
             pw1=$(gum input --password --placeholder "Enter password" 2>/dev/tty) rc=$?
             if [ $rc -eq 130 ]; then return $SETUP_FORM_SIGNAL; fi
             if [ $rc -ne 0 ]; then return $SETUP_FORM_BACK; fi
@@ -208,12 +365,12 @@ sensible_prompt_password() {
             pw1=$(ui_passwordbox "User Password" "Enter password for ${username:-user} and encryption (min 8 chars):") || return $SETUP_FORM_BACK
         fi
         if [ -z "$pw1" ]; then
-            if _setup_use_gum; then clear_logo; echo; gum style --padding "0 0 0 $PADDING_LEFT" --foreground 1 "Password cannot be empty."; sleep 1.2
+            if _setup_use_gum; then clear_logo; ui_blank; ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 1 "Password cannot be empty."; sleep 1.2
             else ui_msgbox "Invalid Password" "Password cannot be empty."; fi
             continue
         fi
         if [ ${#pw1} -lt 8 ]; then
-            if _setup_use_gum; then clear_logo; echo; gum style --padding "0 0 0 $PADDING_LEFT" --foreground 1 "Password must be at least 8 characters."; sleep 1.2
+            if _setup_use_gum; then clear_logo; ui_blank; ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 1 "Password must be at least 8 characters."; sleep 1.2
             else ui_msgbox "Invalid Password" "Password must be at least 8 characters."; fi
             continue
         fi
@@ -225,7 +382,7 @@ sensible_prompt_password() {
             pw2=$(ui_passwordbox "Confirm Password" "Re-enter password:") || return $SETUP_FORM_BACK
         fi
         if [ "$pw1" != "$pw2" ]; then
-            if _setup_use_gum; then clear_logo; echo; gum style --padding "0 0 0 $PADDING_LEFT" --foreground 1 "Passwords did not match."; sleep 1.2
+            if _setup_use_gum; then clear_logo; ui_blank; ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 1 "Passwords did not match."; sleep 1.2
             else ui_msgbox "Mismatch" "Passwords did not match."; fi
             continue
         fi
@@ -248,7 +405,11 @@ sensible_prompt_timezone() {
     current=$(timedatectl show --property=Timezone --value 2>/dev/null || echo "UTC")
     [ -z "$current" ] && current="UTC"
     while true; do
-        _prompt_input_loop "Timezone" "Enter timezone (e.g. UTC, Europe/Berlin, America/New_York):" "$current" "valid_timezone" "Timezone not found. Use IANA name like Europe/Berlin." || return $?
+        _prompt_searchable "Timezone" \
+            "Search by region, city, or country code." \
+            "$current" "list_timezone_options" "valid_timezone" \
+            "Timezone not found. Choose another IANA timezone." \
+            "Enter timezone (e.g. UTC, Europe/Berlin, America/New_York):" || return $?
         timezone="$REPLY"
         return $SETUP_FORM_OK
     done
@@ -256,7 +417,11 @@ sensible_prompt_timezone() {
 
 sensible_prompt_locale() {
     while true; do
-        _prompt_input_loop "Locale" "Enter system locale:" "en_US.UTF-8" "valid_locale" "Locale not found in /usr/share/i18n/SUPPORTED. Try en_US.UTF-8." || return $?
+        _prompt_searchable "Language and locale" \
+            "Search by language, country, or locale code." \
+            "en_US.UTF-8" "list_locale_options" "valid_locale" \
+            "Locale is not available. Choose another UTF-8 locale." \
+            "Enter system locale:" || return $?
         locale_val="$REPLY"
         # Also set LOCALE var for compatibility
         LOCALE="$locale_val"
@@ -268,11 +433,11 @@ sensible_prompt_identity() {
     # Optional full name / email for git + GECOS (can be skipped)
     local name_input email_input
     if _setup_use_gum; then
-        clear_logo; echo
-        gum style --padding "0 0 0 $PADDING_LEFT" --bold "Identity (optional)"
-        echo
-        gum style --padding "0 0 0 $PADDING_LEFT" --foreground 8 "Full name and email for git. Leave empty to skip."
-        echo
+        clear_logo; ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" --bold "Identity (optional)"
+        ui_blank
+        ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 8 "Full name and email for git. Leave empty to skip."
+        ui_blank
         name_input=$(gum input --placeholder "Full name (optional)" --width 50 2>/dev/tty) || return $SETUP_FORM_BACK
         # Allow empty - not validated
         email_input=$(gum input --placeholder "Email (optional)" --width 50 2>/dev/tty) || return $SETUP_FORM_BACK

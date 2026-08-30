@@ -63,7 +63,7 @@ The live session is **not** a desktop. No GNOME/KDE on the ISO in v1. Banner and
 
 `installer/sensible-install.sh` against the spec. Success = reboot into a text or DE-less system with the chosen disk layout.
 
-- [x] Pre-flight: UEFI, disk list, RAM, minimum size, type-to-confirm wipe
+- [x] Pre-flight: UEFI, detailed disk list, RAM, minimum size, destructive confirmation
 - [x] Four combinations: Btrfs/Ext4 × LUKS on/off, fixed 1 GiB EFI + 1 GiB BOOT + root; swap is a swapfile inside root mirroring RAM in both modes (encrypted with the root when LUKS is on)
 - [x] crypttab/fstab as in the spec (UUID fstab; LUKS: swapfile on encrypted root; `resume=`/`resume_offset=` for both modes)
 - [x] User, hostname, locale, keyboard, timezone
@@ -125,7 +125,7 @@ unsafe disk operation reliable.
 - [x] **Owned cleanup and live sanitization:** track mounts and mappings created by this installer run and clean only those resources; remove live autostart, commands, branding, packages/state, staged source, and reused machine identity from the target
 - [x] **Truthful failures and logs:** critical failures produce failure rather than success; non-critical skipped choices are summarized; terminal/package output is retained in root-only `/var/log/sensible-install.log` and copied to the target, including post-wipe failure cleanup when possible
 - [x] **Beginner install guide:** `docs/INSTALL.md` covers release download/checksum, trusted USB writing, requirements, destructive scope, network setup, choices, first boot, updates, and honest support/log expectations
-- [ ] **Automated install input:** implement the validated `--config answers.toml` path below as release-test infrastructure, including exact `confirm_wipe`; it belongs before the matrix rather than waiting behind the release gate
+- [ ] **Automated install input:** implement the validated `--config answers.toml` path below as release-test infrastructure, including explicit `confirm_wipe = true`; it belongs before the matrix rather than waiting behind the release gate
 - [ ] **Real QEMU four-layout boot matrix:** install the release-candidate ISO onto a fresh virtual disk for Btrfs/Ext4 × LUKS on/off, then boot from that installed disk under UEFI (not the ISO); verify expected partitions, mounts, `fstab`/`crypttab`, swap/resume arguments, desktop/login, and the LUKS prompt where applicable. Cover both GNOME and KDE across the matrix, and include an installed-system Secure Boot boot
 - [ ] **Physical hardware smoke:** install and first-boot the candidate on at least one Intel and one AMD amd64 UEFI machine; record disk selection, wired/Wi-Fi, graphics, audio input/output, suspend/resume, Secure Boot state, and `fwupd` detection. Document hardware unavailable for a check rather than silently treating it as passed
 - [ ] **Release decision:** archive the candidate ISO checksum and matrix/hardware results, review all failures and warnings, then and only then set `SENSIBLE_RELEASE_READY` to `true` for the release tag
@@ -216,7 +216,7 @@ Small, real, and not owned by any phase.
 
 Reviewed in this session; the design record is in
 [OFFLINE_REWORK.md](OFFLINE_REWORK.md). Landed already: dialogs sized to their
-content (the type-to-confirm summary was being truncated), an actionable
+content (the former confirmation summary was being truncated), an actionable
 failure screen with a log tail and recovery menu, errors that offer the fix
 rather than a dead end, and post-install boot verification.
 
