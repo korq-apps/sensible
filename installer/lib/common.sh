@@ -47,8 +47,10 @@ require_id() {
     fi
 }
 
-# UI Dialog wrapper (detect whiptail or dialog)
-if command -v whiptail >/dev/null 2>&1; then
+# UI Dialog wrapper (gum > whiptail > dialog > text) — mirrors ui.sh
+if command -v gum >/dev/null 2>&1; then
+    UI_TOOL="gum"
+elif command -v whiptail >/dev/null 2>&1; then
     UI_TOOL="whiptail"
 elif command -v dialog >/dev/null 2>&1; then
     UI_TOOL="dialog"
@@ -77,19 +79,8 @@ record_warning() {
     log_warn "$*"
 }
 
-# Size a dialog to its content instead of a fixed 12x70 box.
-#
-# whiptail silently truncates text that does not fit, so a fixed height turns a
-# long, genuinely useful message (why no disk qualified, how to switch the VM to
-# UEFI) into a clipped one -- the reader loses exactly the part that helps.
-# Accounts for wrapping, since whiptail re-wraps lines wider than the box, and
-# clamps to the terminal so the dialog never exceeds the screen.
-#
-# Echoes "HEIGHT WIDTH LISTHEIGHT". LISTHEIGHT is the rows reserved for a
-# menu/checklist's item list; callers that are not lists ignore it.
-#
-# extra_rows lets a caller reserve space for chrome the text does not include:
-# an inputbox's entry field, or a menu's item list.
+# Legacy geometry kept for tests that source common.sh without ui.sh
+if ! declare -F ui_msgbox >/dev/null 2>&1; then
 ui_box_geometry() {
     local text="$1" min_height="${2:-12}" extra_rows="${3:-0}"
     local term_h term_w width height rows
@@ -97,167 +88,80 @@ ui_box_geometry() {
     term_w=$(tput cols 2>/dev/null || echo 80)
     [ "${term_h:-0}" -lt 10 ] 2>/dev/null && term_h=24
     [ "${term_w:-0}" -lt 40 ] 2>/dev/null && term_w=80
-
     width=$(printf '%s\n' "$text" | awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')
     width=$(( width + 8 ))
     [ "$width" -lt 60 ] && width=60
     [ "$width" -gt $(( term_w - 4 )) ] && width=$(( term_w - 4 ))
-
-    # Wrapped row count: a line wider than the text area occupies several rows.
     rows=$(printf '%s\n' "$text" | awk -v w=$(( width - 6 )) '
         { n = length($0); r = (n == 0 ? 1 : int((n + w - 1) / w)); total += r }
         END { print total + 0 }')
     height=$(( rows + extra_rows + 8 ))
     [ "$height" -lt "$min_height" ] && height="$min_height"
     [ "$height" -gt $(( term_h - 2 )) ] && height=$(( term_h - 2 ))
-
-    # Rows the item list may use: whatever is left after the prose and chrome,
-    # never negative, so a long prompt above a long list still renders.
     local list_height=$(( height - rows - 8 ))
     [ "$list_height" -lt 1 ] && list_height=1
     [ "$extra_rows" -eq 0 ] && list_height=0
-
     printf '%s %s %s\n' "$height" "$width" "$list_height"
 }
-
 ui_msgbox() {
-    local title="$1"
-    local text="$2"
+    local title="$1" text="$2"
     if [ "$UI_TOOL" = "whiptail" ] || [ "$UI_TOOL" = "dialog" ]; then
-        local gh gw
-        read -r gh gw _ <<<"$(ui_box_geometry "$text")"
+        local gh gw; read -r gh gw _ <<<"$(ui_box_geometry "$text")"
         "$UI_TOOL" --title "$title" --msgbox "$text" "$gh" "$gw"
     else
-        echo "=== $title ===" >&2
-        echo "$text" >&2
-        read -rp "Press Enter to continue..."
+        echo "=== $title ===" >&2; echo "$text" >&2; read -rp "Press Enter to continue..." _
     fi
 }
-
 ui_yesno() {
-    local title="$1"
-    local text="$2"
-    local default="${3:-yes}"
+    local title="$1" text="$2" default="${3:-yes}"
     if [ "$UI_TOOL" = "whiptail" ] || [ "$UI_TOOL" = "dialog" ]; then
-        local extra_flag=""
-        local rc
-        [ "$default" = "no" ] && extra_flag="--defaultno"
-        while true; do
+        local extra_flag="" rc; [ "$default" = "no" ] && extra_flag="--defaultno"
+        while true; do local gh gw; read -r gh gw _ <<<"$(ui_box_geometry "$text")"
             # shellcheck disable=SC2086
-            local gh gw
-            read -r gh gw _ <<<"$(ui_box_geometry "$text")"
-            # shellcheck disable=SC2086
-            "$UI_TOOL" --title "$title" $extra_flag --yesno "$text" "$gh" "$gw"
-            rc=$?
-            # ESC (255) must not silently flip a dangerous choice (e.g. LUKS off)
-            [ "$rc" -eq 255 ] && continue
-            return $rc
-        done
+            $UI_TOOL --title "$title" $extra_flag --yesno "$text" "$gh" "$gw"; rc=$?
+            [ "$rc" -eq 255 ] && continue; return $rc; done
     else
-        echo "=== $title ===" >&2
-        echo "$text" >&2
-        while true; do
-            read -rp "[y/n] (default: $default): " ans
-            ans="${ans:-$default}"
-            case "$ans" in
-                [Yy]* ) return 0 ;;
-                [Nn]* ) return 1 ;;
-                * ) echo "Please answer y or n." >&2 ;;
-            esac
-        done
-    fi
+        echo "=== $title ===" >&2; echo "$text" >&2
+        while true; do read -rp "[y/n] (default: $default): " ans; ans="${ans:-$default}"
+            case "$ans" in [Yy]*) return 0;; [Nn]*) return 1;; *) echo "Please answer y or n." >&2;; esac; done; fi
 }
-
 ui_inputbox() {
-    local title="$1"
-    local text="$2"
-    local init_val="${3:-}"
+    local title="$1" text="$2" init_val="${3:-}"
     if [ "$UI_TOOL" = "whiptail" ] || [ "$UI_TOOL" = "dialog" ]; then
-        local res
-        local gh gw
-        read -r gh gw _ <<<"$(ui_box_geometry "$text" 12 2)"
-        res=$("$UI_TOOL" --title "$title" --inputbox "$text" "$gh" "$gw" "$init_val" 3>&1 1>&2 2>&3)
-        echo "$res"
+        local res gh gw; read -r gh gw _ <<<"$(ui_box_geometry "$text" 12 2)"
+        res=$("$UI_TOOL" --title "$title" --inputbox "$text" "$gh" "$gw" "$init_val" 3>&1 1>&2 2>&3); echo "$res"
     else
-        echo "=== $title ===" >&2
-        echo "$text" >&2
-        read -rp "Value [$init_val]: " res
-        echo "${res:-$init_val}"
-    fi
+        echo "=== $title ===" >&2; echo "$text" >&2; read -rp "Value [$init_val]: " res; echo "${res:-$init_val}"; fi
 }
-
 ui_passwordbox() {
-    local title="$1"
-    local text="$2"
+    local title="$1" text="$2"
     if [ "$UI_TOOL" = "whiptail" ] || [ "$UI_TOOL" = "dialog" ]; then
-        local res
-        local gh gw
-        read -r gh gw _ <<<"$(ui_box_geometry "$text" 12 2)"
-        res=$("$UI_TOOL" --title "$title" --passwordbox "$text" "$gh" "$gw" 3>&1 1>&2 2>&3)
-        echo "$res"
+        local res gh gw; read -r gh gw _ <<<"$(ui_box_geometry "$text" 12 2)"
+        res=$("$UI_TOOL" --title "$title" --passwordbox "$text" "$gh" "$gw" 3>&1 1>&2 2>&3); echo "$res"
     else
-        echo "=== $title ===" >&2
-        echo "$text" >&2
-        read -s -rp "Password: " res
-        echo "" >&2
-        echo "$res"
-    fi
+        echo "=== $title ===" >&2; echo "$text" >&2; read -s -rp "Password: " res; echo "" >&2; echo "$res"; fi
 }
-
 ui_menu() {
-    local title="$1"
-    local text="$2"
-    shift 2
-    local items=("$@")
+    local title="$1" text="$2"; shift 2; local items=("$@")
     if [ "$UI_TOOL" = "whiptail" ] || [ "$UI_TOOL" = "dialog" ]; then
-        local res
-        local gh gw gl
-        read -r gh gw gl <<<"$(ui_box_geometry "$text" 15 $(( ${#items[@]} / 2 )))"
-        res=$("$UI_TOOL" --title "$title" --menu "$text" "$gh" "$gw" "$gl" "${items[@]}" 3>&1 1>&2 2>&3)
-        echo "$res"
+        local res gh gw gl; read -r gh gw gl <<<"$(ui_box_geometry "$text" 15 $(( ${#items[@]} / 2 )))"
+        res=$("$UI_TOOL" --title "$title" --menu "$text" "$gh" "$gw" "$gl" "${items[@]}" 3>&1 1>&2 2>&3); echo "$res"
     else
-        echo "=== $title ===" >&2
-        echo "$text" >&2
-        local i=1
-        for ((j=0; j<${#items[@]}; j+=2)); do
-            echo "$i) ${items[j]} - ${items[j+1]}" >&2
-            ((i++))
-        done
-        # Re-prompt until the selection is a number within range; an empty or
-        # non-numeric answer must never map to an unintended item.
-        local idx sel
-        while true; do
-            read -rp "Selection: " sel
-            if [[ "${sel:-}" =~ ^[0-9]+$ ]] && [ "${sel}" -ge 1 ] && [ "${sel}" -le $(( ${#items[@]} / 2 )) ]; then
-                idx=$(((sel - 1) * 2))
-                echo "${items[idx]}"
-                return 0
-            fi
-            echo "Please enter a number between 1 and $(( ${#items[@]} / 2 ))." >&2
-        done
-    fi
+        echo "=== $title ===" >&2; echo "$text" >&2; local i=1
+        for ((j=0; j<${#items[@]}; j+=2)); do echo "$i) ${items[j]} - ${items[j+1]}" >&2; ((i++)); done
+        local idx sel; while true; do read -rp "Selection: " sel
+            if [[ "${sel:-}" =~ ^[0-9]+$ ]] && [ "${sel}" -ge 1 ] && [ "${sel}" -le $(( ${#items[@]} / 2 )) ]; then idx=$(((sel - 1) * 2)); echo "${items[idx]}"; return 0; fi
+            echo "Please enter a number between 1 and $(( ${#items[@]} / 2 ))." >&2; done; fi
 }
-
 ui_checklist() {
-    local title="$1"
-    local text="$2"
-    shift 2
-    local items=("$@")
+    local title="$1" text="$2"; shift 2; local items=("$@")
     if [ "$UI_TOOL" = "whiptail" ] || [ "$UI_TOOL" = "dialog" ]; then
-        local res
-        local gh gw gl
-        read -r gh gw gl <<<"$(ui_box_geometry "$text" 16 $(( ${#items[@]} / 3 )))"
-        res=$("$UI_TOOL" --title "$title" --checklist "$text" "$gh" "$gw" "$gl" "${items[@]}" 3>&1 1>&2 2>&3)
-        echo "$res"
+        local res gh gw gl; read -r gh gw gl <<<"$(ui_box_geometry "$text" 16 $(( ${#items[@]} / 3 )))"
+        res=$("$UI_TOOL" --title "$title" --checklist "$text" "$gh" "$gw" "$gl" "${items[@]}" 3>&1 1>&2 2>&3); echo "$res"
     else
-        echo "=== $title ===" >&2
-        echo "$text" >&2
-        # simple fallback
-        echo "Selected items (space separated tags):" >&2
-        read -rp "> " res
-        echo "$res"
-    fi
+        echo "=== $title ===" >&2; echo "$text" >&2; echo "Selected items (space separated tags):" >&2; read -rp "> " res; echo "$res"; fi
 }
+fi
 
 network_ready() {
     # Checking the actual Debian metadata endpoint catches disconnected links,

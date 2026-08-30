@@ -97,13 +97,106 @@ OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
 assert_rc "no crypttab fails when encryption is on" 1 "${rc}"
 assert_contains "and explains the volume is never unlocked" "${OUT}" "never be unlocked"
 
-printf 'cryptroot UUID=LUKS-UUID none luks,discard\n' > "${T}/etc/crypttab"
+printf 'cryptroot UUID=LUKS-UUID none luks,discard,initramfs\n' > "${T}/etc/crypttab"
+mkdir -p "${T}/etc/cryptsetup-initramfs"
+printf 'CRYPTSETUP=y\n' > "${T}/etc/cryptsetup-initramfs/conf-hook"
 validate_installed_boot "${T}" true >/dev/null
 assert_rc "a real crypttab mapping validates" 0 $?
 
 printf '# cryptroot UUID=LUKS-UUID none luks\n' > "${T}/etc/crypttab"
 OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
 assert_rc "a commented-out crypttab mapping fails" 1 "${rc}"
+
+# Regression (live-copy bug): crypttab without the initramfs option leaves
+# early unlock unconfigured -- the exact "cannot unlock at boot" failure.
+printf 'cryptroot UUID=LUKS-UUID none luks,discard\n' > "${T}/etc/crypttab"
+OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
+assert_rc "crypttab without the initramfs option fails" 1 "${rc}"
+assert_contains "and names the initramfs option" "${OUT}" "initramfs option"
+
+# Build a real (tiny) initramfs so the content gate can be exercised: a newc
+# cpio with the given /cryptroot/crypttab text, gzipped, like initramfs-tools
+# produces (single member -- unmkinitramfs extracts it to the dir root).
+make_initramfs_fixture() {
+    local out="$1" crypttab_text="$2" stage
+    if ! command -v cpio >/dev/null 2>&1 \
+        || ! command -v unmkinitramfs >/dev/null 2>&1; then
+        return 1
+    fi
+    stage=$(mktemp -d)
+    mkdir -p "${stage}/cryptroot"
+    printf '%s' "${crypttab_text}" > "${stage}/cryptroot/crypttab"
+    (cd "${stage}" && find . -print0 | cpio --null -o -H newc 2>/dev/null | gzip > "${out}")
+    rm -rf "${stage}"
+}
+
+t_section "the initramfs must carry the cryptroot mapping (the prompt vs busybox artifact)"
+# The shape of the live-initramfs-stale failure: every binary present, entry
+# file present but EMPTY -- exactly what cryptsetup-initramfs ships on a live
+# image with no /etc/crypttab, and exactly what boots to busybox silently.
+if make_bootable_target "${T}" \
+    && printf 'cryptroot UUID=LUKS-UUID none luks,discard,initramfs\n' > "${T}/etc/crypttab" \
+    && make_initramfs_fixture "${T}/boot/initrd.img-7.1.0-amd64" \
+        'cryptroot UUID=LUKS-UUID none luks,discard,initramfs
+'; then
+    validate_installed_boot "${T}" true >/dev/null
+    assert_rc "initramfs carrying the mapping validates" 0 $?
+
+    make_initramfs_fixture "${T}/boot/initrd.img-7.1.0-amd64" ''
+    OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
+    assert_rc "EMPTY cryptroot/crypttab inside the initramfs fails" 1 "${rc}"
+    assert_contains "and names the busybox outcome" "${OUT}" "busybox"
+
+    make_initramfs_fixture "${T}/boot/initrd.img-7.1.0-amd64" \
+        'othermap UUID=OTHER none luks
+'
+    OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
+    assert_rc "initramfs entry for a different mapping fails" 1 "${rc}"
+
+    make_initramfs_fixture "${T}/boot/initrd.img-7.1.0-amd64" \
+        'cryptroot UUID=LUKS-UUID none luks,discard,initramfs
+'
+    rm -f "${T}"/etc/cryptsetup-initramfs/*
+    validate_installed_boot "${T}" true >/dev/null
+    assert_rc "conf-hook presence is no longer demanded (dead knob since buster)" 0 $?
+else
+    echo "SKIP: cpio or unmkinitramfs unavailable; initramfs content fixtures not exercised" >&2
+fi
+
+# A file that is not an initramfs at all cannot be inspected -- that is a skip,
+# not a failure (the mtime gate above is what catches never-regenerated files).
+make_bootable_target "${T}"
+printf 'cryptroot UUID=LUKS-UUID none luks,discard,initramfs\n' > "${T}/etc/crypttab"
+printf 'not an initramfs\n' > "${T}/boot/initrd.img-7.1.0-amd64"
+validate_installed_boot "${T}" true >/dev/null
+assert_rc "uninspectable initrd file does not add problems" 0 $?
+
+t_section "LUKS target with a stale (un-regenerated) initramfs is rejected"
+# This is the screenshot's failure: rsync copied the live initramfs which has
+# no cryptsetup, so the target cannot unlock at boot. A real install always
+# regenerates the initramfs after de-living, so the initrd mtime is >= kernel.
+make_bootable_target "${T}"
+printf 'cryptroot UUID=LUKS-UUID none luks,discard,initramfs\n' > "${T}/etc/crypttab"
+mkdir -p "${T}/etc/cryptsetup-initramfs"
+printf 'CRYPTSETUP=y\n' > "${T}/etc/cryptsetup-initramfs/conf-hook"
+# Older than kernel: would mean update-initramfs was skipped (live /run/live
+# leaked, update_initramfs=no not flipped, or the script silently no-op'd).
+touch -d '2024-01-01' "${T}/boot/vmlinuz-7.1.0-amd64"
+touch -d '2024-01-01 00:00:00' "${T}/boot/initrd.img-7.1.0-amd64"
+touch -d '2024-01-01 00:01:00' "${T}/boot/vmlinuz-7.1.0-amd64"  # kernel newer
+OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
+assert_rc "stale initramfs (older than kernel) fails when LUKS is on" 1 "${rc}"
+assert_contains "and points at the live/leak cause" "${OUT}" "was never regenerated"
+
+# Sanity: initramfs touched at the same instant as the kernel (or newer) passes.
+make_bootable_target "${T}"
+printf 'cryptroot UUID=LUKS-UUID none luks,discard,initramfs\n' > "${T}/etc/crypttab"
+mkdir -p "${T}/etc/cryptsetup-initramfs"
+printf 'CRYPTSETUP=y\n' > "${T}/etc/cryptsetup-initramfs/conf-hook"
+touch "${T}/boot/vmlinuz-7.1.0-amd64"
+touch "${T}/boot/initrd.img-7.1.0-amd64"
+validate_installed_boot "${T}" true >/dev/null
+assert_rc "fresh initramfs (mtime >= kernel) validates" 0 $?
 
 t_section "show_failure_screen never blocks a run with no human present"
 # The suite itself runs with stdin redirected, so this is the real condition:

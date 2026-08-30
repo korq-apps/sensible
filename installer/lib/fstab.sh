@@ -29,8 +29,11 @@ generate_crypttab_and_fstab() {
     log_info "Generating /etc/crypttab..."
     if [ "$enable_luks" = "true" ]; then
         cat <<EOF > ${MNT}/etc/crypttab
-# Persistent LUKS root container (swap lives inside it as a swapfile)
-cryptroot UUID=${ROOT_PART_UUID} none luks,discard
+# Persistent LUKS root container (swap lives inside it as a swapfile).
+# The "initramfs" option tells cryptsetup-initramfs to unlock this mapping
+# inside the initramfs (required for the root device); without it the hook
+# may leave early-unlock unconfigured and boot drops to an initramfs prompt.
+cryptroot UUID=${ROOT_PART_UUID} none luks,discard,initramfs
 EOF
     else
         cat <<EOF > ${MNT}/etc/crypttab

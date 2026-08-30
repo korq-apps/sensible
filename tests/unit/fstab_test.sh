@@ -27,7 +27,8 @@ blkid() {
 t_section "Btrfs + LUKS (swapfile on encrypted @swap subvol)"
 ENABLE_LUKS=true
 generate_crypttab_and_fstab /dev/mapper/cryptroot /dev/sda2 /dev/sda1 "" /dev/sda3 btrfs true
-assert_file_contains "cryptroot by LUKS header UUID" "${MNT}/etc/crypttab" "cryptroot UUID=ROOTPART-FS-UUID-4444 none luks,discard"
+assert_file_contains "cryptroot by LUKS header UUID" "${MNT}/etc/crypttab" "cryptroot UUID=ROOTPART-FS-UUID-4444 none luks,discard,initramfs"
+assert_file_contains "crypttab carries the initramfs option (4th column)" "${MNT}/etc/crypttab" "luks,discard,initramfs"
 assert_file_not_contains "no cryptswap (swapfile design)" "${MNT}/etc/crypttab" "cryptswap"
 assert_file_contains "fstab root subvol=@"        "${MNT}/etc/fstab" "UUID=ROOTFS-FS-UUID-5555  /            btrfs  noatime,compress=zstd:1,space_cache=v2,discard=async,subvol=@          0 0"
 assert_file_contains "fstab subvol=@home"         "${MNT}/etc/fstab" "subvol=@home"

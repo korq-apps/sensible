@@ -7,6 +7,9 @@
 # Desktop
 gnome-core
 gdm3
+gnome-software
+gnome-software-plugin-flatpak
+dconf-cli
 
 # Applications
 firefox-esr

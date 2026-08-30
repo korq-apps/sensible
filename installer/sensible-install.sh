@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Sensible (aka Lazydeb) Installer — Debian Testing Remix Installer Engine
 # https://korq.io
+# Gum-based TUI, Omarchy-inspired flow: keyboard → user → disk → encryption → confirm
 
 set -euo pipefail
 
@@ -8,9 +9,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${SCRIPT_DIR}/lib"
 CONFIG_DIR="${SCRIPT_DIR}/../configs"
 
-# Source library modules
+# Source library modules — order matters: ui first, then common, then setup-form
+# shellcheck source=lib/ui.sh
+source "${LIB_DIR}/ui.sh"
 # shellcheck source=lib/common.sh
 source "${LIB_DIR}/common.sh"
+# shellcheck source=lib/setup-form.sh
+source "${LIB_DIR}/setup-form.sh"
 # shellcheck source=lib/disk.sh
 source "${LIB_DIR}/disk.sh"
 # shellcheck source=lib/fstab.sh
@@ -36,7 +41,6 @@ cleanup() {
         else
             log_err "$failure_text"
         fi
-        # Keep a plain, synchronous marker for support and for the copy below.
         printf '[ERROR] %s\n' "$failure_text" >> "$INSTALL_LOG" \
             || log_warn "Could not append the final failure to ${INSTALL_LOG}."
         if [ "${INSTALLER_OWNS_TARGET_MOUNTS:-false}" = "true" ]; then
@@ -45,10 +49,191 @@ cleanup() {
         if ! unmount_target; then
             log_err "Automatic cleanup was incomplete. Do not reboot until ${MNT} is unmounted and the cryptroot mapping is closed."
         fi
-        # Offered after cleanup so the log tail reflects the unmount too, and so
-        # a shell opened from here is not holding the target mounted.
         show_failure_screen "${CURRENT_STAGE:-pre-flight}" "$exit_code" "$INSTALL_LOG" || true
     fi
+}
+
+# ── Helpers for Omarchy-style flow ──
+
+abort() {
+    gum style "${1:-Aborted installation}" 2>/dev/null || log_err "${1:-Aborted}"
+    echo
+    gum style "You can retry by running: sensible-install" 2>/dev/null || true
+    exit 1
+}
+
+# Unified user form: username → password (double) → hostname → timezone → locale
+# Optional full name/email collected but not required.
+# Returns 0 on success, 1 on back (caller should re-prompt keyboard)
+_user_form_inner() {
+    sensible_prompt_username || return $?
+    sensible_prompt_password || return $?
+    sensible_prompt_hostname || return $?
+    sensible_prompt_timezone || return $?
+    sensible_prompt_locale || return $?
+    # Optional identity last (skippable)
+    sensible_prompt_identity || return $?
+    return 0
+}
+
+user_form_flow() {
+    local status
+    while true; do
+        step "Let's set up your user account..."
+        _user_form_inner && status=0 || status=$?
+        if (( status != 0 )); then
+            (( status == SETUP_FORM_BACK )) && return $SETUP_FORM_BACK
+            (( status == SETUP_FORM_SIGNAL )) && abort
+            return $status
+        fi
+
+        # Summary table (like Omarchy configurator:273)
+        echo
+        local summary="Field,Value
+Username,$username
+Password,$(printf "%${#password}s" | tr ' ' '*')
+Hostname,$hostname
+Timezone,$timezone
+Locale,$locale_val
+Full name,${full_name:-[Skipped]}
+Email,${email_address:-[Skipped]}
+Keyboard,$keyboard"
+
+        if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
+            echo -e "$summary" | gum table -s "," -p 2>/dev/tty | sed "s/^/${PADDING_LEFT_SPACES}/" 2>/dev/tty || echo "$summary"
+            echo
+            if gum confirm --affirmative "Yes, looks good" --negative "No, change it" "Does this look right?" 2>/dev/tty; then
+                break
+            else
+                continue
+            fi
+        else
+            # Text fallback: simple confirm
+            echo "$summary" >&2
+            echo >&2
+            if ui_yesno "Confirm" "Does this look right?" "yes"; then
+                break
+            fi
+        fi
+    done
+    return 0
+}
+
+keyboard_form() {
+    step "Let's set up your machine..."
+    say --foreground 8 "Keyboard is applied before any password is typed."
+    echo
+    sensible_prompt_keyboard
+    local rc=$?
+    if [ $rc -ne 0 ]; then
+        return $rc
+    fi
+    if [[ $(tty 2>/dev/null) == "/dev/tty"* ]]; then
+        loadkeys "$keyboard" 2>/dev/null || true
+    fi
+    return 0
+}
+
+disk_form() {
+    step "Let's select where to install Sensible..."
+    local boot_source exclude_disk
+    boot_source=$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || findmnt -no SOURCE /run/live/medium 2>/dev/null || true)
+    exclude_disk=""
+    if [ -n "$boot_source" ]; then
+        exclude_disk=$(get_root_disk "$boot_source" 2>/dev/null || true)
+    fi
+
+    local available
+    available=$(lsblk -dpno NAME,TYPE | awk '$2=="disk"{print $1}' | grep -E '/dev/(sd|hd|vd|nvme|mmcblk|xv)' || true)
+    if [ -n "$exclude_disk" ]; then
+        available=$(echo "$available" | grep -Fvx "$exclude_disk" || true)
+    fi
+
+    # Filter to only candidates (in-use checks)
+    local filtered=""
+    local dev
+    while IFS= read -r dev; do
+        [ -z "$dev" ] && continue
+        if disk_is_in_use "$dev" 2>/dev/null; then continue; fi
+        if disk_below_min "$dev" "$MIN_DISK_MIB" 2>/dev/null; then continue; fi
+        filtered+="$dev"$'\n'
+    done <<< "$available"
+
+    if [ -z "$(echo "$filtered" | tr -d '[:space:]')" ]; then
+        # Fall back to list_candidate_disks for full filtering + message
+        local candidates
+        mapfile -t candidates < <(list_candidate_disks)
+        if [ ${#candidates[@]} -eq 0 ]; then
+            return 1
+        fi
+        # Use ui_menu for fallback
+        disk=$(ui_menu "Select Target Disk" "Choose the disk where Sensible will be installed (WARNING: ENTIRE DISK WILL BE WIPED):" "${candidates[@]}")
+        echo "$disk"
+        return 0
+    fi
+
+    local disk_options=""
+    while IFS= read -r device; do
+        [ -n "$device" ] || continue
+        local info
+        info=$(get_disk_info "$device")
+        disk_options+="$info"$'\n'
+    done <<< "$filtered"
+
+    local selected_display
+    if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
+        selected_display=$(echo "$disk_options" | gum choose --header "Select install disk (entire disk will be wiped)" 2>/dev/tty) || return 1
+    else
+        # Text/whiptail fallback: build candidates array
+        local candidates=()
+        while IFS= read -r device; do
+            [ -n "$device" ] || continue
+            local info size model
+            size=$(lsblk -dno SIZE "$device" 2>/dev/null | head -n1)
+            model=$(lsblk -dno MODEL "$device" 2>/dev/null | head -n1)
+            candidates+=("$device" "${size} - ${model:-Generic_Disk}")
+        done <<< "$filtered"
+        selected_display=$(ui_menu "Select Target Disk" "Choose the disk where Sensible will be installed (WARNING: ENTIRE DISK WILL BE WIPED):" "${candidates[@]}")
+    fi
+    disk=$(echo "$selected_display" | awk '{print $1}')
+    echo "$disk"
+}
+
+confirm_encryption() {
+    local mode="encrypted" rc
+    while true; do
+        clear_logo
+        echo
+        say "Everything on ${disk} will be overwritten. There is no recovery."
+        echo
+        if [ "$mode" = "encrypted" ]; then
+            say --foreground 8 "Press Ctrl+C for unencrypted install. Encryption recommended."
+            if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
+                gum confirm --affirmative "Yes, install (encrypted)" --negative "No, change disk" "Confirm overwriting ${disk}?" 2>/dev/tty
+                rc=$?
+            else
+                ui_yesno "Confirm" "Encrypt the system? Password you just set will unlock the disk at boot (recommended)." "yes"
+                rc=$?
+                if [ $rc -eq 0 ]; then encrypt_installation=true; return 0; else return 1; fi
+            fi
+        else
+            if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
+                gum confirm --affirmative "Yes, install without encryption" --negative "No, change disk" "Confirm overwriting ${disk} (unencrypted)?" 2>/dev/tty
+                rc=$?
+            else
+                ui_yesno "Confirm" "Install WITHOUT encryption? Anyone with the disk can read your files." "no"
+                rc=$?
+                if [ $rc -eq 0 ]; then encrypt_installation=true; return 0; else return 1; fi
+            fi
+        fi
+        case $rc in
+            0)  if [ "$mode" = "encrypted" ]; then encrypt_installation=true; else encrypt_installation=false; fi; return 0 ;;
+            1)  return 1 ;;
+            130) if [ "$mode" = "encrypted" ]; then mode="unencrypted"; else mode="encrypted"; fi ;;
+            255) return 1 ;;
+            *)  abort ;;
+        esac
+    done
 }
 
 main() {
@@ -63,42 +248,73 @@ main() {
         exit 1
     fi
 
-    # 1. Welcome, keyboard, and network pre-flight. Keyboard comes first so a
-    # Wi-Fi password entered in NetworkManager uses the intended layout too.
-    ui_msgbox "Sensible Installer" "Welcome to Sensible (Lazydeb) — Debian Testing Installer.\n\nThis installer will erase one selected disk and configure a ready-to-use Debian workstation. Internet access is required, and no disk is changed until the final confirmation."
-
-    local KEYBOARD_LAYOUT
-    KEYBOARD_LAYOUT=$(detect_keyboard_layout)
-    while true; do
-        KEYBOARD_LAYOUT=$(ui_inputbox "Keyboard" "Enter keyboard layout. It will be applied before network or account passwords:" "${KEYBOARD_LAYOUT:-us}")
-        KEYBOARD_LAYOUT="${KEYBOARD_LAYOUT:-us}"
-        if ! validate_keyboard_layout "$KEYBOARD_LAYOUT"; then
-            ui_msgbox "Invalid Keyboard" "Keyboard layout '${KEYBOARD_LAYOUT}' is not installed. Use a layout code such as us, gb, de, fr, or es."
-            continue
+    # Terminal settle + greeter (only on real TTY, not in tests)
+    if [ -t 0 ] && command -v gum >/dev/null 2>&1; then
+        wait_for_stable_terminal
+        greeter
+    else
+        if [ -t 0 ]; then
+            ui_msgbox "Sensible Installer" "Welcome to Sensible (Lazydeb) — Debian Testing Installer.\n\nThis installer will erase one selected disk and configure a ready-to-use Debian workstation. No disk is changed until the final confirmation."
         fi
-        if ! apply_live_keyboard "$KEYBOARD_LAYOUT" "${LIVE_KEYBOARD_FILE:-/etc/default/keyboard}"; then
-            ui_msgbox "Keyboard Setup Failed" "Sensible could not apply '${KEYBOARD_LAYOUT}' to this console. Choose another layout; passwords will not be requested until it succeeds."
-            continue
-        fi
-        break
-    done
+    fi
 
-    ensure_network || exit 1
+    # ── 1. Keyboard ──
+    if ! keyboard_form; then
+        log_warn "Keyboard setup cancelled."
+        exit 1
+    fi
+
+    # ── 2. User account (username → password(confirm) → hostname → timezone → locale) ──
+    # Globals set by setup-form: keyboard, username, password, hostname, timezone, locale_val, full_name, email_address
+    # Also sets USERPASS, LUKS_PASSPHRASE to same password (unified)
+    username=""; password=""; hostname="debian"; timezone=""; locale_val="en_US.UTF-8"; full_name=""; email_address=""
+    # shellcheck disable=SC2034
+    USERPASS=""; LUKS_PASSPHRASE=""
+    local user_rc
+    user_form_flow && user_rc=0 || user_rc=$?
+    if [ $user_rc -ne 0 ]; then
+        if [ $user_rc -eq $SETUP_FORM_BACK ]; then
+            # Back from user form → re-ask keyboard
+            keyboard_form || exit 1
+            user_form_flow || exit 1
+        else
+            exit 1
+        fi
+    fi
+    # Compat aliases for later execution phase
+    HOSTNAME="$hostname"
+    TIMEZONE="$timezone"
+    LOCALE="$locale_val"
+    USERNAME="$username"
+    USERPASS="$password"
+    LUKS_PASSPHRASE="$password"
+    KEYBOARD_LAYOUT="$keyboard"
 
     local RAM_MIB SWAP_MIB MIN_DISK_MIB
     RAM_MIB=$(get_system_ram_mb)
     SWAP_MIB=$(calc_swap_mb)
     MIN_DISK_MIB=$(calc_min_disk_mb)
-
     log_info "Detected RAM: ${RAM_MIB} MiB. Planned Swap: ${SWAP_MIB} MiB. Min disk required: ${MIN_DISK_MIB} MiB."
 
-    # Parse candidate disks. Nothing qualifying is recoverable without a reboot
-    # -- a disk can be attached or resized and rescanned from here -- so offer
-    # that rather than exiting and making the user start the session again.
+    # ── 3. Disk selection with rescan loop ──
+    local TARGET_DISK=""
     local NO_DISK_TEXT NO_DISK_CHOICE
     while true; do
+        # Try gum-based disk_form first
+        local chosen
+        chosen=$(disk_form 2>/dev/tty) || chosen=""
+        # disk_form prints chosen disk to stdout; if empty, fall back to candidate list logic
+        if [ -n "$chosen" ]; then
+            TARGET_DISK="$chosen"
+            break
+        fi
+
+        # Fallback: check if any candidate exists at all
         mapfile -t DISK_CANDIDATES < <(list_candidate_disks)
-        [ ${#DISK_CANDIDATES[@]} -gt 0 ] && break
+        if [ ${#DISK_CANDIDATES[@]} -gt 0 ]; then
+            TARGET_DISK=$(ui_menu "Select Target Disk" "Choose the disk where Sensible will be installed (WARNING: ENTIRE DISK WILL BE WIPED):" "${DISK_CANDIDATES[@]}")
+            [ -n "$TARGET_DISK" ] && break
+        fi
 
         NO_DISK_TEXT="\
 No disk qualified as an installation target.
@@ -113,8 +329,6 @@ The swapfile mirrors RAM so the system can hibernate, so the minimum grows
 with RAM (this machine has ${RAM_MIB} MiB). In a VM, give the guest a bigger
 virtual disk, or less RAM."
 
-        # Without a terminal (tests, unattended runs) there is nobody to answer
-        # a menu, so report and fail exactly as before rather than hang.
         if [ ! -t 0 ]; then
             ui_msgbox "Error: No Installable Disk" "${NO_DISK_TEXT}"
             exit 1
@@ -134,19 +348,15 @@ virtual disk, or less RAM."
         esac
     done
 
-    # 2. Disk Selection
-    local TARGET_DISK
-    TARGET_DISK=$(ui_menu "Select Target Disk" "Choose the disk where Sensible will be installed (WARNING: ENTIRE DISK WILL BE WIPED):" "${DISK_CANDIDATES[@]}")
+    # Export for disk_form helper (confirm step)
+    disk="$TARGET_DISK"
+
     if [ -z "$TARGET_DISK" ]; then
         log_warn "Disk selection cancelled."
         exit 1
     fi
 
-    # 2b. Minimum disk size (spec §1)
     local DISK_SIZE_MIB DISK_SIZE_BYTES DISK_MAJMIN DISK_SERIAL DISK_WWN DISK_MODEL
-    # -d: whole disk only, else a partitioned disk emits one row per partition
-    # and DISK_SIZE_MIB becomes multi-line (non-numeric), making the -lt test
-    # below silently false -- letting an undersized disk through to the wipe.
     DISK_SIZE_BYTES=$(disk_property "$TARGET_DISK" SIZE)
     DISK_SIZE_MIB=$(awk -v bytes="${DISK_SIZE_BYTES:-0}" 'BEGIN { print int(bytes / 1048576) }')
     if [ -z "$DISK_SIZE_MIB" ] || [ "$DISK_SIZE_MIB" -lt "$MIN_DISK_MIB" ]; then
@@ -164,145 +374,74 @@ virtual disk, or less RAM."
     fi
     log_info "Selected disk ${TARGET_DISK}: ${DISK_SIZE_MIB} MiB (minimum ${MIN_DISK_MIB} MiB)."
 
-    # 3. Filesystem Selection
-    local FS_CHOICE
-    FS_CHOICE=$(ui_menu "Filesystem" "Choose root filesystem layout:" \
-        "btrfs" "Btrfs with subvolumes (@, @home, @snapshots, @var_log)" \
-        "ext4" "Ext4 single volume with fast_commit")
-    FS_CHOICE="${FS_CHOICE:-btrfs}"
-
-    # 4. Remaining regional settings
-    local TIMEZONE
-    TIMEZONE=$(timedatectl show --property=Timezone --value 2>/dev/null || echo "UTC")
-    while true; do
-        TIMEZONE=$(ui_inputbox "Timezone" "Enter timezone (e.g. UTC, America/New_York, Europe/London):" "${TIMEZONE:-UTC}")
-        TIMEZONE="${TIMEZONE:-UTC}"
-        if valid_timezone "$TIMEZONE"; then
-            break
-        fi
-        ui_msgbox "Invalid Timezone" "/usr/share/zoneinfo/${TIMEZONE} does not exist.\nUse an IANA name like Europe/Berlin or America/New_York."
-    done
-
-    local LOCALE="en_US.UTF-8"
-    while true; do
-        LOCALE=$(ui_inputbox "Locale" "Enter system locale:" "${LOCALE}")
-        LOCALE="${LOCALE:-en_US.UTF-8}"
-        if [ -r /usr/share/i18n/SUPPORTED ] \
-            && awk -v loc="${LOCALE}" '$1 == loc && $2 == "UTF-8" { found = 1 } END { exit !found }' /usr/share/i18n/SUPPORTED; then
-            break
-        fi
-        ui_msgbox "Invalid Locale" "${LOCALE} was not found in /usr/share/i18n/SUPPORTED (UTF-8).\nExample: en_US.UTF-8"
-    done
-
-    # 5. LUKS2 Encryption
-    local ENABLE_LUKS
-    if ui_yesno "Protect Your Files (Recommended)" "Encrypt the Debian system and your personal files?\n\nYou will enter this passphrase whenever the computer starts. It cannot be recovered if forgotten. The small boot partition remains unencrypted and is protected by Secure Boot."; then
-        ENABLE_LUKS="true"
-    else
-        ENABLE_LUKS="false"
-    fi
-
-    local LUKS_PASSPHRASE=""
-    if [ "$ENABLE_LUKS" = "true" ]; then
+    # ── 4. Encryption (hidden toggle, default encrypted) ──
+    local ENABLE_LUKS="true"
+    local encrypt_installation=true
+    # Gum path with Ctrl-C toggle; text fallback uses simple yes/no
+    if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
+        local enc_confirmed=false
         while true; do
-            LUKS_PASSPHRASE=$(ui_passwordbox "LUKS Passphrase" "Enter LUKS encryption passphrase (minimum 8 characters):")
-            if [ ${#LUKS_PASSPHRASE} -lt 8 ]; then
-                ui_msgbox "Invalid Passphrase" "Passphrase must be at least 8 characters long."
-                continue
+            if confirm_encryption; then
+                enc_confirmed=true
+                break
+            else
+                # User chose "No, change disk" -> re-pick disk
+                chosen=$(disk_form 2>/dev/tty) || chosen=""
+                if [ -z "$chosen" ]; then
+                    log_warn "Disk selection cancelled."
+                    exit 1
+                fi
+                TARGET_DISK="$chosen"
+                disk="$TARGET_DISK"
+                # Re-validate new disk
+                DISK_SIZE_BYTES=$(disk_property "$TARGET_DISK" SIZE)
+                DISK_SIZE_MIB=$(awk -v bytes="${DISK_SIZE_BYTES:-0}" 'BEGIN { print int(bytes / 1048576) }')
+                DISK_MAJMIN=$(disk_property "$TARGET_DISK" MAJ:MIN)
+                DISK_SERIAL=$(disk_property "$TARGET_DISK" SERIAL)
+                DISK_WWN=$(disk_property "$TARGET_DISK" WWN)
+                DISK_MODEL=$(disk_property "$TARGET_DISK" MODEL)
             fi
-            local pass2
-            pass2=$(ui_passwordbox "Confirm Passphrase" "Re-enter LUKS encryption passphrase:")
-            if [ "$LUKS_PASSPHRASE" != "$pass2" ]; then
-                ui_msgbox "Mismatch" "Passphrases did not match. Please try again."
-                continue
-            fi
-            break
         done
-    fi
-
-    # 6. Desktop Environment
-    local DESKTOP_CHOICE
-    DESKTOP_CHOICE=$(ui_menu "Desktop Environment" "Choose your desktop environment (Wayland session):" \
-        "gnome" "GNOME Desktop (macOS-oriented, gestures, gdm3)" \
-        "kde" "KDE Plasma (Windows-oriented, panel, sddm)")
-    DESKTOP_CHOICE="${DESKTOP_CHOICE:-gnome}"
-
-    # 7. Mac Clipboard (keyd)
-    local ENABLE_KEYD="false"
-    local KEYD_DEFAULT="yes"
-    [ "$DESKTOP_CHOICE" = "kde" ] && KEYD_DEFAULT="no"
-    if ui_yesno "Mac Clipboard (keyd)" "Enable Mac clipboard shortcuts (Super+C/V/X -> Ctrl/Shift+Insert)?\n\nTerminal-safe: does not send SIGINT." "$KEYD_DEFAULT"; then
-        ENABLE_KEYD="true"
-    fi
-
-    # 8. Optional Software Checkboxes
-    local EXTRA_APPS
-    EXTRA_APPS=$(ui_checklist "Optional Software" "Select optional software to install:" \
-        "chromium" "Chromium Web Browser" OFF \
-        "brave" "Brave Browser (Official Apt Origin)" OFF \
-        "audacious" "Audacious Audio Player" OFF \
-        "native_media" "DE Native Media Player (Amberol/Elisa)" OFF)
-
-    if [[ "$EXTRA_APPS" =~ "native_media" ]]; then
-        if [ "$DESKTOP_CHOICE" = "gnome" ]; then
-            EXTRA_APPS="${EXTRA_APPS} amberol"
+        if [ "$encrypt_installation" = "true" ]; then ENABLE_LUKS="true"; else ENABLE_LUKS="false"; fi
+    else
+        # Text mode: simple yes/no
+        if ui_yesno "Protect Your Files (Recommended)" "Encrypt the system and your files?\n\nYou will enter the password at boot (the same password you just set). It cannot be recovered if forgotten. The boot partition stays unencrypted and is protected by Secure Boot." "yes"; then
+            ENABLE_LUKS="true"
+            encrypt_installation=true
         else
-            EXTRA_APPS="${EXTRA_APPS} elisa"
+            ENABLE_LUKS="false"
+            encrypt_installation=false
         fi
     fi
 
-    # 9. Hostname
-    local HOSTNAME="debian"
-    while true; do
-        HOSTNAME=$(ui_inputbox "Computer Name" "Choose a name for this computer:" "$HOSTNAME")
-        HOSTNAME="${HOSTNAME:-debian}"
-        if valid_hostname "$HOSTNAME"; then
-            break
-        fi
-        ui_msgbox "Invalid Computer Name" "Use letters, numbers, hyphens, and dots. Each part must start and end with a letter or number."
-    done
+    # Fixed choices for offline model (no prompts)
+    local FS_CHOICE="btrfs"
+    local DESKTOP_CHOICE="${SENSIBLE_VARIANT:-gnome}"
+    # Validate variant
+    case "$DESKTOP_CHOICE" in gnome|kde) ;; *) DESKTOP_CHOICE="gnome" ;; esac
+    local ENABLE_KEYD="false"
+    [ "$DESKTOP_CHOICE" = "gnome" ] && ENABLE_KEYD="true"
+    local EXTRA_APPS=""
 
-    # 10. User Account & Password
-    local USERNAME=""
-    while true; do
-        USERNAME=$(ui_inputbox "Username" "Enter primary username (lowercase, starts with letter):" "")
-        if valid_username "$USERNAME"; then
-            break
-        fi
-        ui_msgbox "Invalid Username" "Use up to 32 lowercase letters, numbers, hyphens, or underscores, starting with a letter or underscore. Reserved system account names cannot be used."
-    done
-
-    local USERPASS=""
-    while true; do
-        USERPASS=$(ui_passwordbox "User Password" "Enter password for ${USERNAME} and root recovery:")
-        if [ -z "$USERPASS" ]; then
-            ui_msgbox "Invalid Password" "Password cannot be empty."
-            continue
-        fi
-        local pass2
-        pass2=$(ui_passwordbox "Confirm Password" "Re-enter user password:")
-        if [ "$USERPASS" != "$pass2" ]; then
-            ui_msgbox "Mismatch" "Passwords did not match. Please try again."
-            continue
-        fi
-        break
-    done
-
-    # 10b. Optional autologin — only meaningful with disk encryption: the LUKS
-    # passphrase at boot is the authentication, the idle lock protects the
-    # session. Without LUKS this would leave the machine wide open.
     local ENABLE_AUTOLOGIN="false"
     if [ "$ENABLE_LUKS" = "true" ]; then
-        if ui_yesno "Skip Login Password" "Boot straight into the desktop as ${USERNAME} (no login password)?\n\nThe LUKS passphrase at boot stays required, the screen still locks on idle,\nand the password is kept for sudo and screen unlock. Without LUKS this is not offered." "yes"; then
-            ENABLE_AUTOLOGIN="true"
+        if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
+            clear_logo; echo
+            say "The disk passphrase at boot will unlock the system."
+            echo
+            if gum confirm --affirmative "Yes, skip login" --negative "No, ask for login" "Boot straight into the desktop (no login password)?" 2>/dev/tty; then
+                ENABLE_AUTOLOGIN="true"
+            fi
+        else
+            if ui_yesno "Skip Login Password" "Boot straight into the desktop as ${USERNAME} (no login password)?\n\nThe disk passphrase at boot stays required, the screen still locks on idle,\nand the password is kept for sudo and screen unlock. Without LUKS this is not offered." "yes"; then
+                ENABLE_AUTOLOGIN="true"
+            fi
         fi
     else
         log_info "Autologin is only offered with full disk encryption."
     fi
 
-    # 11. Confirmation / Wipe Warning
-    ensure_network || exit 1
-
+    # ── 5. Confirmation ──
     local SUMMARY_TEXT
     SUMMARY_TEXT="SUMMARY OF INSTALLATION CHOICES:\n\n"
     SUMMARY_TEXT+="• Target Disk:   ${TARGET_DISK} (${DISK_MODEL:-Unknown model})\n"
@@ -311,8 +450,6 @@ virtual disk, or less RAM."
     SUMMARY_TEXT+="• LUKS2 Encrypt: ${ENABLE_LUKS}\n"
     SUMMARY_TEXT+="• Swap Size:     ${SWAP_MIB} MiB\n"
     SUMMARY_TEXT+="• Desktop:       ${DESKTOP_CHOICE}\n"
-    SUMMARY_TEXT+="• Mac keyd:      ${ENABLE_KEYD}\n"
-    SUMMARY_TEXT+="• Autologin:     ${ENABLE_AUTOLOGIN}\n"
     SUMMARY_TEXT+="• Hostname:      ${HOSTNAME}\n"
     SUMMARY_TEXT+="• Username:      ${USERNAME}\n"
     SUMMARY_TEXT+="• Timezone:      ${TIMEZONE}\n"
@@ -322,7 +459,16 @@ virtual disk, or less RAM."
     SUMMARY_TEXT+="To confirm, please type the exact disk path (${TARGET_DISK}) below:"
 
     local CONFIRM_DISK
-    CONFIRM_DISK=$(ui_inputbox "DANGER: Confirm Disk Wipe" "$SUMMARY_TEXT" "")
+    if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
+        clear_logo; echo
+        gum style --padding "0 0 0 $PADDING_LEFT" --bold "DANGER: Confirm Disk Wipe"
+        echo
+        gum style --padding "0 0 0 $PADDING_LEFT" "$SUMMARY_TEXT"
+        echo
+        CONFIRM_DISK=$(gum input --placeholder "${TARGET_DISK}" --width 60 2>/dev/tty) || CONFIRM_DISK=""
+    else
+        CONFIRM_DISK=$(ui_inputbox "DANGER: Confirm Disk Wipe" "$SUMMARY_TEXT" "")
+    fi
 
     if [ "$CONFIRM_DISK" != "$TARGET_DISK" ]; then
         ui_msgbox "Aborted" "Confirmation did not match ${TARGET_DISK}. Installation cancelled."
@@ -338,23 +484,17 @@ virtual disk, or less RAM."
     CURRENT_STAGE="partitioning the selected disk"
     log_info "Beginning installation onto ${TARGET_DISK}..."
 
-    # Step 1: Partitioning
     partition_disk "$TARGET_DISK" "$SWAP_MIB" "$ENABLE_LUKS"
 
-    # Step 2: Formatting & Mounting
     CURRENT_STAGE="formatting and mounting filesystems"
     format_and_mount "$TARGET_DISK" "$FS_CHOICE" "$ENABLE_LUKS" "$LUKS_PASSPHRASE" "$SWAP_MIB"
 
-    # Step 3: Base Deployment
     CURRENT_STAGE="deploying the Debian base system"
     log_info "Deploying base system..."
     local DEPLOYED_FROM_LIVE="false"
     if [ -d "${LIVE_ROOT_SENTINEL:-/lib/live}" ] || [ -f /etc/issue.sensible ]; then
         DEPLOYED_FROM_LIVE="true"
         log_info "Copying live environment root to ${MNT} with rsync..."
-        # Exclude the CONTENTS of the API filesystems ('/dev/*'), never the
-        # directories themselves ('/dev'): the bind mounts below need existing
-        # mountpoints on the target.
         rsync -aAX --info=progress2 \
             --exclude='/dev/*' --exclude='/proc/*' --exclude='/sys/*' --exclude='/tmp/*' \
             --exclude='/run/*' --exclude="${MNT}/*" --exclude='/media/*' --exclude=/lost+found \
@@ -365,15 +505,11 @@ virtual disk, or less RAM."
         log_info "Bootstrapping Debian Testing to ${MNT} with debootstrap..."
         debootstrap --arch=amd64 testing ${MNT} https://deb.debian.org/debian
     fi
-    # Whatever the deploy path produced, the API mountpoints and /tmp must exist.
     mkdir -p "${MNT}/dev" "${MNT}/proc" "${MNT}/sys" "${MNT}/run" "${MNT}/tmp" "${MNT}/mnt" "${MNT}/media"
     chmod 1777 "${MNT}/tmp"
-    # Live-session-only: never ship passwordless root autologin to the target.
     rm -f ${MNT}/etc/systemd/system/getty@tty1.service.d/autologin.conf \
           ${MNT}/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf
 
-    # Strip every live-only launcher and identity marker. Leaving these behind
-    # would make a later tty login offer the destructive installer again.
     rm -f "${MNT}/etc/profile.d/99-sensible-autostart.sh" \
           "${MNT}/etc/profile.d/99-sensible-firmware-check.sh" \
           "${MNT}/usr/local/bin/sensible-install" \
@@ -384,39 +520,91 @@ virtual disk, or less RAM."
     printf 'Debian GNU/Linux testing\n' > "${MNT}/etc/issue.net"
     : > "${MNT}/etc/motd"
 
-    # The rsync path copies the live session's /etc/machine-id, so every install
-    # from one boot would inherit the same identity (journald, DHCP DUIDs and
-    # other machine-ID consumers then collide). An empty /etc/machine-id is
-    # systemd's documented "first boot" marker: it regenerates one at boot.
     : > "${MNT}/etc/machine-id"
-    # Debian usually symlinks this to /etc/machine-id; drop it only if the copy
-    # left a real file behind, so the symlink is preserved when present.
     [ -L "${MNT}/var/lib/dbus/machine-id" ] || rm -f "${MNT}/var/lib/dbus/machine-id"
 
-    # The live image boots to a console so the display manager cannot take the
-    # tty the installer runs on (0020-live-boot-to-console.hook.chroot). That
-    # default is copied along with everything else, so the installed system
-    # would come up without its desktop unless it is restored here.
+    # live-build disables update-initramfs inside the image (update_initramfs=no
+    # in update-initramfs.conf) so the ISO build doesn't churn initramfs. The
+    # copied target inherits that flag, and then EVERY regeneration here —
+    # plymouth-set-default-theme -R, update-initramfs -u — silently no-ops
+    # ("I: update-initramfs is disabled"), leaving the LIVE initramfs in /boot.
+    # Without a rebuilt initramfs the LUKS root cannot be unlocked at boot.
+    # Re-enable before anything regenerates it.
+    if [ -f "${MNT}/etc/initramfs-tools/update-initramfs.conf" ]; then
+        sed -i 's/^update_initramfs=.*/update_initramfs=yes/' "${MNT}/etc/initramfs-tools/update-initramfs.conf"
+        log_info "Re-enabled update-initramfs on the target (live-build ships it disabled)"
+    fi
+
+    if [ "$ENABLE_LUKS" = "true" ]; then
+        # cryptsetup-initramfs must actually be installed in the target: it
+        # provides the initramfs hook, boot scripts, and askpass. It ships in
+        # the variant closure lists; a warn-only check here lets an unbootable
+        # system through, so abort instead. Tested via the dpkg database (no
+        # chroot needed -- this runs before the bind mounts).
+        if [ -d "${MNT}/var/lib/dpkg/info" ] \
+            && ! ls "${MNT}"/var/lib/dpkg/info/cryptsetup-initramfs.* >/dev/null 2>&1; then
+            log_err "cryptsetup-initramfs is not installed in the target closure; the initramfs cannot unlock LUKS. Rebuild the ISO with cryptsetup-initramfs in the variant package list."
+            exit 1
+        fi
+        # No CRYPTSETUP=y conf-hook write here: since buster that file only
+        # carries KEYFILE_PATTERN, and the hook copies /sbin/cryptsetup,
+        # /sbin/dmsetup, and askpass unconditionally. What actually decides
+        # early unlock is the "initramfs" option in /etc/crypttab (fstab.sh),
+        # which makes the hook write the mapping into the initramfs crypttab
+        # even though root-device detection fails inside a chroot.
+        # validate_installed_boot checks the generated initramfs for that
+        # mapping before we dare report success.
+    fi
+
     if [ -d "${MNT}/etc/systemd/system" ]; then
         ln -sfn /lib/systemd/system/graphical.target \
                 "${MNT}/etc/systemd/system/default.target"
     fi
 
-    # Step 4: Bind Mounts & DNS
     CURRENT_STAGE="preparing the installed system"
     log_info "Preparing chroot environment..."
-    for d in /dev /dev/pts /proc /sys /run; do
+    for d in /dev /dev/pts /proc /sys; do
         mount --bind "$d" "${MNT}$d"
     done
+    # /run is mounted as a fresh tmpfs, not a bind of the live host's /run.
+    # Runtime state from the installer must not become target state.  In
+    # particular, /run/live/medium belongs to the USB, not the installed root.
+    # live-tools' update-initramfs diversion is removed below; merely hiding
+    # /run/live is not enough, because the wrapper also sees boot=live through
+    # the bound /proc and then emits the exact disabled message from the report.
+    # A fresh tmpfs is also enough for `chroot systemctl enable ...`, which
+    # only writes to /etc/systemd/system.
+    log_info "Mounting fresh tmpfs on ${MNT}/run (must NOT be a bind of the live /run)"
+    if ! mount -t tmpfs tmpfs "${MNT}/run"; then
+        log_err "Could not mount tmpfs on ${MNT}/run. The live /run contains /run/live/medium, which makes update-initramfs refuse to regenerate and leaves the LUKS root un-unlockable. Aborting rather than producing an unbootable install."
+        return 1
+    fi
+    # grub-install sets the NVRAM boot entry through efivarfs, which is a
+    # SUBMOUNT of /sys — a plain /sys bind does not carry it, and grub-install
+    # then only warns "EFI variables cannot be set on this system", leaving the
+    # machine without a boot entry. Bind it explicitly.
+    if [ -d /sys/firmware/efi/efivars ] && [ -d "${MNT}/sys/firmware/efi" ]; then
+        mount --bind /sys/firmware/efi/efivars "${MNT}/sys/firmware/efi/efivars" || true
+    fi
     rm -f "${MNT}/etc/resolv.conf"
     cp -L /etc/resolv.conf "${MNT}/etc/resolv.conf"
 
-    # Step 5: Configure Repos & Generate crypttab / fstab
-    configure_apt_sources
+    # Strip live-environment markers from the chroot.  Keep dpkg's package
+    # metadata intact so the later purge can run maintainer scripts and undo
+    # diversions cleanly.
+    rm -f "${MNT}/etc/live/version" "${MNT}"/etc/initramfs-tools/scripts/*-live 2>/dev/null || true
+
+    # Offline: when we copied the live root, the package closure is already
+    # baked in the ISO. Do not apt-get update or install — it would hit
+    # deb.debian.org and fail offline, as in the screenshot. The check-packages
+    # gate guarantees the closure at build time.
+    if [ "${DEPLOYED_FROM_LIVE}" != "true" ]; then
+        configure_apt_sources
+    else
+        log_info "Offline install — skipping apt update (live root already contains the closure)"
+    fi
     generate_crypttab_and_fstab "$TARGET_ROOT" "$BOOT_PART" "$EFI_PART" "$SWAP_PART" "$ROOT_PART" "$FS_CHOICE" "$ENABLE_LUKS"
 
-    # Step 6: Identity and locale. User creation waits until package-owned
-    # service accounts exist, preventing names such as sddm from colliding.
     log_info "Configuring hostname and locale..."
     echo "$HOSTNAME" > ${MNT}/etc/hostname
     printf '127.0.0.1 localhost\n127.0.1.1 %s\n' "$HOSTNAME" > ${MNT}/etc/hosts
@@ -424,22 +612,42 @@ virtual disk, or less RAM."
     chroot ${MNT} ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
     echo "$LOCALE UTF-8" > ${MNT}/etc/locale.gen
     echo "LANG=$LOCALE" > ${MNT}/etc/default/locale
-    # locale-gen itself runs after Step 7: on a debootstrap base the locales
-    # package (which provides it) is not installed yet at this point.
 
-    # Step 7: Hardware Packages & Services (Phase 3)
     CURRENT_STAGE="installing hardware support"
-    install_hardware_packages
+    if [ "${DEPLOYED_FROM_LIVE}" != "true" ]; then
+        install_hardware_packages
+    else
+        log_info "Offline install — skipping hardware apt install (firmware baked in)"
+        # Still enable services that would have been enabled
+        chroot ${MNT} systemctl enable NetworkManager.service 2>/dev/null || true
+        chroot ${MNT} systemctl enable bluetooth.service 2>/dev/null || true
+        chroot ${MNT} systemctl enable power-profiles-daemon.service 2>/dev/null || true
+        chroot ${MNT} systemctl enable fwupd.service 2>/dev/null || true
+    fi
 
-    # Step 7a: Generate locales now that the locales package is present.
-    chroot ${MNT} locale-gen
+    chroot ${MNT} locale-gen 2>/dev/null || log_warn "locale-gen failed (locales not yet in closure?)"
 
-    # Step 7b: Keyboard layout through keyboard-configuration (spec §3)
     configure_keyboard "$KEYBOARD_LAYOUT"
 
-    # Step 8: Desktop Environment & Plymouth (Phase 4)
     CURRENT_STAGE="installing the desktop"
-    install_desktop "$DESKTOP_CHOICE" "$ENABLE_KEYD" "$CONFIG_DIR"
+    if [ "${DEPLOYED_FROM_LIVE}" != "true" ]; then
+        install_desktop "$DESKTOP_CHOICE" "$ENABLE_KEYD" "$CONFIG_DIR"
+    else
+        log_info "Offline install — skipping desktop apt install (DE baked in)"
+        # Ensure display manager and keyd are enabled if their packages are present
+        if [ "$DESKTOP_CHOICE" = "gnome" ]; then
+            chroot ${MNT} systemctl enable gdm3.service 2>/dev/null || true
+        else
+            chroot ${MNT} systemctl enable sddm.service 2>/dev/null || true
+        fi
+        if [ -f "${MNT}/etc/keyd/default.conf" ] || [ "$ENABLE_KEYD" = "true" ]; then
+            chroot ${MNT} systemctl enable keyd.service 2>/dev/null || true
+        fi
+        # Plymouth theme already baked — ensure it matches variant
+        local plymouth_theme="spinner"
+        [ "$DESKTOP_CHOICE" = "kde" ] && plymouth_theme="breeze"
+        chroot ${MNT} plymouth-set-default-theme -R "$plymouth_theme" 2>/dev/null || true
+    fi
 
     CURRENT_STAGE="creating the user account"
     if chroot ${MNT} getent passwd "$USERNAME" >/dev/null 2>&1; then
@@ -459,33 +667,94 @@ virtual disk, or less RAM."
     echo "${USERNAME}:${USERPASS}" | chroot ${MNT} chpasswd
     echo "root:${USERPASS}" | chroot ${MNT} chpasswd
 
-    # Step 8b: Session login (autologin) + idle screen lock (Phase 4)
-    configure_login "$DESKTOP_CHOICE" "$ENABLE_AUTOLOGIN" "$USERNAME"
-
-    # Step 9: Default Apps & Optional Software
-    CURRENT_STAGE="installing applications"
-    install_default_apps "$USERNAME"
-    install_optional_apps "$EXTRA_APPS"
-
-    # Live packages are useful only while booted from the ISO. Purge them before
-    # rebuilding initramfs so no live-boot hooks survive on the installed disk.
-    if [ "$DEPLOYED_FROM_LIVE" = "true" ]; then
-        local live_pkg
-        for live_pkg in live-config-systemd live-config live-boot; do
-            if chroot ${MNT} dpkg-query -W -f='${db:Status-Abbrev}' "$live_pkg" 2>/dev/null | grep -q '^ii '; then
-                DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get purge -y "$live_pkg"
-            fi
-        done
-        rm -rf "${MNT}/lib/live" "${MNT}/usr/lib/live" "${MNT}/var/lib/live"
+    # Store optional identity for git/GECOS if provided
+    if [ -n "${full_name:-}" ]; then
+        chroot ${MNT} chfn -f "$full_name" "$USERNAME" 2>/dev/null || true
+        mkdir -p "${MNT}/home/${USERNAME}"
+        # git identity for user (per-user, not system)
+        if [ -n "${email_address:-}" ]; then
+            cat > "${MNT}/home/${USERNAME}/.gitconfig" <<EOF
+[user]
+	name = $full_name
+	email = $email_address
+EOF
+            chroot ${MNT} chown "${USERNAME}:${USERNAME}" "/home/${USERNAME}/.gitconfig" 2>/dev/null || true
+        fi
     fi
 
-    # Step 10: GRUB & Initramfs
+    configure_login "$DESKTOP_CHOICE" "$ENABLE_AUTOLOGIN" "$USERNAME"
+
+    CURRENT_STAGE="installing applications"
+    if [ "${DEPLOYED_FROM_LIVE}" != "true" ]; then
+        install_default_apps "$USERNAME"
+    else
+        log_info "Offline install — skipping default-apps apt install (apps baked in)"
+        # Still ensure LazyVim skel and flathub where possible, without network
+        mkdir -p "${MNT}/etc/skel/.config/nvim" 2>/dev/null || true
+        if [ ! -f "${MNT}/etc/skel/.config/nvim/init.lua" ] && [ -d "${MNT}/usr/share/sensible/nvim-starter" ]; then
+            cp -r "${MNT}/usr/share/sensible/nvim-starter" "${MNT}/etc/skel/.config/nvim" 2>/dev/null || true
+        fi
+        if [ -n "$USERNAME" ] && [ -d "${MNT}/home/$USERNAME" ] && [ -d "${MNT}/etc/skel/.config/nvim" ]; then
+            mkdir -p "${MNT}/home/$USERNAME/.config"
+            cp -r "${MNT}/etc/skel/.config/nvim" "${MNT}/home/$USERNAME/.config/" 2>/dev/null || true
+            chroot ${MNT} chown -R "${USERNAME}:${USERNAME}" "/home/${USERNAME}/.config" 2>/dev/null || true
+        fi
+        chroot ${MNT} flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
+    fi
+
+    if [ "$DEPLOYED_FROM_LIVE" = "true" ]; then
+        CURRENT_STAGE="removing live-environment packages"
+        # Purge the whole live stack in ONE transaction. Purging one at a time
+        # hits an unsatisfiable dependency state: `live-config` Depends:
+        # `live-config-systemd`, so removing only the -systemd split makes apt's
+        # solver fail with "Unable to satisfy dependencies ... Solver timed out"
+        # (exit 100) — after the disk was already written. All live-* packages
+        # are local removals; `dpkg --purge` needs no network and no solver.
+        local LIVE_PKGS=()
+        local live_pkg
+        # live-tools is boot-critical here: it diverts Debian's real
+        # /usr/sbin/update-initramfs to live-update-initramfs.  Inside this
+        # chroot that wrapper still sees "boot=live" through the bound /proc,
+        # but the fresh /run deliberately hides /run/live/medium, so it exits
+        # 0 without rebuilding anything.  Its postrm restores the original
+        # command when live-tools is removed.  Remove the live initramfs hooks
+        # at the same time so later kernel upgrades build an installed-system
+        # initramfs rather than a live one.
+        for live_pkg in live-boot live-boot-initramfs-tools live-config live-config-systemd live-tools; do
+            if chroot ${MNT} dpkg-query -W -f='${db:Status-Abbrev}' "$live_pkg" 2>/dev/null | grep -q '^ii '; then
+                LIVE_PKGS+=("$live_pkg")
+            fi
+        done
+        if [ ${#LIVE_PKGS[@]} -gt 0 ]; then
+            log_info "Purging live packages offline: ${LIVE_PKGS[*]}"
+            DEBIAN_FRONTEND=noninteractive chroot ${MNT} dpkg --purge "${LIVE_PKGS[@]}" \
+                || record_warning "Live packages could not be purged cleanly: ${LIVE_PKGS[*]}"
+        fi
+        rm -rf "${MNT}/lib/live" "${MNT}/usr/lib/live" "${MNT}/var/lib/live"
+
+        # Do not trust dpkg's aggregate exit alone: a maintainer-script failure
+        # can leave the live-tools diversion behind, and the wrapper deliberately
+        # exits 0 after printing that update-initramfs is disabled.  That exact
+        # state produces a stale initramfs with no cryptroot mapping.
+        local update_initramfs_path="${MNT}/usr/sbin/update-initramfs"
+        local update_initramfs_target=""
+        if [ -L "${update_initramfs_path}" ]; then
+            update_initramfs_target=$(readlink "${update_initramfs_path}" 2>/dev/null || true)
+        fi
+        if [ ! -x "${update_initramfs_path}" ]; then
+            log_err "The target has no executable /usr/sbin/update-initramfs after removing live packages."
+            return 1
+        fi
+        if [ "${update_initramfs_target##*/}" = "live-update-initramfs" ]; then
+            log_err "live-tools still diverts update-initramfs in the target; refusing to build an initramfs with the live-system wrapper."
+            return 1
+        fi
+    fi
+
     CURRENT_STAGE="installing the bootloader"
     log_info "Configuring GRUB and initramfs..."
     local GRUB_CMDLINE="quiet splash loglevel=3"
     if detect_nvidia_gpu; then
-        # KMS is required for GDM/KWin to offer a Wayland session on the
-        # proprietary driver; without it the DE silently falls back to X11.
         GRUB_CMDLINE+=" nvidia-drm.modeset=1"
     fi
     mkdir -p ${MNT}/etc/default/grub.d
@@ -495,16 +764,8 @@ GRUB_GFXMODE=auto
 GRUB_GFXPAYLOAD_LINUX=keep
 EOF
 
-    # Hibernation: point the kernel at the swap that holds the resume image.
-    # Swap is a swapfile inside the root filesystem in both modes, so resume is
-    # always the root UUID plus the file's offset -- there is no swap partition
-    # to name. Note the kernel refuses hibernation under Secure Boot lockdown;
-    # this is configured so it works when Secure Boot is off.
     mkdir -p ${MNT}/etc/initramfs-tools/conf.d
     if [ "$ENABLE_LUKS" = "true" ]; then
-        # The Plymouth passphrase dialog decodes keys with the initramfs keymap;
-        # without the console keymap a non-US passphrase can never match — the
-        # user is locked out of a passphrase they typed correctly.
         if grep -q '^KEYMAP=' ${MNT}/etc/initramfs-tools/initramfs.conf 2>/dev/null; then
             sed -i 's/^KEYMAP=.*/KEYMAP=y/' ${MNT}/etc/initramfs-tools/initramfs.conf
         else
@@ -518,18 +779,23 @@ EOF
     sed -i "s|quiet splash loglevel=3|quiet splash loglevel=3 resume=UUID=${ROOTFS_UUID} resume_offset=${RESUME_OFFSET}|" ${MNT}/etc/default/grub.d/installer.cfg
     echo "RESUME=UUID=${ROOTFS_UUID}" > ${MNT}/etc/initramfs-tools/conf.d/resume
 
-    # Secure Boot chain: shim (MS-signed) -> Debian-signed GRUB -> signed kernel.
-    # Works with Secure Boot on and off, so it is always used.
-    DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y --no-install-recommends grub-efi-amd64 grub-efi-amd64-signed shim-signed cryptsetup-initramfs
+    if [ "${DEPLOYED_FROM_LIVE}" != "true" ]; then
+        DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y --no-install-recommends grub-efi-amd64 grub-efi-amd64-signed shim-signed cryptsetup-initramfs
+    else
+        log_info "Offline install — skipping grub/shim/cryptsetup apt install (already in closure)"
+        # Verify required packages are present offline
+        for pkg in grub-efi-amd64 shim-signed cryptsetup-initramfs; do
+            if ! chroot ${MNT} dpkg-query -W -f='${db:Status-Abbrev}' "$pkg" 2>/dev/null | grep -q '^ii '; then
+                log_warn "Offline closure missing $pkg — boot may fail (rebuild ISO with variant closure)"
+            fi
+        done
+    fi
 
     log_info "Installing GRUB to EFI System Partition..."
     chroot ${MNT} grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=debian --recheck
     chroot ${MNT} update-initramfs -u -k all
     chroot ${MNT} update-grub
 
-    # Step 11: Verify the installed system can actually boot. Everything above
-    # can succeed command-by-command and still leave an unbootable machine, and
-    # that only shows up after the reboot, with the installer gone.
     CURRENT_STAGE="verifying the installed system can boot"
     local BOOT_PROBLEMS
     if ! BOOT_PROBLEMS=$(validate_installed_boot "${MNT}" "${ENABLE_LUKS}"); then
@@ -549,7 +815,6 @@ a reboot, with the installer gone."
     fi
     log_success "Post-install verification passed: kernel, initramfs, GRUB, and fstab are in place."
 
-    # Step 12: Flush and preserve the log before target teardown.
     CURRENT_STAGE="finalizing the installer log"
     stop_install_log
     preserve_install_log || record_warning "The installer log could not be copied to the installed system."
@@ -559,19 +824,53 @@ a reboot, with the installer gone."
 
     trap - EXIT
     log_success "Installation finished successfully!"
-    local COMPLETE_TEXT="Sensible installation completed successfully.\n\nInstalled to: ${TARGET_DISK}\nDesktop: ${DESKTOP_CHOICE}\nEncryption: ${ENABLE_LUKS}\n\nRemove the USB installation drive and reboot."
+    local COMPLETE_TEXT="Sensible installation completed successfully.
+
+Installed to: ${TARGET_DISK}
+Desktop: ${DESKTOP_CHOICE}
+Encryption: ${ENABLE_LUKS}"
     if [ ${#INSTALL_WARNINGS[@]} -gt 0 ]; then
-        COMPLETE_TEXT+="\n\nCompleted with warnings:\n"
+        COMPLETE_TEXT+=$'\n\nCompleted with warnings:'
         local warning
         for warning in "${INSTALL_WARNINGS[@]}"; do
-            COMPLETE_TEXT+="- ${warning}\n"
+            COMPLETE_TEXT+=$'\n- '"${warning}"
         done
     fi
-    [ "$ENABLE_LUKS" = "true" ] && COMPLETE_TEXT+="\nOn first boot, enter the encryption passphrase you created."
-    ui_msgbox "Complete" "$COMPLETE_TEXT"
+    [ "$ENABLE_LUKS" = "true" ] && COMPLETE_TEXT+=$'\n\nOn first boot, enter the encryption passphrase (same as your login password).'
+
+    local completion_action
+    if ! completion_action=$(ui_menu "Installation Complete" "${COMPLETE_TEXT}
+
+What would you like to do next?" \
+        "reboot" "Reboot now and eject optical installation media" \
+        "live"   "Stay in the live session"); then
+        # Esc/Escape in a graphical menu is the non-destructive choice.
+        completion_action="live"
+    fi
+
+    case "${completion_action}" in
+        reboot)
+            log_info "Reboot requested. Optical installation media will be ejected during shutdown; remove USB media as the machine restarts."
+            sync
+            # Debian live-tools runs live-medium-eject from systemd's shutdown
+            # hook. Calling it here would be too early: the running squashfs
+            # may still need the medium before systemd reaches final shutdown.
+            if command -v systemctl >/dev/null 2>&1 && systemctl reboot; then
+                return 0
+            fi
+            if command -v reboot >/dev/null 2>&1 && reboot; then
+                return 0
+            fi
+            log_err "The reboot command failed. Remove the installation media and reboot manually."
+            ui_msgbox "Reboot Failed" "The installation is complete, but Sensible could not reboot this machine.\n\nRemove the installation media and reboot manually."
+            return 1
+            ;;
+        live)
+            log_info "Remaining in the live session. Remove the installation media before the next boot."
+            ;;
+    esac
 }
 
-# Only execute when run directly; sourcing (tests) can call main() explicitly.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     main "$@"
 fi

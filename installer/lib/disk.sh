@@ -147,6 +147,61 @@ explain_no_candidates() {
     [ "$found" -eq 1 ] || printf '  (no block devices detected at all)\n'
 }
 
+get_disk_info() {
+    local device="$1" size vendor model label
+    size=$(lsblk -dno SIZE "$device" 2>/dev/null)
+    vendor=$(lsblk -dno VENDOR "$device" 2>/dev/null | sed 's/ *$//')
+    model=$(lsblk -dno MODEL "$device" 2>/dev/null | sed 's/ *$//')
+    label=""
+    if [[ -n $vendor && -n $model ]]; then
+        if [[ $model == *$vendor* ]]; then label="$model"; else label="$vendor $model"; fi
+    elif [[ -n $model ]]; then label="$model"
+    elif [[ -n $vendor ]]; then label="$vendor"
+    fi
+    local display="$device"
+    [[ -n $size ]] && display="$display ($size)"
+    [[ -n $label ]] && display="$display - $label"
+    local part_summary
+    part_summary=$(lsblk -nro TYPE,NAME,FSTYPE,MOUNTPOINT "$device" 2>/dev/null | \
+        awk '$1=="part" { printf "%s%s%s", s, ($3==""?"unknown":$3), ($4==""?"":"("$4")"); s=", " }')
+    [[ -n $part_summary ]] && display+=" [$part_summary]"
+    echo "$display"
+}
+
+get_root_disk() {
+    local device="$1" parent
+    [[ -n $device ]] || return 1
+    device=$(readlink -f "$device" 2>/dev/null || printf "%s\n" "$device")
+    while true; do
+        parent=$(lsblk -dno PKNAME "$device" 2>/dev/null | tail -n1)
+        [[ -n $parent ]] || break
+        device="/dev/$parent"
+    done
+    if [[ $(lsblk -dno TYPE "$device" 2>/dev/null) == "disk" ]]; then
+        printf "%s\n" "$device"
+    fi
+}
+
+wait_for_device() {
+    local i
+    for i in $(seq 1 10); do
+        [[ -b "$1" ]] && return 0
+        udevadm settle 2>/dev/null || true
+        sleep 1
+    done
+    return 1
+}
+
+disk_step() {
+    local desc="$1"; shift
+    local output status=0
+    output=$("$@" 2>&1) || status=$?
+    [[ -n $output ]] && printf '%s\n' "$output"
+    (( status == 0 )) && return 0
+    log_err "$desc failed (exit $status): $output"
+    return $status
+}
+
 list_candidate_disks() {
     # List candidate disks excluding loop devices, optical drives, and live
     # mounts. Disks below the minimum install size (spec §1) are refused.
@@ -163,13 +218,26 @@ list_candidate_disks() {
             # Never offer a disk with mounted filesystems, active swap, or
             # device-mapper/RAID/LVM holders. The live medium is covered by
             # the mounted-filesystem check as well.
+            # Also exclude the live boot disk itself
+            local boot_source exclude_disk
+            boot_source=$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || findmnt -no SOURCE /run/live/medium 2>/dev/null || true)
+            if [ -n "$boot_source" ]; then
+                exclude_disk=$(get_root_disk "$boot_source" 2>/dev/null || true)
+                if [ -n "$exclude_disk" ] && [ "$name" = "$exclude_disk" ]; then
+                    continue
+                fi
+            fi
             if ! disk_is_in_use "$name"; then
                 if disk_below_min "$name" "$min_mib"; then
                     log_warn "Skipping ${name}: smaller than the ${min_mib} MiB minimum."
                     continue
                 fi
                 model=$(lsblk -dno MODEL "$name" 2>/dev/null | head -n 1)
-                candidates+=("$name" "${size} - ${model:-Generic_Disk}")
+                # Use get_disk_info for richer display
+                local info
+                info=$(get_disk_info "$name")
+                # But for ui_menu we need key + description split: key is device path
+                candidates+=("$name" "${info#$name }")
             fi
         fi
     done < <(lsblk -dpno NAME,SIZE,TYPE,RO 2>/dev/null)
@@ -338,7 +406,9 @@ unmount_target() {
     if [ "$INSTALLER_OWNS_TARGET_MOUNTS" = "true" ]; then
         log_info "Unmounting installer-owned target filesystems..."
         local path
-        for path in dev/pts dev proc sys run boot/efi boot swap home .snapshots var/log; do
+        # sys/firmware/efi/efivars first: it is a bind inside the /sys bind,
+        # so it must come down before its parent (deepest first).
+        for path in sys/firmware/efi/efivars dev/pts dev proc sys run boot/efi boot swap home .snapshots var/log; do
             if mountpoint -q "${MNT}/${path}"; then
                 umount "${MNT}/${path}" || return 1
             fi

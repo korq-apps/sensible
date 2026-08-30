@@ -83,6 +83,27 @@ validate_installed_boot() {
     compgen -G "${root}/boot/initrd.img-*" >/dev/null \
         || problems+=("- no initramfs in /boot (expected initrd.img-*); the kernel cannot mount the root filesystem")
 
+    # When encryption is on, the initramfs MUST have been regenerated for THIS
+    # target (live-build ships update_initramfs=no AND the chroot inherits
+    # /run/live/medium which makes update-initramfs itself bail out). A live
+    # initramfs has no cryptsetup support and cannot unlock the root.
+    # We catch this by demanding the initramfs mtime be at least as new as the
+    # kernel image -- a regenerated initramfs is always newer than the bundled
+    # kernel it was rebuilt for. This is cheaper than unpacking the cpio and
+    # just as decisive: a stale, copied-as-is initramfs fails the check.
+    if [ "${luks}" = "true" ]; then
+        local kernel_file initrd_file kernel_mtime initrd_mtime
+        kernel_file=$(compgen -G "${root}/boot/vmlinuz-*" | sort -V | tail -n1)
+        initrd_file=$(compgen -G "${root}/boot/initrd.img-*" | sort -V | tail -n1)
+        if [ -n "$kernel_file" ] && [ -n "$initrd_file" ]; then
+            kernel_mtime=$(stat -c %Y "$kernel_file" 2>/dev/null || echo 0)
+            initrd_mtime=$(stat -c %Y "$initrd_file" 2>/dev/null || echo 0)
+            if [ "$initrd_mtime" -lt "$kernel_mtime" ]; then
+                problems+=("- initramfs older than the kernel it pairs with; it was never regenerated for this target (live /run/live or update_initramfs=no leak?)")
+            fi
+        fi
+    fi
+
     # The EFI binaries grub-install should have staged. Either the signed shim
     # chain or plain grubx64 is enough to boot; neither is not.
     if [ ! -f "${esp}/grubx64.efi" ] && [ ! -f "${esp}/shimx64.efi" ]; then
@@ -122,6 +143,53 @@ validate_installed_boot() {
         else
             awk '$1 !~ /^#/ && NF >= 3 { found = 1 } END { exit !found }' "${crypttab}" \
                 || problems+=("- /etc/crypttab has no mapping entry")
+            # The initramfs option (4th column) is what makes cryptsetup-initramfs
+            # unlock this mapping inside the initramfs; without it early unlock
+            # is not configured for the root device.
+            awk '$1 !~ /^#/ && NF >= 4 && $4 ~ /initramfs/ { found = 1 } END { exit !found }' "${crypttab}" \
+                || problems+=("- /etc/crypttab mapping lacks the initramfs option; early unlock of the root is not configured")
+        fi
+
+        # And the initramfs must actually CONTAIN the unlock configuration. This
+        # is the one artifact that decides between a passphrase prompt and a
+        # busybox prompt: scripts/local-top/cryptroot only unlocks mappings it
+        # finds in the initramfs /cryptroot/crypttab. The live initramfs ships
+        # that file EMPTY (the hook creates it even with no /etc/crypttab), and
+        # it carries the cryptsetup binaries too -- so a stale, copied-as-is
+        # live initramfs passes every existence and mtime check above yet boots
+        # straight to busybox with no prompt. Extract the initramfs and demand
+        # a non-empty entry for the cryptroot mapping. Cannot inspect a file
+        # that is not an initramfs at all (test fixtures, truncated writes):
+        # that is a skip, the empty-entry case is the real failure.
+        if command -v unmkinitramfs >/dev/null 2>&1; then
+            local initrd inspect_dir entry_file
+            initrd=$(compgen -G "${root}/boot/initrd.img-*" | sort -V | tail -n 1 || true)
+            if [ -n "$initrd" ] && [ -s "$initrd" ]; then
+                mkdir -p "${root}/var/tmp"
+                inspect_dir=$(mktemp -d "${root}/var/tmp/initrd-check.XXXXXX" 2>/dev/null) || inspect_dir=""
+                if [ -n "$inspect_dir" ] && unmkinitramfs "$initrd" "$inspect_dir" 2>/dev/null; then
+                    entry_file=""
+                    for entry_file in \
+                        "${inspect_dir}/cryptroot/crypttab" \
+                        "${inspect_dir}/main/cryptroot/crypttab"; do
+                        [ -f "$entry_file" ] && break
+                        entry_file=""
+                    done
+                    if [ -n "$entry_file" ]; then
+                        local mapping_name
+                        mapping_name=$(awk '$1 !~ /^#/ && NF >= 3 { print $1; exit }' "${crypttab}" 2>/dev/null)
+                        mapping_name=${mapping_name:-cryptroot}
+                        if ! grep -Eq "^[[:space:]]*${mapping_name}[[:space:]]" "$entry_file"; then
+                            problems+=("- initramfs /cryptroot/crypttab has no ${mapping_name} mapping; the boot would drop to a busybox prompt without asking for the passphrase (stale or mis-generated initramfs?)")
+                        fi
+                    else
+                        problems+=("- initramfs has no /cryptroot/crypttab at all; the encrypted root cannot be unlocked at boot")
+                    fi
+                fi
+                if [ -n "$inspect_dir" ]; then
+                    rm -rf "$inspect_dir"
+                fi
+            fi
         fi
     fi
 

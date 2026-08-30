@@ -7,6 +7,10 @@
 # Desktop
 kde-plasma-desktop
 sddm
+plasma-discover
+plasma-discover-backend-flatpak
+plymouth-theme-breeze
+dconf-cli
 
 # Applications
 firefox-esr

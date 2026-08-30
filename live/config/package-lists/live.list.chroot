@@ -18,6 +18,7 @@ console-setup
 locales
 
 # TUI / User Interface
+gum
 whiptail
 dialog
 
