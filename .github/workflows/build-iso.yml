@@ -1,0 +1,214 @@
+name: Build Sensible Live ISO
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    # Rebuild weekly on Sundays at 03:00 UTC to catch Debian Testing transitions early
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run test suite (unit + full-flow integration)
+        run: |
+          chmod +x tests/run-tests.sh
+          tests/run-tests.sh
+
+      - name: ShellCheck (non-blocking)
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          shellcheck -S warning installer/sensible-install.sh installer/lib/*.sh scripts/run-qemu.sh live/build.sh
+
+  build:
+    name: Build Live ISO & UEFI Smoke Test (${{ matrix.variant }})
+    needs: tests
+    runs-on: [self-hosted, debian-13]
+    strategy:
+      fail-fast: false
+      matrix:
+        # KDE joins once its variant lands (offline rework, phase 5).
+        variant: [gnome]
+    # Read-only: this job runs for pull_request and executes PR-controlled
+    # build scripts, so it must never hold a token that can write the repo.
+    # Publishing happens in the tag-only `release` job below.
+    permissions:
+      contents: read
+
+    steps:
+      # The live-build container runs as root and bind-mounts the workspace
+      # read-write. On a self-hosted runner the build outputs under live/
+      # (chroot/, .build/, binary/, cache/, the produced ISO, and the
+      # chroot.packages.* metadata files) end up owned by a UID the runner
+      # service account cannot read or delete. Two failure modes follow:
+      #   1. `actions/checkout` runs `git clean -ffdx` and fails with
+      #      "Permission denied" on every root-owned directory.
+      #   2. When checkout decides to recreate the repository (clean failed,
+      #      or a prior run already nuked .git -- checkout deletes workspace
+      #      contents *including* .git when it cannot clean), its deletion
+      #      loop dies on root-owned entries, and the job surfaces as a
+      #      cryptic "fatal: --local can only be used inside a git
+      #      repository" from checkout's trailing removeAuth step.
+      # Clean the workspace from inside a one-shot container as root, so no
+      # sudoers rule is needed: the container engine socket is the only
+      # escalation path. Prefer the same engine live/build.sh uses (podman,
+      # then docker) so cleanup runs with the same privilege model that
+      # created the files.
+      - name: Clean live-build leftovers from prior runs
+        if: always()
+        env:
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          if command -v podman >/dev/null 2>&1; then
+            ENGINE=podman
+          elif command -v docker >/dev/null 2>&1; then
+            ENGINE=docker
+          else
+            echo "::error::Neither podman nor docker is available to the runner user; cannot clean root-owned live-build leftovers."
+            exit 1
+          fi
+          echo "==> Cleaning workspace via ${ENGINE} (no sudo required)"
+          "${ENGINE}" run --rm \
+            -v "${WORKSPACE}:/workspace:rw" \
+            alpine:3 \
+            sh -c '
+            set -eu
+            # Stale live-build outputs, regardless of owner: the build wipes
+            # these at the start of every run anyway (see build-stages.sh),
+            # so removing them here only moves the same deletion ahead of
+            # git clean / checkout.
+            rm -rf \
+              /workspace/live/chroot \
+              /workspace/live/.build \
+              /workspace/live/binary \
+              /workspace/live/cache \
+              /workspace/live/local \
+              /workspace/live/binary.modified_timestamps \
+              /workspace/live/chroot.files \
+              /workspace/live/chroot.packages.install \
+              /workspace/live/chroot.packages.live \
+              /workspace/live/sensible-* \
+              /workspace/sensible-*-debian-testing-amd64.iso \
+              /workspace/sensible-*-debian-testing-amd64.iso.sha256
+            # Sweep anything else left owned by host root (uid 0) anywhere
+            # in the workspace -- future live-build output locations
+            # included. Guard: with a rootless/userns engine the workspace
+            # owner maps to container root, and -user 0 would then match
+            # runner-owned files, so the sweep must not run.
+            ws_uid="$(stat -c %u /workspace)"
+            if [ "${ws_uid}" = "0" ]; then
+              echo "==> workspace owner maps to container root (userns engine); skipping root-owned sweep"
+            else
+              echo "==> sweeping host-root-owned leftovers"
+              find /workspace -xdev -depth -user 0 -exec rm -rf -- {} +
+              leftovers="$(find /workspace -xdev -user 0 -print -quit)"
+              if [ -n "${leftovers}" ]; then
+                echo "::error::Root-owned workspace entries remain after cleanup: ${leftovers}"
+                exit 1
+              fi
+            fi
+            for p in /workspace/live/chroot /workspace/live/.build /workspace/live/binary /workspace/live/cache; do
+              if [ -e "${p}" ]; then
+                echo "::error::${p} still exists after cleanup"
+                exit 1
+              fi
+            done
+            echo "==> workspace clean"
+            '
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Do not leave the job token on disk for the PR-controlled build.
+          persist-credentials: false
+
+      - name: Cache APT packages
+        uses: actions/cache@v4
+        with:
+          path: live/.cache/apt
+          key: ${{ runner.os }}-apt-cache-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-apt-cache-
+
+      - name: Check package names resolve against Debian Testing
+        run: |
+          chmod +x scripts/check-packages.sh
+          scripts/check-packages.sh ${{ matrix.variant }}
+
+      - name: Build Live ISO in Container
+        env:
+          SENSIBLE_VARIANT: ${{ matrix.variant }}
+        run: |
+          chmod +x live/build.sh
+          ./live/build.sh
+
+      - name: Install QEMU and OVMF for Smoke Test
+        run: |
+          missing=()
+          for pkg in qemu-system-x86 qemu-utils ovmf; do
+            dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q 'install ok installed' \
+              || missing+=("$pkg")
+          done
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "QEMU and OVMF already installed; skipping apt-get."
+          else
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq "${missing[@]}"
+          fi
+
+      - name: Headless QEMU UEFI Boot Smoke Test
+        # Same script developers run locally (scripts/smoke-boot.sh), so a
+        # green local smoke and a green CI smoke exercise identical logic.
+        run: |
+          chmod +x scripts/smoke-boot.sh
+          scripts/smoke-boot.sh sensible-${{ matrix.variant }}-debian-testing-amd64.iso
+
+      - name: Upload ISO and Checksum Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sensible-${{ matrix.variant }}-debian-testing-amd64
+          path: |
+            sensible-${{ matrix.variant }}-debian-testing-amd64.iso
+            sensible-${{ matrix.variant }}-debian-testing-amd64.iso.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  # Publication is isolated in its own job so that `contents: write` exists only
+  # on tag pushes and never in a run that builds PR-controlled code. Keep
+  # SENSIBLE_RELEASE_READY unset/false until the real installed-disk matrix and
+  # documented release gate pass; enabling it is the final publication switch.
+  # This job consumes the build artifact rather than rebuilding.
+  release:
+    name: Publish Release Assets
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') && vars.SENSIBLE_RELEASE_READY == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download built ISO artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sensible-*-debian-testing-amd64
+          merge-multiple: true
+
+      - name: Publish Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            sensible-*-debian-testing-amd64.iso
+            sensible-*-debian-testing-amd64.iso.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

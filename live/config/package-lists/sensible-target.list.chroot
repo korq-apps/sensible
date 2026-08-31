@@ -1,0 +1,71 @@
+# Sensible target closure — baked into live ISO for offline install
+# This list ensures the copy-installed target has everything that
+# installer/lib/*.sh previously apt-installed. No apt runs at install time.
+
+# Kernel + microcode (hardware.sh)
+linux-image-amd64
+intel-microcode
+amd64-microcode
+
+# Locale / console (hardware.sh, setup)
+locales
+keyboard-configuration
+console-setup
+
+# Firmware is in live.list.chroot (kept there for live Wi-Fi); also needed on target
+# Already in live.list: firmware-linux etc
+
+# Graphics / media
+mesa-vulkan-drivers
+va-driver-all
+nvidia-driver
+# libspa-0.2-bluetooth is pulled by pipewire but explicit is safer
+libspa-0.2-bluetooth
+
+# Audio / networking / power / firmware updates
+pipewire
+wireplumber
+pipewire-pulse
+pipewire-audio
+pipewire-alsa
+network-manager
+power-profiles-daemon
+fwupd
+bluez
+wireless-regdb
+
+# Boot / plymouth (desktop.sh)
+plymouth
+plymouth-themes
+# kde variant adds plymouth-theme-breeze via its own list; gnome uses spinner from plymouth-themes
+
+# Desktop common (ensured in variant lists, but keep here for safety)
+# gnome-core/gdm3 or kde-plasma-desktop/sddm are in variant lists
+
+# Apps — default set (apps.sh:install_default_apps)
+firefox-esr
+vlc
+neovim
+ripgrep
+fd-find
+fzf
+bat
+eza
+zoxide
+btop
+fastfetch
+jq
+sudo
+curl
+git
+ca-certificates
+flatpak
+fonts-noto-core
+fonts-noto-color-emoji
+fonts-liberation
+# dconf-cli needed for GNOME lock defaults
+dconf-cli
+
+# Optional but expected to be available without fetching
+# (keyd, plymouth themes) — keyd is in variant? ensure target has it if GNOME
+keyd

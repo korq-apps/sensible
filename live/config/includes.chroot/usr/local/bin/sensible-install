@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -e
+
+# The standard live console autologins as root. Keep sudo fallback support for
+# manually started sessions so the printed `sensible-install` command works in
+# either case.
+if [ "$(id -u)" -ne 0 ]; then
+    if command -v sudo >/dev/null 2>&1; then
+        exec sudo -- "$0" "$@"
+    fi
+    echo "Error: sensible-install must run as root, and sudo is unavailable." >&2
+    echo "       Log in as root and run it again." >&2
+    exit 1
+fi
+
+if [ -f /opt/sensible/installer/sensible-install.sh ]; then
+    exec /opt/sensible/installer/sensible-install.sh "$@"
+elif [ -f /usr/local/share/sensible/installer/sensible-install.sh ]; then
+    exec /usr/local/share/sensible/installer/sensible-install.sh "$@"
+else
+    echo "Error: Sensible installer script not found." >&2
+    exit 1
+fi

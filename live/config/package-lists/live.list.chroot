@@ -1,0 +1,51 @@
+# Base live system
+live-boot
+live-config
+live-config-systemd
+systemd
+systemd-sysv
+sudo
+rsync
+debootstrap
+ca-certificates
+curl
+git
+bash-completion
+less
+nano
+kbd
+console-setup
+locales
+
+# TUI / User Interface
+gum
+whiptail
+dialog
+
+# Disk, Partitioning & Filesystem Tools
+gdisk
+parted
+util-linux
+cryptsetup
+btrfs-progs
+e2fsprogs
+dosfstools
+efibootmgr
+pciutils
+
+# Networking
+network-manager
+wpasupplicant
+iproute2
+iputils-ping
+wireless-regdb
+
+# Hardware Firmware (same as target so Wi-Fi laptops can install)
+firmware-linux
+firmware-misc-nonfree
+firmware-iwlwifi
+firmware-realtek
+firmware-atheros
+firmware-brcm80211
+firmware-mediatek
+firmware-sof-signed

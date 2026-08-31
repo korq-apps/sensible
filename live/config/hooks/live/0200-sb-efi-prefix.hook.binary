@@ -1,0 +1,61 @@
+#!/bin/sh
+# The Debian-signed GRUB (gcdx64.efi.signed) that live-build puts into
+# efi.img has the prefix /EFI/debian baked in at package build time, so on
+# the El Torito ESP it only looks for /EFI/debian/grub.cfg. live-build only
+# drops its redirect config at /boot/grub/grub.cfg, which the signed binary
+# never reads -- Secure Boot boots would strand at a bare GRUB prompt.
+# Inject the same redirect at /EFI/debian/grub.cfg inside efi.img.
+#
+# efi.img is built nearly full, so rebuild it with headroom first.
+#
+# NAMING: only *.hook.binary is executed at the binary stage (cwd = binary/).
+set -e
+
+IMG="boot/grub/efi.img"
+if [ ! -f "$IMG" ]; then
+    echo "ERROR: sb-efi-prefix hook requires $IMG, but live-build did not create it" >&2
+    exit 1
+fi
+
+# Only relevant when the Secure Boot chain (shim) was installed.
+if ! mdir -i "$IMG" ::/EFI/boot 2>/dev/null | grep -qi bootx64; then
+    echo "sb-efi-prefix hook: no shim in efi.img (Secure Boot off), skipping"
+    exit 0
+fi
+if mdir -i "$IMG" ::/EFI/debian/grub.cfg >/dev/null 2>&1; then
+    echo "sb-efi-prefix hook: /EFI/debian config already present"
+    exit 0
+fi
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+mkdir -p "$WORK/tree"
+mcopy -i "$IMG" -s ::EFI "$WORK/tree/"
+mcopy -i "$IMG" -s ::boot "$WORK/tree/"
+
+mkdir -p "$WORK/tree/EFI/debian"
+cat > "$WORK/tree/EFI/debian/grub.cfg" <<'EOF'
+search --set=root --file /.disk/info
+set prefix=($root)/boot/grub
+configfile ($root)/boot/grub/grub.cfg
+EOF
+
+# Rebuild the FAT image: previous size plus 1 MiB headroom, rounded up to
+# a 32 KiB multiple like live-build does.
+bytes="$(stat -c %s "$IMG")"
+kib=$(( (bytes + 1048576) / 1024 ))
+blocks=$(( (kib + 55) / 32 * 32 ))
+mkfs.msdos -C "$WORK/efi.img" "$blocks" >/dev/null
+
+mmd -i "$WORK/efi.img" ::EFI
+mmd -i "$WORK/efi.img" ::EFI/boot
+mmd -i "$WORK/efi.img" ::EFI/debian
+mmd -i "$WORK/efi.img" ::boot
+mmd -i "$WORK/efi.img" ::boot/grub
+mcopy -m -o -i "$WORK/efi.img" "$WORK"/tree/EFI/boot/*.efi ::EFI/boot/
+mcopy -m -o -i "$WORK/efi.img" "$WORK/tree/boot/grub/grub.cfg" ::boot/grub/
+mcopy -m -o -i "$WORK/efi.img" "$WORK/tree/EFI/debian/grub.cfg" ::EFI/debian/
+
+mv "$WORK/efi.img" "$IMG"
+echo "sb-efi-prefix hook: /EFI/debian/grub.cfg injected into $IMG"
