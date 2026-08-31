@@ -47,6 +47,57 @@ jobs:
       contents: read
 
     steps:
+      # The live-build container runs as root and bind-mounts the workspace
+      # read-write. On a self-hosted runner the build outputs under live/
+      # (chroot/, .build/, binary/, cache/, the produced ISO, and the
+      # chroot.packages.* metadata files) end up owned by a UID the runner
+      # service account cannot read. The next run's `actions/checkout`
+      # then calls `git clean -ffdx`, which logs
+      #     warning: could not open directory 'live/chroot/...': Permission denied
+      # for every entry and fails the checkout step before any build runs.
+      # Wipe those directories from inside a one-shot container as root, so we
+      # do not need a sudoers rule on the runner host: the Docker socket the
+      # build step already uses is the only escalation path. live/build.sh
+      # also resets ownership on the way out (see restore_host_ownership in
+      # live/build-stages.sh), so a successful build leaves this step as a
+      # no-op on the next run.
+      - name: Wipe root-owned live-build leftovers from prior runs
+        # Non-fatal: if the docker cleanup fails (engine unavailable, network
+        # down, alpine pull denied) the build can still proceed if its own
+        # workspace is clean, and the in-container restore_host_ownership
+        # trap keeps the next run healthy regardless.
+        continue-on-error: true
+        if: always()
+        env:
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          # Rootless podman would map container root back to the runner's
+          # unprivileged uid, which cannot delete host-root-owned files on
+          # the bind mount. Use docker so the container's root is real host
+          # root (CAP_DAC_OVERRIDE), and bind-mount the workspace rw. No
+          # sudoers change on the host is required; the docker socket is the
+          # only escalation path.
+          command -v docker >/dev/null 2>&1 \
+            || { echo "::warning::docker not on PATH; skipping live/ cleanup."; exit 0; }
+          echo "==> Wiping root-owned live/ leftovers via docker"
+          docker run --rm \
+            -v "${WORKSPACE}:/workspace:rw" \
+            alpine:3 \
+            sh -c 'rm -rf \
+              /workspace/live/chroot \
+              /workspace/live/.build \
+              /workspace/live/binary \
+              /workspace/live/cache \
+              /workspace/live/binary.modified_timestamps \
+              /workspace/live/chroot.files \
+              /workspace/live/chroot.packages.install \
+              /workspace/live/chroot.packages.live \
+              /workspace/live/sensible-*-debian-testing-amd64.iso \
+              /workspace/live/sensible-*-debian-testing-amd64.iso.sha256 \
+              /workspace/live/sensible-*-debian-testing-amd64.contents \
+              /workspace/live/sensible-*-debian-testing-amd64.files \
+              /workspace/live/sensible-*-debian-testing-amd64.packages'
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:

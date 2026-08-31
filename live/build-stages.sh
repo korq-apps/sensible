@@ -40,7 +40,37 @@ release_dev_nodes() {
         umount "chroot/dev/${n}" 2>/dev/null || true
     done
 }
-trap release_dev_nodes EXIT
+
+# live-build writes everything under live/ as root inside the container, which
+# is also root on the host when the container is --privileged (no userns
+# remap). On a self-hosted runner the next workflow run's `actions/checkout`
+# calls `git clean -ffdx`, and if the workspace is owned by a user the runner
+# can't become, every chroot/ subdirectory logs
+#     warning: could not open directory 'live/chroot/...': Permission denied
+# and the checkout step fails before any build runs. The bind mount surfaces
+# the host's UID/GID on /workspace; chown the build outputs back to that
+# identity before the container exits so the runner can clean them later.
+restore_host_ownership() {
+    local host_uid host_gid
+    # /workspace is the bind mount of the repo root; its owner on the host
+    # is the user the runner runs as.
+    host_uid="$(stat -c '%u' /workspace 2>/dev/null || echo 0)"
+    host_gid="$(stat -c '%g' /workspace 2>/dev/null || echo 0)"
+    if [ "${host_uid}" = "0" ] && [ "${host_gid}" = "0" ]; then
+        # Host user is already root (or stat failed); nothing to reset.
+        return 0
+    fi
+    # -R for directories live-build owns, -h so bind-mounts and symlinks
+    # don't follow into the chroot rootfs. chown the cwd too so live-build's
+    # top-level metadata files (chroot.files, *.iso, etc.) are also reachable.
+    chown -R -h "${host_uid}:${host_gid}" \
+        . \
+        2>/dev/null || true
+    # chroot/ can contain mountpoints (we bind-mounted /dev nodes above);
+    # chown is harmless on the dir itself, but a busy mount would block it.
+    # release_dev_nodes runs before this in the EXIT trap, so this is safe.
+}
+trap 'release_dev_nodes; restore_host_ownership' EXIT
 
 # Hard-remove the build state first; `lb clean --purge` alone leaves a
 # populated chroot/ and a .build/ stagefile set out of sync with cache/, and
