@@ -75,8 +75,17 @@ jobs:
 
       - name: Install QEMU and OVMF for Smoke Test
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf
+          missing=()
+          for pkg in qemu-system-x86 qemu-utils ovmf; do
+            dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q 'install ok installed' \
+              || missing+=("$pkg")
+          done
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "QEMU and OVMF already installed; skipping apt-get."
+          else
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq "${missing[@]}"
+          fi
 
       - name: Headless QEMU UEFI Boot Smoke Test
         # Same script developers run locally (scripts/smoke-boot.sh), so a
