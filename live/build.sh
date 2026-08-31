@@ -4,6 +4,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# Both build entry points mutate live/config and live-build's state. Hold one
+# non-blocking lock per checkout so concurrent GNOME/KDE builds cannot replace
+# each other's staged package list or chroot midway through a build.
+command -v flock >/dev/null 2>&1 \
+    || { echo "Error: flock is required (install util-linux)." >&2; exit 1; }
+BUILD_LOCK_ID="$(printf '%s' "${REPO_ROOT}" | sha256sum | cut -c1-16)"
+BUILD_LOCK="${TMPDIR:-/tmp}/sensible-live-build-${BUILD_LOCK_ID}.lock"
+exec 9>"${BUILD_LOCK}"
+flock -n 9 \
+    || { echo "Error: another Sensible ISO build is already using this checkout." >&2; exit 1; }
+
 # Container engine detection
 if command -v podman >/dev/null 2>&1; then
     CONTAINER_ENGINE="podman"

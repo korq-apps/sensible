@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Sensible (aka Lazydeb) Installer — Debian Testing Remix Installer Engine
 # https://korq.io
-# Gum-based TUI, Omarchy-inspired flow: keyboard → user → disk → encryption → confirm
+# Gum-based TUI, Omarchy-inspired flow:
+# keyboard → user → disk → filesystem → encryption → confirm
 
 set -euo pipefail
 
@@ -210,12 +211,40 @@ disk_form() {
     [ -n "$disk" ]
 }
 
+filesystem_form() {
+    filesystem=""
+    step "Choose the root filesystem..."
+
+    local selected
+    if _ui_use_gum; then
+        say --foreground 8 "Both choices support encryption and hibernation."
+        ui_blank
+        selected=$(printf '%s\n' \
+            $'Btrfs  —  compression, subvolumes, snapshot-ready\tbtrfs' \
+            $'Ext4   —  traditional, simple, broadly familiar\text4' \
+            | gum choose --label-delimiter $'\t' \
+                --header "Select the filesystem for the root volume" 2>/dev/tty) \
+            || return 1
+    else
+        selected=$(ui_menu "Filesystem" \
+            "Choose the filesystem for the root volume. Both support encryption and hibernation:" \
+            "btrfs" "Btrfs — compression, subvolumes, snapshot-ready" \
+            "ext4"  "Ext4 — traditional, simple, broadly familiar") || return 1
+    fi
+
+    case "$selected" in
+        btrfs|ext4) filesystem="$selected" ;;
+        *) return 1 ;;
+    esac
+}
+
 confirm_encryption() {
     local mode="encrypted" rc
     while true; do
         clear_logo
         ui_blank
-        say "Everything on ${disk} will be overwritten. There is no recovery."
+        say "Everything on ${disk} will be overwritten and formatted as ${filesystem}."
+        say "There is no recovery."
         ui_blank
         if [ "$mode" = "encrypted" ]; then
             say --foreground 8 "Press Ctrl+C for unencrypted install. Encryption recommended."
@@ -388,7 +417,15 @@ virtual disk, or less RAM."
     fi
     log_info "Selected disk ${TARGET_DISK}: ${DISK_SIZE_MIB} MiB (minimum ${MIN_DISK_MIB} MiB)."
 
-    # ── 4. Encryption (hidden toggle, default encrypted) ──
+    # ── 4. Filesystem ──
+    local FS_CHOICE
+    if ! filesystem_form; then
+        log_warn "Filesystem selection cancelled."
+        exit 1
+    fi
+    FS_CHOICE="$filesystem"
+
+    # ── 5. Encryption (hidden toggle, default encrypted) ──
     local ENABLE_LUKS="true"
     local encrypt_installation=true
     # Gum path with Ctrl-C toggle; text fallback uses simple yes/no
@@ -427,8 +464,7 @@ virtual disk, or less RAM."
         fi
     fi
 
-    # Fixed choices for offline model (no prompts)
-    local FS_CHOICE="btrfs"
+    # Choices fixed by the desktop build variant (no prompts)
     local ENABLE_KEYD="false"
     [ "$DESKTOP_CHOICE" = "gnome" ] && ENABLE_KEYD="true"
     local EXTRA_APPS=""
@@ -456,7 +492,7 @@ virtual disk, or less RAM."
     # safety gate here; nobody has to retype a device path they just selected.
     if ! _ui_use_gum; then
         if ! ui_yesno "Ready to Install" \
-            "Erase ${TARGET_DISK} and install Sensible?\n\nAll existing data on this disk will be permanently destroyed." "no"; then
+            "Erase ${TARGET_DISK}, create a ${FS_CHOICE} root filesystem, and install Sensible?\n\nAll existing data on this disk will be permanently destroyed." "no"; then
             log_warn "Installation cancelled before ${TARGET_DISK} was changed."
             exit 1
         fi
@@ -502,6 +538,7 @@ virtual disk, or less RAM."
           ${MNT}/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf
 
     rm -f "${MNT}/etc/profile.d/99-sensible-autostart.sh" \
+          "${MNT}/etc/profile.d/98-sensible-serial-ready.sh" \
           "${MNT}/etc/profile.d/99-sensible-firmware-check.sh" \
           "${MNT}/usr/local/bin/sensible-install" \
           "${MNT}/usr/local/bin/lazydeb" \

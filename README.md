@@ -17,43 +17,44 @@ Debian itself is excellent. Getting to a usable desktop is not:
 3. **Hardware is half-enabled.** Wi-Fi firmware, SOF laptop audio, Bluetooth codecs, GPU decode, and power profiles are extra work.
 4. **Switching from macOS or Windows feels alien.** Shortcuts, app stores, and “where is Slack?” are the usual friction — not a reason to ship Basecamp.
 
-Sensible is a **reproducible live ISO** plus a **TUI installer**. It partitions the disk the way people actually want, turns on firmware and PipeWire, and offers GNOME or KDE. Third-party apps stay on Flatpak. Nothing commercial is baked in. The machine you get is Debian.
+Sensible is a **reproducible live ISO** plus a **TUI installer**. It partitions the disk the way people actually want and turns on firmware and PipeWire. Separate GNOME and KDE release images provide the chosen desktop; the installer does not download or switch desktops. Third-party apps stay on Flatpak. Nothing commercial is baked in. The machine you get is Debian.
 
 ---
 
-## What you choose at install time
+## Installation profile
 
-### Disk (4 combinations, one layout)
+### Disk (four combinations, one partition layout)
 
-Two filesystems, each with optional LUKS2. One GPT layout — no LVM:
+Choose Btrfs or Ext4, each with optional LUKS2. All four combinations use one
+GPT partition layout — no LVM:
 
 | Partition | Size | Filesystem | Mount |
 | :--- | :--- | :--- | :--- |
 | EFI | 1 GiB | FAT32 | `/boot/efi` |
 | BOOT | 1 GiB | Ext4 | `/boot` (always unencrypted) |
 | *(swap)* | mirrors physical RAM | swapfile | **a swapfile inside the root filesystem, never a partition** — encrypted with the root when LUKS is on. Hibernation works in both modes (Secure Boot lockdown blocks it; see [Architecture](docs/ARCHITECTURE.md#3-swap-luks-and-hibernation)) |
-| ROOT | rest of disk | Btrfs **or** Ext4, optional LUKS2 | `/` |
+| ROOT | rest of disk | Btrfs or Ext4, optional LUKS2 | `/` |
 
 - **Btrfs**: subvolumes `@`, `@home`, `@snapshots`, `@var_log` (Snapper/Timeshift-ready; snapshot tools themselves are optional later).
-- **Ext4**: single volume, `fast_commit`.
+- **Ext4**: traditional single root filesystem with `fast_commit` enabled.
 - **LUKS2**: Argon2id, TRIM/`discard`. Unlock is a **Plymouth** graphical dialog, not a console prompt.
 
 `/boot` stays unencrypted on purpose so GRUB and Plymouth stay fast and simple. That is a known evil-maid tradeoff, documented in Architecture.
 
-### Desktop
+### Desktop release
 
-- **GNOME** — macOS-oriented: Wayland, gestures, dynamic workspaces. Optional **Mac copy/paste** via `keyd` (`Super+C` / `V` / `X`) so terminals do not get `SIGINT`.
+- **GNOME** — macOS-oriented: Wayland, gestures, dynamic workspaces. Includes **Mac copy/paste** via `keyd` (`Super+C` / `V` / `X`) so terminals do not get `SIGINT`.
 - **KDE Plasma** — Windows-oriented: panel, tray, familiar window management.
 
-The live ISO does **not** ship both desktops. It is a console/TUI installer environment. The chosen DE is installed onto the target disk.
+The live ISO does **not** ship both desktops. Choose the GNOME or KDE release asset before writing the USB. The corresponding desktop is already baked into the offline image and copied to the target.
 
 ### Software (defaults vs optional)
 
 **Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak + Flathub, fonts, `fwupd`, Secure Boot chain on the installed system (shim + Debian-signed GRUB).
 
-**Default apps:** Firefox, VLC, Neovim (LazyVim starter in `/etc/skel`), modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`).
+**Default apps:** Firefox ESR, VLC, Neovim (LazyVim starter in `/etc/skel`), modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`).
 
-**Installer checkboxes (off unless selected):** Chromium, Brave (official apt origin, not a Flatpak), Audacious, and a DE-native player (Amberol on GNOME, Elisa on KDE).
+**Not currently offered by the offline installer:** Chromium, Brave, Audacious, Amberol, and Elisa. Install additional applications after first boot; commercial applications belong on Flathub rather than in the base image.
 
 **Not currently offered:** AI CLIs. If added later, they will be optional and use pinned artifacts rather than `curl | sh` from the ISO.
 
@@ -69,7 +70,7 @@ Make as much hardware work as Debian Testing allows, on first boot:
 
 - Kernel: `linux-image-amd64` plus `intel-microcode` / `amd64-microcode`
 - Firmware: `firmware-linux`, `firmware-misc-nonfree`, `firmware-iwlwifi`, `firmware-realtek`, `firmware-atheros`, `firmware-brcm80211`, `firmware-mediatek`, `firmware-sof-signed`
-- GPU: Mesa Vulkan + VA-API/VDPAU; proprietary `nvidia-driver` only when an NVIDIA GPU is detected
+- GPU: Mesa Vulkan + VA-API/VDPAU; the offline closure includes `nvidia-driver`, and NVIDIA-specific KMS configuration is enabled only when matching hardware is detected
 - Audio / BT: PipeWire + WirePlumber + `libspa-0.2-bluetooth`
 - Power: `power-profiles-daemon`
 - Device firmware updates: `fwupd` + LVFS
@@ -137,4 +138,4 @@ Build: `./live/build.sh` (podman/docker) or `sudo ./scripts/build-native.sh` (co
 
 Sensible source (installer, live-build config, docs, configs) is **[MIT](LICENSE)**. Take it, remix it, ship it.
 
-That covers **this repository only**. A built ISO is a pile of Debian (and optional third-party) packages, each under its own license — GPL kernel, various firmware, Firefox MPL, Brave if you tick that box, and so on. Redistributing the ISO means honoring those terms; MIT does not relicense them.
+That covers **this repository only**. A built ISO is a pile of Debian packages, each under its own license — GPL kernel, various firmware, Firefox MPL, and so on. Redistributing the ISO means honoring those terms; MIT does not relicense them.

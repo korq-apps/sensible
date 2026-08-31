@@ -94,9 +94,10 @@ KDE variant adds account creation (username, password) and timezone, because
 Plasma has no equivalent first-boot wizard. This divergence is deliberate and
 accepted; each variant uses its desktop's best flow.
 
-Everything else becomes an opinionated default: Btrfs (no filesystem choice),
-automatic hostname, no application checklist, no keyd question. Those move to
-post-install settings.
+Everything else becomes an opinionated default: automatic hostname, no
+application checklist, no keyd question. The initial rework proposed fixing
+Btrfs too, but the existing Btrfs/Ext4 choice was retained because both paths
+are fully offline and use packages already carried by the image.
 
 ## Build system
 

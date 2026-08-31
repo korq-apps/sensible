@@ -19,18 +19,23 @@ You need:
   More space is strongly recommended.
 - A USB drive large enough for the ISO (8 GB is a practical choice). Writing
   the image erases the USB.
-- A working Internet connection during installation. Wired Ethernet is the
-  simplest option; Wi-Fi can be configured from the live shell.
+- An Internet connection is optional during installation. The release image
+  contains the complete target system; networking is only needed for updates
+  and additional applications after first boot.
 - AC power connected for a laptop. Do not risk losing power while a disk is
   being partitioned or packages are being installed.
 
 ## 1. Download and verify
 
 Open the official [Sensible Releases page](https://github.com/korq-apps/sensible/releases)
-and download these two assets from the same release:
+and choose either the GNOME or KDE edition. Download its ISO and matching
+checksum from the same release, for example:
 
 - `sensible-gnome-debian-testing-amd64.iso`
 - `sensible-gnome-debian-testing-amd64.iso.sha256`
+
+Use the `sensible-kde-...` pair instead if you want KDE Plasma. The desktop is
+chosen by the release image and is not a question inside the installer.
 
 Keep both files in the same folder. Verification detects an incomplete or
 changed download. A successful check should name the ISO and say `OK` or
@@ -86,37 +91,37 @@ the writer reports success, eject the USB safely.
    remain enabled. If the USB is not listed, confirm that UEFI boot is enabled
    and Legacy/CSM is disabled before changing Secure Boot settings.
 
-The live environment is text-based. The installer starts after a short
-countdown, applies your keyboard choice, and checks Internet access before
-offering any disk. If it cannot reach Debian, choose the network-setup option,
-connect with NetworkManager's text screen, and let the installer retry. You can
-also press a key during the countdown, run `nmtui`, connect and exit, then run:
+The live environment is text-based and opens the branded installer
+immediately. Press Enter on the welcome screen, then choose the keyboard layout
+before entering any password. Installation is offline and does not wait for a
+Debian mirror. If you leave the installer for diagnostics, start it again with:
 
 ```bash
 sensible-install
 ```
 
-Wired networking normally connects automatically. Sensible checks the Debian
-package server once at startup and again before the destructive confirmation.
+Networking can still be configured with `nmtui` from the live shell, but it is
+not required to complete the installation.
 
 ## 4. Make the installer choices
 
 Read every screen rather than accepting choices blindly:
 
 - **Target disk:** the whole selected disk will be erased. Match its path,
-  capacity, and model to the intended drive. Stop if anything is uncertain.
-- **Filesystem:** Btrfs creates separate subvolumes and is ready for snapshot
-  tools, though those tools are not installed. Ext4 is a simpler traditional
-  filesystem. Both are supported.
+  capacity, model, existing volumes, filesystem labels, and mount points to the
+  intended drive. Stop if anything is uncertain.
+- **Filesystem:** choose Btrfs for compression, subvolumes, and future snapshot
+  tooling, or Ext4 for a traditional single root filesystem. Both choices use
+  a swapfile inside root and support optional LUKS encryption and hibernation.
 - **Encryption:** LUKS2 protects the root filesystem and swap at rest; `/boot`
   remains unencrypted. Losing the passphrase means losing access to the data.
-- **Desktop:** GNOME is the macOS-oriented choice; KDE Plasma is the
-  Windows-oriented choice.
-- **Mac clipboard:** optionally maps Super+C/V/X in a terminal-safe way. It is
-  on by default for GNOME and off for KDE.
-- **Optional software:** the implemented choices are Chromium, Brave,
-  Audacious, and Amberol (GNOME) or Elisa (KDE). AI CLIs are not installer
-  choices.
+- **Desktop:** already selected by the GNOME or KDE release image. It is shown
+  for confirmation but cannot be changed inside the offline installer.
+- **Mac clipboard:** the GNOME image enables terminal-safe Super+C/V/X mapping;
+  the KDE image leaves it disabled. There is no installer prompt.
+- **Additional software:** no optional application checkboxes are currently
+  shown. Add applications after first boot through GNOME Software, KDE
+  Discover, Flatpak, or APT.
 - **Identity:** choose the computer name, username, user password, timezone,
   locale, and keyboard layout. The user password is also used for root recovery.
 - **Skip login password:** offered only with encryption. The encryption
@@ -128,23 +133,26 @@ either password. On first boot, the encryption prompt uses that same layout.
 
 ## 5. Confirm the wipe and install
 
-The final summary names the target disk and repeats the erase warning. Compare
-the disk path and all choices one last time. To proceed, type the exact target
-disk path shown, such as `/dev/nvme0n1`. Any other input cancels the install.
+The encryption screen repeats the selected disk and warns that everything on
+it will be overwritten. Choose the install action to confirm, or go back and
+change the disk. Text-mode fallback uses a final yes/no prompt defaulting to
+No. The installer does not ask you to retype the device path.
 
-After confirmation, the erase begins immediately. Terminal output reports
-partitioning, copying, package installation, desktop setup, and bootloader
-setup; there is not yet a single overall percentage. Downloads and package
-installation can take a while. Do not power off, close the lid, remove the USB,
-or interrupt the process. Wait for the explicit successful-completion dialog.
+After confirmation and one last device-identity check, the erase begins
+immediately. A 12-stage progress bar shows the current operation, percentage,
+and elapsed time while detailed command output is kept in
+`/var/log/sensible-install.log`. Do not power off, close the lid, remove the
+USB, or interrupt the process. Wait for the explicit successful-completion
+screen, which reports total installation time.
 
-When it completes, remove the USB and reboot. If the live installer starts
-again, shut down, remove the USB, and boot from the internal disk.
+When it completes, choose **Reboot now**. Optical media is ejected by the live
+shutdown hook; remove USB media as the machine restarts. You may instead stay
+in the live session for diagnostics.
 
 ## 6. First boot
 
 - With encryption enabled, expect a graphical disk-unlock prompt first. Enter
-  the LUKS passphrase. This is separate from the desktop user password.
+  the LUKS passphrase, which is the same password created for the desktop user.
 - If skip-login was enabled, the desktop opens after disk unlock. Otherwise,
   log in with the username and user password created during installation.
 - Without encryption, there is no disk-unlock prompt; log in normally.
@@ -175,17 +183,18 @@ Not every device exposes firmware updates through LVFS.
 - **No install disk:** the disk may be read-only, in use as the live medium, or
   below the RAM-dependent minimum. The installer lists why detected devices
   were rejected.
-- **Package/download failure:** confirm networking with `nmtui` and retry the
-  installation. Because the disk may already be partially erased, do not
-  assume a failed install left the old system recoverable.
+- **Copy or configuration failure:** inspect the failure screen and installer
+  log. Because the disk may already be partially erased, do not assume a
+  failed install left the old system recoverable.
 - **Encryption passphrase fails after reboot:** check Caps Lock and the keyboard
   layout used during installation. There is no passphrase recovery mechanism.
 - **Secure Boot with proprietary NVIDIA:** Debian's stock boot chain remains
   signed, but the proprietary NVIDIA module may require disabling Secure Boot
   or separately enrolling a Machine Owner Key.
 
-The installer writes a root-only log to `/var/log/sensible-install.log` in the
-live session and copies it to the same path on the installed system. If a
+The installer writes a log to `/var/log/sensible-install.log` in the live
+session and copies it to the same path on the installed system. It is readable
+by root and members of the `sudo` group. If a
 post-wipe failure happens while the target is mounted, it also attempts to copy
 the log into that partial target before cleanup. Photograph the exact failure
 screen before rebooting in case the target could not be mounted. From the live
@@ -199,7 +208,7 @@ journalctl -b --no-pager
 
 Open a [GitHub issue](https://github.com/korq-apps/sensible/issues) with the
 release version, whether SHA256 verification passed, hardware model, firmware
-UEFI/Secure Boot settings, chosen filesystem/encryption/desktop, the exact
+UEFI/Secure Boot settings, release edition and encryption choice, the exact
 error, and the last relevant output. Review logs before posting and remove
 usernames, network names, serial numbers, and other private data. Never post
 passwords or encryption passphrases.

@@ -10,7 +10,7 @@ Blueprint for `installer/sensible-install.sh`. On the live ISO the command is `s
 - **One disk, full wipe.** No dual-boot, no custom partition editor in v1.
 - **Minimum disk:** `2048 + SWAP_MIB + 20480` MiB (1 GiB EFI + 1 GiB BOOT + swap + 20 GiB root). Refuse smaller disks.
 - Live image already has `cryptsetup`, `btrfs-progs`, `e2fsprogs`, `dosfstools`, `gdisk`, NetworkManager, firmware, and either a squashfs or `debootstrap`.
-- **Internet is mandatory.** Reach Debian's Testing `Release` metadata before disk selection and recheck before destructive confirmation. Offer `nmtui-connect`/`nmtui` and retry; declining exits before any disk change.
+- **Offline installation.** The release image contains the complete target closure. NetworkManager remains available for diagnostics, but no mirror check or download is required before the wipe.
 - Exclude disks with mounted descendants, active swap, or holders. Capture major:minor, byte size, serial and WWN where available, then re-read all identity/state immediately before partitioning.
 - Unlock is **`/etc/crypttab` + `cryptsetup-initramfs`**. Do not set `cryptdevice=` or `GRUB_ENABLE_CRYPTODISK`.
 
@@ -20,11 +20,11 @@ Blueprint for `installer/sensible-install.sh`. On the live ISO the command is `s
 
 ```
 Pre-flight (UEFI, unused target mountpoint)
-    → Select and apply live keyboard; check Debian mirror
+    → Branded welcome; select and apply live keyboard
     → Disks, RAM, size/state check; remaining regional settings
     → Remaining prompts (--config answers file: planned — Phase 6)
-    → Type-the-disk-name confirmation
-    → Recheck network and selected disk identity/state
+    → Explicit destructive confirmation (no device-path retyping)
+    → Recheck selected disk identity/state
     → Partition, format, mount
     → Deploy base (squashfs rsync, or debootstrap)
     → Chroot: fstab/crypttab, identity + user, packages, locale-gen,
@@ -42,13 +42,11 @@ suite (`tests/`) can run the full flow unprivileged against a temp directory.
 | Field | Default | Notes |
 | :--- | :--- | :--- |
 | Target disk | none | Show path/size/model; record major:minor, byte size, serial and WWN; exclude every in-use disk and revalidate before wipe |
-| Filesystem | Btrfs | Btrfs or Ext4 |
+| Filesystem | Btrfs | Choose Btrfs (subvolumes/compression) or Ext4 (traditional single root) |
 | LUKS2 | Yes | If yes: passphrase twice, min 8 characters |
 | Swap | Swapfile inside root, mirroring RAM | Shown, not editable in v1 |
-| Desktop | GNOME | GNOME or KDE Plasma |
-| Mac clipboard (`keyd`) | On for GNOME, off for KDE | Super+C/V/X only |
-| Extra browsers | none | Chromium; Brave (official apt origin) |
-| Extra media | none | Audacious; Amberol (GNOME) or Elisa (KDE) |
+| Desktop | Build variant | GNOME or KDE Plasma release image; shown, not prompted |
+| Mac clipboard (`keyd`) | On for GNOME, off for KDE | Fixed by build variant; Super+C/V/X only |
 | Hostname | `debian` | RFC 1123 syntax and maximum 63 bytes for the Linux static hostname. Stay `debian` — the box is Debian, not a derivative. |
 | Username | none | `^[a-z_][a-z0-9_-]*$`, maximum 32 characters, and not an existing or known package-owned account; recheck after target packages before `useradd` |
 | User password | none | Twice; root password set to the same value for recovery |
@@ -56,34 +54,30 @@ suite (`tests/`) can run the full flow unprivileged against a temp directory.
 | Locale | `en_US.UTF-8` | Must be in `/usr/share/i18n/SUPPORTED` |
 | Keyboard | live console layout | Validate and apply to the live console before either password; write the same layout through target `keyboard-configuration` |
 | Skip login password (autologin) | On (only offered with LUKS) | GDM/SDDM autologin; the LUKS passphrase stays the single authentication and the idle screen lock is always enforced |
+| Full name | empty | Optional GECOS + git `user.name` |
+| Email | empty | Optional git `user.email`, written only to the user's `~/.gitconfig` |
 
-Firefox, VLC, Neovim, Flatpak, firmware, and the CLI set are always installed — not checkboxes.
+Firefox ESR, VLC, Neovim, Flatpak, firmware, and the CLI set are always installed — not checkboxes.
 
 **Planned prompts (Phase 6, not implemented):**
 
 | Field | Default | Notes |
 | :--- | :--- | :--- |
-| Full name | empty | **Optional.** GECOS field + git `user.name` |
-| Email | empty | **Optional.** git `user.email` only — written to the user's `~/.gitconfig`, sent nowhere |
 | BioPass face login | Off | Pinned `.deb` + SHA256; IR camera recommended. Fingerprint (`fprintd`) is not a prompt — always installed |
 | Developer tools | Off | `docker.io` + `docker-compose`, `lazygit`, `gh`; user **not** added to the docker group |
 
 ### Unattended mode (planned — Phase 6)
 
-`sensible-install --config answers.toml` reads every prompt from a file and asks nothing. Same validation as interactive mode; any missing or invalid key aborts **before** partitioning. `confirm_wipe = true` is still required as explicit destructive authorization, without making interactive users retype a device they selected and confirmed. Primary consumer is CI: running all four disk layouts end-to-end in QEMU.
+`sensible-install --config answers.toml` reads every prompt from a file and asks nothing. Same validation as interactive mode; any missing or invalid key aborts **before** partitioning. `confirm_wipe = true` is still required as explicit destructive authorization, without making interactive users retype a device they selected and confirmed. Primary consumer is CI: running LUKS on/off for each desktop release image end-to-end in QEMU.
 
 ```toml
 disk            = "/dev/vda"
 confirm_wipe    = true               # required explicit authorization
-filesystem      = "btrfs"           # btrfs | ext4
+filesystem      = "btrfs"            # btrfs or ext4
 luks            = true
 luks_passphrase = "correct-horse"
-desktop         = "gnome"           # gnome | kde
-mac_clipboard   = true
 autologin       = true              # only honored when luks = true
 biopass         = false
-extra_browsers  = []                # chromium, brave
-extra_media     = []                # audacious, amberol, elisa
 hostname        = "debian"
 username        = "user"
 full_name       = ""                # optional: GECOS + git user.name
@@ -348,7 +342,7 @@ Always:
   libspa-0.2-bluetooth bluez
   power-profiles-daemon fwupd
   flatpak
-  firefox vlc neovim
+  firefox-esr vlc neovim
   ripgrep fd-find fzf bat eza zoxide btop fastfetch jq
   fonts-noto-core fonts-noto-color-emoji fonts-liberation
 
@@ -551,8 +545,8 @@ umount /mnt  # never recursive; an unknown child mount is not ours to remove
 # The swapfile lives inside the root filesystem — nothing else to close.
 ```
 
-The installer records terminal and package output in root-only
-`/var/log/sensible-install.log`. On post-wipe failure it copies that log into
+The installer records terminal and package output in the root-owned,
+sudo-group-readable `/var/log/sensible-install.log`. On post-wipe failure it copies that log into
 the partial target when possible before owned cleanup. A critical operation or
 failed teardown prevents the success dialog; optional failures are retained and
 shown in the completion warning summary.

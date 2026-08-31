@@ -25,7 +25,7 @@ t_section "Default apps: canonical package list (Architecture §7)"
 mock_setup
 install_default_apps "alice"
 apt_line="$(mock_last_call 'apt-get install -y --no-install-recommends')"
-for pkg in firefox vlc neovim ripgrep fd-find fzf bat eza zoxide btop fastfetch jq sudo curl git ca-certificates flatpak fonts-noto-core fonts-noto-color-emoji fonts-liberation; do
+for pkg in firefox-esr vlc neovim ripgrep fd-find fzf bat eza zoxide btop fastfetch jq sudo curl git ca-certificates flatpak fonts-noto-core fonts-noto-color-emoji fonts-liberation; do
     if [[ " ${apt_line} " == *" ${pkg} "* ]]; then t_ok; else t_fail "package ${pkg} in apt install call" "line: ${apt_line}"; fi
 done
 calls="$(cat "${MOCK_LOG}")"

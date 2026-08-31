@@ -46,12 +46,19 @@ t_section "missing EFI binary is caught"
 make_bootable_target "${T}"; rm -f "${T}"/boot/efi/EFI/debian/*.efi
 OUT="$(validate_installed_boot "${T}" false)" && rc=0 || rc=1
 assert_rc "missing GRUB EFI binary fails validation" 1 "${rc}"
-assert_contains "and says firmware would find nothing" "${OUT}" "no GRUB EFI binary"
+assert_contains "and names the missing shim" "${OUT}" "no shimx64.efi"
+assert_contains "and names the missing signed GRUB" "${OUT}" "no grubx64.efi"
 
-t_section "shim alone is sufficient (Secure Boot chain)"
+t_section "the complete signed EFI chain is required"
 make_bootable_target "${T}"; rm -f "${T}/boot/efi/EFI/debian/grubx64.efi"
-validate_installed_boot "${T}" false >/dev/null
-assert_rc "shimx64 alone still validates" 0 $?
+OUT="$(validate_installed_boot "${T}" false)" && rc=0 || rc=1
+assert_rc "shim without signed GRUB fails validation" 1 "$rc"
+assert_contains "failure explains shim has no second stage" "$OUT" "shim has no signed GRUB"
+
+make_bootable_target "${T}"; rm -f "${T}/boot/efi/EFI/debian/shimx64.efi"
+OUT="$(validate_installed_boot "${T}" false)" && rc=0 || rc=1
+assert_rc "GRUB without shim fails validation" 1 "$rc"
+assert_contains "failure names the missing signed first stage" "$OUT" "no signed first-stage"
 
 t_section "an entry-less grub.cfg is caught, not just a missing one"
 # This is the exact shape of today's failure: the file exists and is non-empty,
@@ -163,13 +170,17 @@ else
     echo "SKIP: cpio or unmkinitramfs unavailable; initramfs content fixtures not exercised" >&2
 fi
 
-# A file that is not an initramfs at all cannot be inspected -- that is a skip,
-# not a failure (the mtime gate above is what catches never-regenerated files).
+# A non-empty file that is not an initramfs is corrupt, even when its mtime is
+# fresh. Force the extractor failure so this guard is exercised on hosts that
+# do not have initramfs-tools installed too.
 make_bootable_target "${T}"
 printf 'cryptroot UUID=LUKS-UUID none luks,discard,initramfs\n' > "${T}/etc/crypttab"
 printf 'not an initramfs\n' > "${T}/boot/initrd.img-7.1.0-amd64"
-validate_installed_boot "${T}" true >/dev/null
-assert_rc "uninspectable initrd file does not add problems" 0 $?
+unmkinitramfs() { return 1; }
+OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
+unset -f unmkinitramfs
+assert_rc "unextractable initramfs fails validation" 1 "$rc"
+assert_contains "failure identifies corrupt or truncated image" "$OUT" "corrupt or truncated"
 
 t_section "LUKS target with a stale (un-regenerated) initramfs is rejected"
 # This is the screenshot's failure: rsync copied the live initramfs which has

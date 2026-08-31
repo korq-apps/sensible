@@ -4,9 +4,9 @@
 install_default_apps() {
     local username="$1"
 
-    log_info "Installing default apps (Firefox, VLC, Neovim, Flatpak, modern CLI tools, fonts)..."
+    log_info "Installing default apps (Firefox ESR, VLC, Neovim, Flatpak, modern CLI tools, fonts)..."
     local pkgs=(
-        firefox
+        firefox-esr
         vlc
         neovim
         ripgrep

@@ -31,7 +31,9 @@ sh_files=(
     live/config/hooks/live/0100-sensible-setup.hook.chroot
     live/config/hooks/live/0020-live-boot-to-console.hook.chroot
     live/config/hooks/live/0100-grub-serial-timeout.hook.binary
+    live/config/hooks/live/0200-sb-efi-prefix.hook.binary
     live/config/includes.chroot/usr/local/bin/sensible-install
+    live/config/includes.chroot/etc/profile.d/98-sensible-serial-ready.sh
     live/config/includes.chroot/etc/profile.d/99-sensible-firmware-check.sh
     live/config/includes.chroot/etc/profile.d/99-sensible-autostart.sh
     live/config/includes.chroot/usr/local/bin/lazydeb
@@ -98,6 +100,8 @@ assert_contains "terminal size is measured from its controlling TTY" "${ui_sourc
 assert_file_contains "live console uses readable installer typography" "${REPO_ROOT}/live/config/includes.chroot/etc/default/console-setup" 'FONTSIZE="14x28"'
 assert_contains "keyboard uses searchable system choices" "${setup_source}" '_prompt_searchable "Keyboard layout"'
 assert_contains "enumerated prompts use Gum filter" "${setup_source}" 'gum filter --limit 1 --strict'
+assert_contains "guided flow asks for the root filesystem" "$(<"${REPO_ROOT}/installer/sensible-install.sh")" 'filesystem_form'
+assert_not_contains "guided flow does not hard-code Btrfs" "$(<"${REPO_ROOT}/installer/sensible-install.sh")" 'local FS_CHOICE="btrfs"'
 assert_contains "Linux console hides echoed capability replies" "${ui_source}" 'stty -echoctl'
 assert_contains "terminal state is restored on installer exit" "$(<"${REPO_ROOT}/installer/sensible-install.sh")" 'restore_terminal'
 assert_not_contains "disk selection does not capture rendered UI as its value" "$(<"${REPO_ROOT}/installer/sensible-install.sh")" 'chosen=$(disk_form'
@@ -105,6 +109,51 @@ assert_not_contains "installer no longer asks users to type a disk path" "$(<"${
 assert_contains "Gum menus return explicit hidden values" "${ui_source}" "gum choose --label-delimiter"
 assert_contains "installer renders staged progress" "$(<"${REPO_ROOT}/installer/sensible-install.sh")" 'install_progress_update 12'
 assert_eq "elapsed time uses minutes and zero-padded seconds" "2m 05s" "$(UI_TOOL=text; source "${REPO_ROOT}/installer/lib/ui.sh"; format_elapsed_time 125)"
+
+t_section "build and boot gates fail closed"
+smoke_source="$(<"${REPO_ROOT}/scripts/smoke-boot.sh")"
+hook_source="$(<"${REPO_ROOT}/live/config/hooks/live/0200-sb-efi-prefix.hook.binary")"
+package_check_source="$(<"${REPO_ROOT}/scripts/check-packages.sh")"
+native_build_source="$(<"${REPO_ROOT}/scripts/build-native.sh")"
+container_build_source="$(<"${REPO_ROOT}/live/build.sh")"
+serial_marker="$(<"${REPO_ROOT}/live/config/includes.chroot/etc/profile.d/98-sensible-serial-ready.sh")"
+apps_source="$(<"${REPO_ROOT}/installer/lib/apps.sh")"
+assert_contains "non-BIOS smoke refuses missing OVMF" "$smoke_source" '"${SMOKE_FIRMWARE}" != "bios"'
+assert_contains "smoke asserts a serial-visible marker" "$smoke_source" "SENSIBLE_LIVE_SERIAL_READY"
+assert_contains "serial profile emits the asserted marker" "$serial_marker" "SENSIBLE_LIVE_SERIAL_READY"
+assert_contains "Secure Boot hook checks the redirect file, not just its directory" "$hook_source" "::/EFI/debian/grub.cfg"
+assert_contains "missing EFI image is a build error" "$hook_source" 'exit 1'
+assert_contains "package query status is checked" "$package_check_source" 'CHECK_STATUS'
+assert_contains "container build takes the shared lock" "$container_build_source" 'flock -n 9'
+assert_contains "native build takes the shared lock" "$native_build_source" 'flock -n 9'
+assert_contains "native build stages its selected desktop list" "$native_build_source" 'desktop.list.chroot'
+assert_file_contains "offline closure carries the NVIDIA driver" "${REPO_ROOT}/live/config/package-lists/sensible-target.list.chroot" "nvidia-driver"
+assert_contains "Debian browser package uses ESR name" "$apps_source" "firefox-esr"
+assert_not_contains "unsupported plain Firefox package is absent" "$apps_source" $'\n        firefox\n'
+
+# A container/archive outage must fail the package gate rather than looking
+# like an empty (therefore successful) missing-package result.
+fake_engine_dir="$(mktemp -d /tmp/sensible-package-check.XXXXXX)"
+cat > "${fake_engine_dir}/podman" <<'EOF'
+#!/bin/sh
+echo "simulated archive failure" >&2
+exit 42
+EOF
+chmod +x "${fake_engine_dir}/podman"
+package_gate_output="$(PATH="${fake_engine_dir}:${PATH}" bash "${REPO_ROOT}/scripts/check-packages.sh" gnome 2>&1)"
+package_gate_rc=$?
+rm -rf "${fake_engine_dir}"
+assert_rc "package gate propagates container failure" 1 "${package_gate_rc}"
+assert_contains "package gate explains archive-query failure" "${package_gate_output}" "container exit 42"
+
+missing_img_dir="$(mktemp -d /tmp/sensible-sb-hook.XXXXXX)"
+(
+    cd "${missing_img_dir}"
+    sh "${REPO_ROOT}/live/config/hooks/live/0200-sb-efi-prefix.hook.binary"
+) >/dev/null 2>&1
+missing_img_rc=$?
+rm -rf "${missing_img_dir}"
+assert_rc "Secure Boot hook fails when efi.img is absent" 1 "${missing_img_rc}"
 
 t_section "text UI strips Gum presentation flags"
 plain_output="$(UI_TOOL=text; source "${REPO_ROOT}/installer/lib/ui.sh"; say --foreground 8 --bold "Readable fallback" 2>&1)"

@@ -8,18 +8,18 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Layer 4: Desktop (installed onto the target, not the ISO)   │
+│ Layer 4: Desktop (one variant carried in the offline ISO)   │
 │   GNOME or KDE Plasma                                       │
-│   Optional keyd Mac clipboard (Super+C/V/X)                 │
-│   Flatpak + Flathub · Firefox · Neovim · CLI extras         │
+│   GNOME: keyd Mac clipboard (Super+C/V/X)                   │
+│   Flatpak + Flathub · Firefox ESR · Neovim · CLI extras     │
 ├─────────────────────────────────────────────────────────────┤
 │ Layer 3: Hardware services (on the target)                  │
 │   Testing kernel + microcode + non-free firmware            │
 │   PipeWire / WirePlumber / BlueZ / NetworkManager           │
-│   Mesa (+ nvidia-driver if detected) · fwupd · PPD          │
+│   Mesa + NVIDIA closure · fwupd · PPD                       │
 ├─────────────────────────────────────────────────────────────┤
 │ Layer 2: Disk, unlock, boot                                 │
-│   GPT: EFI + BOOT + SWAP + ROOT                             │
+│   GPT: EFI + BOOT + ROOT; swapfile inside root              │
 │   ROOT = Btrfs or Ext4, optional LUKS2                      │
 │   Plymouth graphical unlock (LUKS only)                     │
 ├─────────────────────────────────────────────────────────────┤
@@ -29,7 +29,7 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The live image is an **installer appliance**, not a full desktop. That keeps ISO size down and avoids shipping two DEs. Firmware and NetworkManager **do** belong on the live image so a laptop can reach a mirror during install.
+The live image is an **installer appliance** carrying the complete target closure, including one desktop variant. Installation is offline; firmware and NetworkManager remain useful for hardware support and optional diagnostics, but reaching a mirror is not a prerequisite.
 
 ---
 
@@ -68,7 +68,9 @@ Ready for Snapper or Timeshift. Those tools are **not** installed in v1.
 
 ### Ext4
 
-Single filesystem on the unlocked root (or the raw partition). Options: `noatime,errors=remount-ro,discard`. `fast_commit` at `mkfs` time.
+The guided installer offers Ext4 as the traditional alternative to Btrfs. It
+uses a single filesystem on the unlocked root (or raw partition),
+`noatime,errors=remount-ro,discard`, and `fast_commit` at `mkfs` time.
 
 ### Why `/boot` is unencrypted
 
@@ -84,7 +86,7 @@ The rule, as implemented:
 
 | Root encryption | Swap | Hibernation |
 | :--- | :--- | :--- |
-| Off | Plain partition (`p3`), `resume=UUID=<swap>` in GRUB | Enabled |
+| Off | Swapfile inside the plain root (`@swap` on Btrfs), `resume=UUID=<rootfs> resume_offset=<n>` | Enabled* |
 | On | Swapfile **inside the LUKS root** (`@swap` subvol on Btrfs / `/swapfile` on Ext4), `resume=UUID=<rootfs> resume_offset=<n>` | Enabled* |
 
 `*` Hibernation writes an unverified resume image, so the kernel blocks it under Secure Boot lockdown. With SB off, hibernation works in both modes.
@@ -133,7 +135,7 @@ Display manager is implied by the DE: **gdm3** with GNOME, **sddm** with Plasma.
 
 ### GNOME (macOS-oriented)
 
-Gestures, overview, dynamic workspaces. Optional **Mac clipboard** (`keyd`), default **on** for this DE.
+Gestures, overview, dynamic workspaces. The GNOME image enables **Mac clipboard** (`keyd`).
 
 `keyd` mapping (input-device level, DE-agnostic):
 
@@ -147,7 +149,7 @@ Super tap alone stays with the DE (GNOME Overview). We do **not** map Super+A / 
 
 ### KDE Plasma (Windows-oriented)
 
-Panel, launcher, tray, Alt+Tab. `keyd` is offered but default **off**.
+Panel, launcher, tray, Alt+Tab. The KDE image leaves `keyd` disabled.
 
 ### Login: autologin with LUKS, idle lock always
 
@@ -188,7 +190,7 @@ Facts to not relearn later:
 | Firmware | `firmware-linux`, `firmware-misc-nonfree`, `firmware-iwlwifi`, `firmware-realtek`, `firmware-atheros`, `firmware-brcm80211`, `firmware-mediatek`, `firmware-sof-signed` |
 | Wi-Fi / BT | NetworkManager, `iwd` or `wpa_supplicant`, BlueZ, `libspa-0.2-bluetooth` |
 | Audio | PipeWire, WirePlumber, `pipewire-pulse`, `pipewire-audio`, `pipewire-alsa` |
-| GPU | `mesa-vulkan-drivers`, `va-driver-all` (VDPAU comes from `mesa-libgallium` via mesa; `vdpau-driver-all` was removed from Testing); `nvidia-driver` + `firmware-misc-nonfree` if `lspci` sees NVIDIA |
+| GPU | `mesa-vulkan-drivers`, `va-driver-all` (VDPAU comes from `mesa-libgallium` via mesa; `vdpau-driver-all` was removed from Testing); the offline closure includes `nvidia-driver`, while NVIDIA KMS configuration is enabled only when `lspci` sees matching hardware |
 | Power | `power-profiles-daemon` (not TLP — it fights PPD and both DEs) |
 | Biometrics | `fprintd`, `libpam-fprintd`; BioPass optional — see §5 **(planned — Phase 6)** |
 | Print / scan | `cups`, `ipp-usb` (driverless IPP-over-USB), `sane-airscan`; `simple-scan` with GNOME, `skanlite` with KDE **(planned — Phase 6)** |
@@ -197,7 +199,7 @@ Facts to not relearn later:
 
 `firmware-broadcom` is not a Debian package name; Broadcom Wi-Fi is `firmware-brcm80211`. `firmware-linux-nonfree` is a leftover name — do not list it.
 
-NVIDIA: detect at install time, install proprietary stack when present. No nouveau-vs-prop prompt in v1. The installer adds `nvidia-drm.modeset=1` to the kernel command line whenever NVIDIA is detected — without KMS, GDM/KWin silently fall back to X11 and the Wayland-by-default promise breaks on exactly the hardware we special-cased.
+NVIDIA: the proprietary stack is baked into the offline closure because installation cannot fetch it after the live root is copied. There is no nouveau-vs-proprietary prompt in v1. The installer adds `nvidia-drm.modeset=1` only when NVIDIA is detected — without KMS, GDM/KWin silently fall back to X11 on exactly the hardware being special-cased.
 
 ---
 
@@ -215,7 +217,7 @@ Keep this list the single source of truth. README and the installer spec should 
 
 | Kind | Package |
 | :--- | :--- |
-| Browser | Firefox |
+| Browser | Firefox ESR (`firefox-esr`) |
 | Media | VLC |
 | Editor | Neovim + LazyVim starter copied to `/etc/skel/.config/nvim` |
 | CLI | `ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`, `jq` |
@@ -239,7 +241,7 @@ No credential helper is configured: Debian ships no packaged libsecret helper (`
 
 ### Optional software
 
-**Current installer checkboxes:** Chromium; Brave from [the official apt origin](https://brave.com/linux/); Audacious; Amberol (GNOME) or Elisa (KDE).
+**Not currently offered by the offline installer:** Chromium; Brave; Audacious; Amberol; Elisa. These belong in a post-install application tool or the desktop's software center.
 
 **Later, not implemented:** AI CLIs may be added as an optional module with pinned artifacts. They are not current installer checkboxes.
 
@@ -253,7 +255,7 @@ Steam, Slack, WhatsApp, Zoom, Discord, Spotify, Snapd, any SaaS “default clien
 
 ## 8. Scope
 
-**In v1:** amd64, UEFI only, single-disk wipe, the four disk combinations above, GNOME or KDE, English-first locales (other locales selectable), working Wi-Fi/audio/GPU on common laptops.
+**In v1:** amd64, UEFI only, single-disk wipe, Btrfs or Ext4 with LUKS on/off, separate GNOME and KDE images, selectable locales, and working Wi-Fi/audio/GPU on common laptops.
 
 **Planned (Phase 6):** biometrics (§5), oh-my-bash + git defaults (§7), ufw, printing/scanning, developer tools, `--config` unattended installs.
 

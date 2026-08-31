@@ -96,20 +96,28 @@ else
 fi
 
 LIST_FILE="$(mktemp)"
-trap 'rm -f "${LIST_FILE}"' EXIT
+ERROR_FILE="$(mktemp)"
+trap 'rm -f "${LIST_FILE}" "${ERROR_FILE}"' EXIT
 printf '%s' "${TO_CHECK}" > "${LIST_FILE}"
 
 # apt-cache show is enough: it answers "does this name exist in the archive",
 # which is exactly the failure being prevented, without solving dependencies.
-MISSING="$(${ENGINE} run --rm -v "${LIST_FILE}:/names.txt:ro" debian:testing-slim bash -c '
+MISSING="$(${ENGINE} run --rm -v "${LIST_FILE}:/names.txt:ro" debian:testing-slim bash -ceu '
     sed -i "s/^Components:.*/Components: main contrib non-free non-free-firmware/" \
-        /etc/apt/sources.list.d/debian.sources 2>/dev/null
-    apt-get update -qq >/dev/null 2>&1
+        /etc/apt/sources.list.d/debian.sources
+    apt-get update -qq >/dev/null
     while read -r p; do
         [ -z "$p" ] && continue
         apt-cache show "$p" >/dev/null 2>&1 || echo "$p"
     done < /names.txt
-' 2>/dev/null)"
+' 2>"${ERROR_FILE}")"
+CHECK_STATUS=$?
+
+if [ "${CHECK_STATUS}" -ne 0 ]; then
+    echo "Error: package validation could not query Debian Testing (container exit ${CHECK_STATUS})." >&2
+    [ ! -s "${ERROR_FILE}" ] || cat "${ERROR_FILE}" >&2
+    exit 1
+fi
 
 if [ -n "${MISSING}" ]; then
     echo

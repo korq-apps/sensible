@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Integration test: runs the installer's full main() flow end-to-end with
 # every destructive/external tool mocked, driven through the text-mode UI via
-# piped answers. Covers new gum-based flow: keyboard → user (username/pass/hostname/timezone/locale) → disk → encryption → confirm
+# piped answers. Covers the guided flow: keyboard → user → disk → filesystem
+# → encryption → confirm.
 
 TEST_NAME="installer_flow_test"
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/harness.sh"
@@ -179,12 +180,15 @@ chroot() {
     return 0
 }
 
-# New flow: keyboard → user → disk → encryption → autologin → final yes/no
+# Guided flow: keyboard → user → disk → filesystem → encryption → autologin
+# → final yes/no
 build_answers() {
     local luks="$1"  # yes/no
     local final_confirm="${2:-yes}" username="${3:-alice}" completion_action="${4:-live}"
+    local filesystem_choice="${5:-btrfs}" filesystem_answer="1"
     local enc_answer="y" # y=encrypted, n=unencrypted
     [ "$luks" = "yes" ] && enc_answer="y" || enc_answer="n"
+    [ "$filesystem_choice" = "ext4" ] && filesystem_answer="2"
     {
         printf 'us\n'                     # keyboard
         printf '%s\n' "${username}"       # username
@@ -196,6 +200,7 @@ build_answers() {
         printf '\n'                       # email (skip)
         printf 'y\n'                      # user summary confirm "Does this look right?"
         printf '1\n'                      # disk menu -> /dev/sda (first entry)
+        printf '%s\n' "${filesystem_answer}" # filesystem: 1=btrfs, 2=ext4
         printf '%s\n' "${enc_answer}"     # encryption yes/no (text mode ui_yesno)
         if [ "$luks" = "yes" ]; then printf 'y\n'; fi  # autologin prompt (LUKS only)
         if [ "$final_confirm" = "no" ]; then printf 'n\n'; else printf 'y\n'; fi
@@ -243,6 +248,7 @@ assert_common_success() {
     assert_file_contains "keyboard layout applied" "${MNT}/etc/default/keyboard" 'XKBLAYOUT="us"'
     assert_file_not_exists "no root autologin leak into target (tty1)" "${MNT}/etc/systemd/system/getty@tty1.service.d/autologin.conf"
     assert_file_not_exists "no live installer autostart profile" "${MNT}/etc/profile.d/99-sensible-autostart.sh"
+    assert_file_not_exists "no live serial smoke marker" "${MNT}/etc/profile.d/98-sensible-serial-ready.sh"
     assert_file_exists "installer log preserved on target" "${MNT}/var/log/sensible-install.log"
     assert_contains "live keyboard applied" "$(log_text)" "setupcon --force --keyboard-only"
     assert_contains "timezone symlink attempted via chroot" "$(log_text)" "chroot ${MNT} ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime"
@@ -261,7 +267,7 @@ assert_common_success() {
     assert_contains "hardware: PipeWire bluetooth codec" "$(log_text)" "libspa-0.2-bluetooth"
     assert_contains "hardware: power-profiles-daemon" "$(log_text)" "power-profiles-daemon"
     assert_contains "hardware: fwupd" "$(log_text)" "fwupd"
-    assert_contains "apps: firefox" "$(log_text)" "firefox"
+    assert_contains "apps: Firefox ESR" "$(log_text)" "firefox-esr"
     assert_contains "apps: neovim" "$(log_text)" "neovim"
     assert_contains "apps: flathub" "$(log_text)" "flatpak remote-add --if-not-exists flathub"
     assert_contains "apps: LazyVim starter" "$(log_text)" "git clone --depth 1 https://github.com/LazyVim/starter"
@@ -322,6 +328,29 @@ run_flow
 assert_common_success
 assert_file_contains "nvidia-drm.modeset=1 on NVIDIA" "${MNT}/etc/default/grub.d/installer.cfg" "nvidia-drm.modeset=1"
 assert_contains "NVIDIA driver added" "$(log_text)" "nvidia-driver"
+
+t_section "Combo 4: Ext4 + LUKS uses a root swapfile and filefrag resume offset"
+build_answers yes yes alice live ext4
+MOCK_NVIDIA=0
+run_flow
+assert_common_success
+assert_contains "ext4 on encrypted mapper" "$(log_text)" "mkfs.ext4 -F -L ROOT -O fast_commit /dev/mapper/cryptroot"
+assert_contains "ext4 swapfile created at root" "$(log_text)" "fallocate -l 8192M ${MNT}/swapfile"
+assert_not_contains "ext4 creates no btrfs subvolumes" "$(log_text)" "btrfs subvolume create"
+assert_file_contains "ext4 encrypted root in fstab" "${MNT}/etc/fstab" "UUID=ROOTFS-FS-UUID-5555  /            ext4"
+assert_file_contains "ext4 swapfile in fstab" "${MNT}/etc/fstab" "/swapfile none swap sw 0 0"
+assert_file_contains "ext4 encrypted resume offset" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTFS-FS-UUID-5555 resume_offset=38400"
+
+t_section "Combo 5: Ext4 + no LUKS formats the raw root partition"
+build_answers no yes alice live ext4
+MOCK_NVIDIA=0
+run_flow
+assert_common_success
+assert_contains "ext4 on raw partition" "$(log_text)" "mkfs.ext4 -F -L ROOT -O fast_commit /dev/sda3"
+assert_not_contains "plain ext4 uses no cryptsetup" "$(log_text)" "luksFormat"
+assert_contains "plain ext4 swapfile created at root" "$(log_text)" "fallocate -l 8192M ${MNT}/swapfile"
+assert_file_contains "plain ext4 root in fstab" "${MNT}/etc/fstab" "UUID=ROOTPART-FS-UUID-4444  /            ext4"
+assert_file_contains "plain ext4 resume offset" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTPART-FS-UUID-4444 resume_offset=38400"
 
 t_section "Live-copy deploy path: excludes keep API dirs, mountpoints exist (offline skips apt)"
 build_answers no
@@ -461,6 +490,7 @@ mock_setup
     printf '\n'                         # email
     printf 'y\n'                        # summary confirm
     printf '1\n'                        # disk
+    printf '1\n'                        # btrfs filesystem
     printf 'y\n'                        # encryption yes
     printf 'y\n'                        # autologin
     printf 'y\n'                        # final destructive confirmation
@@ -490,6 +520,7 @@ mock_setup
     printf '\n'
     printf 'y\n'
     printf '1\n'
+    printf '1\n'                        # btrfs filesystem
     printf 'n\n'                        # no encryption
     printf 'y\n'                        # final destructive confirmation
     printf '2\n'                        # remain in live session

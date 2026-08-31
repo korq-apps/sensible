@@ -13,8 +13,8 @@ set -e
 
 IMG="boot/grub/efi.img"
 if [ ! -f "$IMG" ]; then
-    echo "sb-efi-prefix hook: $IMG not found, nothing to do"
-    exit 0
+    echo "ERROR: sb-efi-prefix hook requires $IMG, but live-build did not create it" >&2
+    exit 1
 fi
 
 # Only relevant when the Secure Boot chain (shim) was installed.
@@ -22,7 +22,7 @@ if ! mdir -i "$IMG" ::/EFI/boot 2>/dev/null | grep -qi bootx64; then
     echo "sb-efi-prefix hook: no shim in efi.img (Secure Boot off), skipping"
     exit 0
 fi
-if mdir -i "$IMG" ::/EFI/debian >/dev/null 2>&1; then
+if mdir -i "$IMG" ::/EFI/debian/grub.cfg >/dev/null 2>&1; then
     echo "sb-efi-prefix hook: /EFI/debian config already present"
     exit 0
 fi

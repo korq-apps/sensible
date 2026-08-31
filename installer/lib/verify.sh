@@ -104,11 +104,13 @@ validate_installed_boot() {
         fi
     fi
 
-    # The EFI binaries grub-install should have staged. Either the signed shim
-    # chain or plain grubx64 is enough to boot; neither is not.
-    if [ ! -f "${esp}/grubx64.efi" ] && [ ! -f "${esp}/shimx64.efi" ]; then
-        problems+=("- no GRUB EFI binary at /boot/efi/EFI/debian; firmware would find nothing to boot")
-    fi
+    # This installer promises the signed chain: firmware launches shim, and
+    # shim then loads Debian's signed GRUB. Either file missing leaves that
+    # chain incomplete even if the other file happens to exist.
+    [ -f "${esp}/shimx64.efi" ] \
+        || problems+=("- no shimx64.efi at /boot/efi/EFI/debian; firmware has no signed first-stage bootloader")
+    [ -f "${esp}/grubx64.efi" ] \
+        || problems+=("- no grubx64.efi at /boot/efi/EFI/debian; shim has no signed GRUB second stage to load")
 
     # grub.cfg must exist AND carry a real boot entry. An empty or entry-less
     # config still satisfies a file-exists test but drops to a grub> prompt.
@@ -158,16 +160,19 @@ validate_installed_boot() {
         # it carries the cryptsetup binaries too -- so a stale, copied-as-is
         # live initramfs passes every existence and mtime check above yet boots
         # straight to busybox with no prompt. Extract the initramfs and demand
-        # a non-empty entry for the cryptroot mapping. Cannot inspect a file
-        # that is not an initramfs at all (test fixtures, truncated writes):
-        # that is a skip, the empty-entry case is the real failure.
+        # a non-empty entry for the cryptroot mapping. A non-empty image that
+        # cannot be extracted is corrupt and must fail verification.
         if command -v unmkinitramfs >/dev/null 2>&1; then
             local initrd inspect_dir entry_file
             initrd=$(compgen -G "${root}/boot/initrd.img-*" | sort -V | tail -n 1 || true)
             if [ -n "$initrd" ] && [ -s "$initrd" ]; then
                 mkdir -p "${root}/var/tmp"
                 inspect_dir=$(mktemp -d "${root}/var/tmp/initrd-check.XXXXXX" 2>/dev/null) || inspect_dir=""
-                if [ -n "$inspect_dir" ] && unmkinitramfs "$initrd" "$inspect_dir" 2>/dev/null; then
+                if [ -z "$inspect_dir" ]; then
+                    problems+=("- could not create a workspace to inspect the generated initramfs")
+                elif ! unmkinitramfs "$initrd" "$inspect_dir" 2>/dev/null; then
+                    problems+=("- generated initramfs could not be extracted; it may be corrupt or truncated")
+                else
                     entry_file=""
                     for entry_file in \
                         "${inspect_dir}/cryptroot/crypttab" \

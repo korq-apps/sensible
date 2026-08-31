@@ -16,10 +16,23 @@ export SENSIBLE_VARIANT="${SENSIBLE_VARIANT:-gnome}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+command -v flock >/dev/null 2>&1 \
+    || { echo "Error: flock is required (install util-linux)." >&2; exit 1; }
+BUILD_LOCK_ID="$(printf '%s' "${REPO_ROOT}" | sha256sum | cut -c1-16)"
+BUILD_LOCK="${TMPDIR:-/tmp}/sensible-live-build-${BUILD_LOCK_ID}.lock"
+exec 9>"${BUILD_LOCK}"
+flock -n 9 \
+    || { echo "Error: another Sensible ISO build is already using this checkout." >&2; exit 1; }
+
 if [ "$(id -u)" -ne 0 ]; then
     echo "Error: live-build needs root. Re-run: sudo scripts/build-native.sh" >&2
     exit 1
 fi
+
+case "${SENSIBLE_VARIANT}" in
+    gnome|kde) ;;
+    *) echo "Error: unknown SENSIBLE_VARIANT '${SENSIBLE_VARIANT}' (expected gnome or kde)." >&2; exit 1 ;;
+esac
 
 # Build toolchain — keep in sync with live/Dockerfile.
 DEPS=(
@@ -50,6 +63,14 @@ rsync -a --delete "${REPO_ROOT}/installer/" "${OPT_SENSIBLE}/installer/"
 rsync -a --delete "${REPO_ROOT}/configs/" "${OPT_SENSIBLE}/configs/"
 rsync -a --delete "${REPO_ROOT}/docs/" "${OPT_SENSIBLE}/docs/"
 chmod -R +x "${OPT_SENSIBLE}/installer/" 2>/dev/null || true
+
+# desktop.list.chroot is generated and intentionally ignored. Recreate it on
+# the native path exactly as live/build.sh does, or a clean checkout silently
+# produces an ISO without the selected desktop and boot closure.
+VARIANT_LIST="${REPO_ROOT}/live/variants/${SENSIBLE_VARIANT}.list"
+[ -f "${VARIANT_LIST}" ] \
+    || { echo "Error: no package list at ${VARIANT_LIST}." >&2; exit 1; }
+cp "${VARIANT_LIST}" "${REPO_ROOT}/live/config/package-lists/desktop.list.chroot"
 
 echo "==> Running live-build (lb clean --purge && lb config && lb build)..."
 cd "${REPO_ROOT}/live"

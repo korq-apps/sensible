@@ -2,7 +2,7 @@
 # Headless UEFI boot smoke test — the exact check CI runs, factored out so it
 # can be run locally against a freshly built ISO. Boots the ISO in QEMU with
 # OVMF (UEFI) and a serial console, then asserts that live-boot reached the
-# systemd banner and the Sensible autologin MOTD.
+# systemd banner and a stable marker emitted by the serial autologin shell.
 #
 # Usage:  scripts/smoke-boot.sh [ISO]
 #   ISO            path to the ISO (default: sensible-$SENSIBLE_VARIANT-debian-testing-amd64.iso)
@@ -73,7 +73,8 @@ case "${SMOKE_FIRMWARE}" in
         exit 1
         ;;
 esac
-if [ -n "${OVMF_VARS}" ] && [ -z "${OVMF_CODE}" ]; then
+if [ "${SMOKE_FIRMWARE}" != "bios" ] \
+    && { [ -z "${OVMF_CODE}" ] || [ -z "${OVMF_VARS}" ]; }; then
     echo "Error: no OVMF code/vars pair found for SMOKE_FIRMWARE=${SMOKE_FIRMWARE}. Install 'ovmf' (Debian/Ubuntu) or 'edk2-ovmf' (Arch)." >&2
     ls -la /usr/share/OVMF 2>/dev/null || true
     exit 1
@@ -150,10 +151,10 @@ else
     echo "  FAIL: systemd 'Welcome to Debian' banner not seen on serial console" >&2
     fail=1
 fi
-if grep -q "Sensible (aka Lazydeb)" "${CLEAN}"; then
-    echo "  ok: Sensible live autologin/MOTD reached"
+if grep -q "SENSIBLE_LIVE_SERIAL_READY" "${CLEAN}"; then
+    echo "  ok: Sensible live serial autologin reached"
 else
-    echo "  FAIL: live session autologin/MOTD ('Sensible (aka Lazydeb)') not reached" >&2
+    echo "  FAIL: live serial autologin marker not reached" >&2
     fail=1
 fi
 
@@ -163,4 +164,4 @@ if [ "${fail}" -ne 0 ]; then
     echo "Smoke test FAILED." >&2
     exit 1
 fi
-echo "Smoke test PASSED: UEFI live session reached autologin."
+echo "Smoke test PASSED: ${SMOKE_FIRMWARE} live session reached serial autologin."
