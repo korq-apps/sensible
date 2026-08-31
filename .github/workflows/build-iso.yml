@@ -34,7 +34,7 @@ jobs:
   build:
     name: Build Live ISO & UEFI Smoke Test (${{ matrix.variant }})
     needs: tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, debian-13]
     strategy:
       fail-fast: false
       matrix:
