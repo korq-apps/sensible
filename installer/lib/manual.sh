@@ -14,13 +14,12 @@ configure_user_manual_autostart() {
     local dest="${user_autostart_dir}/sensible-manual.desktop"
 
     if [ ! -f "$template" ]; then
-        # If running in test mode or minimal chroot without manual staged, warn rather than fail
-        log_warn "Manual autostart template not found at ${template}; skipping first-login autostart."
-        return 0
+        log_err "Manual autostart template not found at ${template}."
+        return 1
     fi
 
     log_info "Configuring first-login manual autostart for ${username}..."
     mkdir -p "$user_autostart_dir"
     cp "$template" "$dest"
-    chroot ${MNT} chown -R "${username}:${username}" "/home/${username}/.config" 2>/dev/null || true
+    chroot ${MNT} chown "${username}:${username}" "/home/${username}/.config/autostart" "/home/${username}/.config/autostart/sensible-manual.desktop"
 }

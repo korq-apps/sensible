@@ -50,10 +50,10 @@ sgdisk()      { mlog "sgdisk $*"; }
 rsync()       {
     mlog "rsync $*"
     mkdir -p "${MNT}/etc/profile.d" "${MNT}/usr/local/bin" "${MNT}/opt/sensible/configs" "${MNT}/boot" "${MNT}/etc/initramfs-tools" "${MNT}/run/live" "${MNT}/etc/live" "${MNT}/var/lib/dpkg/info" "${MNT}/usr/sbin" "${MNT}/usr/bin" "${MNT}/usr/share/sensible/manual" "${MNT}/usr/share/applications"
-    cp "${REPO_ROOT}/configs/keyd-default.conf" "${MNT}/opt/sensible/configs/keyd-default.conf" 2>/dev/null || true
-    cp "${REPO_ROOT}/packaging/manual/sensible-manual-autostart.desktop" "${MNT}/usr/share/sensible/manual/sensible-manual-autostart.desktop" 2>/dev/null || true
-    cp "${REPO_ROOT}/packaging/manual/sensible-manual.desktop" "${MNT}/usr/share/applications/sensible-manual.desktop" 2>/dev/null || true
-    cp "${REPO_ROOT}/packaging/manual/sensible-manual" "${MNT}/usr/local/bin/sensible-manual" 2>/dev/null || true
+    cp "${REPO_ROOT}/configs/keyd-default.conf" "${MNT}/opt/sensible/configs/keyd-default.conf"
+    cp "${REPO_ROOT}/packaging/manual/sensible-manual-autostart.desktop" "${MNT}/usr/share/sensible/manual/sensible-manual-autostart.desktop"
+    cp "${REPO_ROOT}/packaging/manual/sensible-manual.desktop" "${MNT}/usr/share/applications/sensible-manual.desktop"
+    cp "${REPO_ROOT}/packaging/manual/sensible-manual" "${MNT}/usr/local/bin/sensible-manual"
     touch "${MNT}/usr/share/sensible/manual/index.html" "${MNT}/etc/profile.d/99-sensible-autostart.sh" \
           "${MNT}/etc/profile.d/99-sensible-firmware-check.sh" \
           "${MNT}/usr/local/bin/sensible-install" "${MNT}/usr/local/bin/lazydeb"

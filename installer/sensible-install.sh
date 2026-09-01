@@ -679,8 +679,10 @@ virtual disk, or less RAM."
         # Ensure display manager and keyd are enabled if their packages are present
         if [ "$DESKTOP_CHOICE" = "gnome" ]; then
             chroot ${MNT} systemctl enable gdm3.service 2>/dev/null || true
-            if [ -f "${MNT}/etc/keyd/default.conf" ] || [ "$ENABLE_KEYD" = "true" ]; then
+            if [ -f "${MNT}/etc/keyd/default.conf" ]; then
                 chroot ${MNT} systemctl enable keyd.service 2>/dev/null || true
+            elif [ "$ENABLE_KEYD" = "true" ]; then
+                log_warn "GNOME keyd mapping is missing; leaving keyd.service disabled."
             fi
         else
             chroot ${MNT} systemctl enable sddm.service 2>/dev/null || true
@@ -748,8 +750,11 @@ EOF
         chroot ${MNT} flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
     fi
 
-    # Configure offline manual first-login autostart for the primary user
-    configure_user_manual_autostart "$USERNAME"
+    # The offline live image carries the manual payload; the debootstrap path
+    # does not, so it must not claim to configure first-login documentation.
+    if [ "${DEPLOYED_FROM_LIVE}" = "true" ]; then
+        configure_user_manual_autostart "$USERNAME"
+    fi
 
     install_progress_update 9 "Removing live-environment components"
     if [ "$DEPLOYED_FROM_LIVE" = "true" ]; then

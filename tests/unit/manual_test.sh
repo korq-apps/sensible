@@ -26,11 +26,12 @@ assert_contains "HTML contains main element with id" "${manual_html}" '<main id=
 assert_contains "HTML contains navigation landmark" "${manual_html}" '<nav'
 assert_contains "HTML contains footer" "${manual_html}" '<footer'
 
-# Ensure 100% offline self-containment: no external remote scripts, stylesheets, fonts, or images
-assert_not_contains "No external http:// references in CSS" "${manual_css}" "http://"
-assert_not_contains "No external https:// references in CSS" "${manual_css}" "https://"
-assert_not_contains "No protocol-relative // in CSS" "${manual_css}" "url(//"
+# Required assets are self-contained; optional outbound support links are allowed.
+assert_not_contains "No external http:// assets in CSS" "${manual_css}" "url(http://"
+assert_not_contains "No external https:// assets in CSS" "${manual_css}" "url(https://"
+assert_not_contains "No protocol-relative assets in CSS" "${manual_css}" "url(//"
 assert_not_contains "No remote scripts in HTML" "${manual_html}" '<script src="http'
+assert_not_contains "No remote stylesheets in HTML" "${manual_html}" '<link rel="stylesheet" href="http'
 
 # Check that internal anchor links resolve to ids
 while IFS= read -r anchor; do
@@ -84,62 +85,61 @@ rc=0
 "${OPENER}" --help >/dev/null 2>&1 || rc=$?
 assert_rc "opener accepts --help with exit 0" 0 "${rc}"
 
-# Test opener with mocked environment
+# Test the real opener with a temporary manual path and mocked gio.
 TEST_ENV_DIR="${TMP_DIR}/test-user-env"
-mkdir -p "${TEST_ENV_DIR}/state" "${TEST_ENV_DIR}/config/autostart"
+TEST_MANUAL="${TMP_DIR}/manual/index.html"
+PATCHED_OPENER="${TMP_DIR}/sensible-manual"
+mkdir -p "${TEST_ENV_DIR}/state" "${TEST_ENV_DIR}/config/autostart" "$(dirname "${TEST_MANUAL}")"
+printf '<!doctype html>\n' > "${TEST_MANUAL}"
+sed "s#^MANUAL_PATH=.*#MANUAL_PATH=\"${TEST_MANUAL}\"#" "${OPENER}" > "${PATCHED_OPENER}"
+chmod +x "${PATCHED_OPENER}"
+
 MOCK_BIN="${TMP_DIR}/bin"
 mkdir -p "${MOCK_BIN}"
-
-# Create a mock xdg-open that records invocations
-cat > "${MOCK_BIN}/xdg-open" <<'EOF'
+cat > "${MOCK_BIN}/gio" <<'EOF'
 #!/bin/sh
-echo "$@" >> "${MOCK_OPEN_LOG}"
-exit 0
+printf '%s\n' "$*" >> "${MOCK_OPEN_LOG}"
+if [ "${MOCK_GIO_RC:-0}" -ne 0 ]; then
+    exit "${MOCK_GIO_RC}"
+fi
 EOF
-chmod +x "${MOCK_BIN}/xdg-open"
+chmod +x "${MOCK_BIN}/gio"
 
-MOCK_OPEN_LOG="${TMP_DIR}/xdg-open.log"
+MOCK_OPEN_LOG="${TMP_DIR}/gio.log"
 : > "${MOCK_OPEN_LOG}"
+export PATH="${MOCK_BIN}:${PATH}"
+export HOME="${TEST_ENV_DIR}"
+export XDG_STATE_HOME="${TEST_ENV_DIR}/state"
+export XDG_CONFIG_HOME="${TEST_ENV_DIR}/config"
+export MOCK_OPEN_LOG
 
-# Create mock manual in the system path or override via subshell
-# We test the first-login marker logic:
-(
-    export PATH="${MOCK_BIN}:${PATH}"
-    export HOME="${TEST_ENV_DIR}"
-    export XDG_STATE_HOME="${TEST_ENV_DIR}/state"
-    export XDG_CONFIG_HOME="${TEST_ENV_DIR}/config"
-    export MOCK_OPEN_LOG
+cp "${REPO_ROOT}/packaging/manual/sensible-manual-autostart.desktop" "${TEST_ENV_DIR}/config/autostart/sensible-manual.desktop"
 
-    # Seed an autostart desktop entry
-    cp "${REPO_ROOT}/packaging/manual/sensible-manual-autostart.desktop" "${TEST_ENV_DIR}/config/autostart/sensible-manual.desktop"
+# A failed launch must not create the marker or remove autostart.
+export MOCK_GIO_RC=1
+rc=0
+"${PATCHED_OPENER}" --first-login >/dev/null 2>&1 || rc=$?
+assert_rc "failed first-login launch returns non-zero" 1 "${rc}"
+assert_file_not_exists "failed first-login does not create marker" "${TEST_ENV_DIR}/state/sensible/manual-opened-v1"
+assert_file_exists "failed first-login keeps autostart" "${TEST_ENV_DIR}/config/autostart/sensible-manual.desktop"
 
-    # If the default /usr/share/sensible/manual/index.html is not on test host,
-    # create a mock opener that exercises the exact state logic with local path
-    STATE_DIR="${XDG_STATE_HOME}/sensible"
-    MARKER="${STATE_DIR}/manual-opened-v1"
+# A successful launch must create the marker and remove the per-user entry.
+MOCK_GIO_RC=0
+"${PATCHED_OPENER}" --first-login >/dev/null 2>&1
+assert_file_exists "real first-login creates state marker" "${TEST_ENV_DIR}/state/sensible/manual-opened-v1"
+assert_file_not_exists "real first-login removes autostart" "${TEST_ENV_DIR}/config/autostart/sensible-manual.desktop"
+assert_contains "real opener passes local manual URI" "$(<"${MOCK_OPEN_LOG}")" "open file://${TEST_MANUAL}"
+assert_not_contains "opener has no direct browser fallback" "$(<"${OPENER}")" "firefox"
+assert_not_contains "opener has no sensible-browser fallback" "$(<"${OPENER}")" "sensible-browser"
 
-    # 1. First run without marker: should open and create marker
-    if [ ! -f "${MARKER}" ]; then
-        xdg-open "file:///usr/share/sensible/manual/index.html"
-        mkdir -p "${STATE_DIR}"
-        touch "${MARKER}"
-        rm -f "${TEST_ENV_DIR}/config/autostart/sensible-manual.desktop"
-    fi
+open_count="$(wc -l < "${MOCK_OPEN_LOG}")"
+"${PATCHED_OPENER}" --first-login >/dev/null 2>&1
+assert_eq "real first-login is idempotent" "${open_count}" "$(wc -l < "${MOCK_OPEN_LOG}")"
 
-    [ -f "${MARKER}" ] && echo "MARKER_CREATED"
-    [ ! -f "${TEST_ENV_DIR}/config/autostart/sensible-manual.desktop" ] && echo "AUTOSTART_REMOVED"
+# The permanent launcher remains independent of the first-login marker.
+"${PATCHED_OPENER}" >/dev/null 2>&1
+assert_eq "permanent launcher opens despite marker" "$((open_count + 1))" "$(wc -l < "${MOCK_OPEN_LOG}")"
 
-    # 2. Second run: marker exists, should be no-op (no new xdg-open entry)
-    if [ -f "${MARKER}" ]; then
-        echo "MARKER_FOUND_NOOP"
-    fi
-) > "${TMP_DIR}/first-login-test.out"
-
-first_login_out="$(<"${TMP_DIR}/first-login-test.out")"
-assert_contains "first-login creates state marker" "${first_login_out}" "MARKER_CREATED"
-assert_contains "first-login removes desktop autostart" "${first_login_out}" "AUTOSTART_REMOVED"
-assert_contains "first-login is idempotent on second run" "${first_login_out}" "MARKER_FOUND_NOOP"
-assert_contains "xdg-open was called for manual URI" "$(<"${MOCK_OPEN_LOG}")" "file:///usr/share/sensible/manual/index.html"
 
 t_section "Installer configure_user_manual_autostart helper"
 mock_setup
@@ -150,11 +150,11 @@ assert_rc "missing username returns error" 1 "${rc}"
 mock_teardown
 
 mock_setup
-# Scenario B: missing template warns but returns 0
+# Scenario B: missing template fails clearly
 rm -rf "${MNT}/usr/share/sensible/manual"
 rc=0
 configure_user_manual_autostart "alice" >/dev/null 2>&1 || rc=$?
-assert_rc "missing template returns 0 gracefully" 0 "${rc}"
+assert_rc "missing template returns non-zero" 1 "${rc}"
 mock_teardown
 
 mock_setup
@@ -167,7 +167,7 @@ calls="$(cat "${MOCK_LOG}")"
 
 assert_file_exists "user autostart desktop entry deployed" "${MNT}/home/alice/.config/autostart/sensible-manual.desktop"
 assert_file_contains "user autostart executes --first-login" "${MNT}/home/alice/.config/autostart/sensible-manual.desktop" "Exec=/usr/local/bin/sensible-manual --first-login"
-assert_contains "ownership fixed for user .config" "${calls}" "chown -R alice:alice /home/alice/.config"
+assert_contains "ownership fixed only for manual autostart" "${calls}" "chown alice:alice /home/alice/.config/autostart /home/alice/.config/autostart/sensible-manual.desktop"
 mock_teardown
 
 t_section "Build scripts stage manual and packaging"
