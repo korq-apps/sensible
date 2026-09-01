@@ -49,8 +49,12 @@ lsblk() {
 sgdisk()      { mlog "sgdisk $*"; }
 rsync()       {
     mlog "rsync $*"
-    mkdir -p "${MNT}/etc/profile.d" "${MNT}/usr/local/bin" "${MNT}/opt/sensible" "${MNT}/boot" "${MNT}/etc/initramfs-tools" "${MNT}/run/live" "${MNT}/etc/live" "${MNT}/var/lib/dpkg/info" "${MNT}/usr/sbin" "${MNT}/usr/bin"
-    touch "${MNT}/etc/profile.d/99-sensible-autostart.sh" \
+    mkdir -p "${MNT}/etc/profile.d" "${MNT}/usr/local/bin" "${MNT}/opt/sensible/configs" "${MNT}/boot" "${MNT}/etc/initramfs-tools" "${MNT}/run/live" "${MNT}/etc/live" "${MNT}/var/lib/dpkg/info" "${MNT}/usr/sbin" "${MNT}/usr/bin" "${MNT}/usr/share/sensible/manual" "${MNT}/usr/share/applications"
+    cp "${REPO_ROOT}/configs/keyd-default.conf" "${MNT}/opt/sensible/configs/keyd-default.conf" 2>/dev/null || true
+    cp "${REPO_ROOT}/packaging/manual/sensible-manual-autostart.desktop" "${MNT}/usr/share/sensible/manual/sensible-manual-autostart.desktop" 2>/dev/null || true
+    cp "${REPO_ROOT}/packaging/manual/sensible-manual.desktop" "${MNT}/usr/share/applications/sensible-manual.desktop" 2>/dev/null || true
+    cp "${REPO_ROOT}/packaging/manual/sensible-manual" "${MNT}/usr/local/bin/sensible-manual" 2>/dev/null || true
+    touch "${MNT}/usr/share/sensible/manual/index.html" "${MNT}/etc/profile.d/99-sensible-autostart.sh" \
           "${MNT}/etc/profile.d/99-sensible-firmware-check.sh" \
           "${MNT}/usr/local/bin/sensible-install" "${MNT}/usr/local/bin/lazydeb"
     # The live root carries the full baked closure: kernel and initramfs are
@@ -400,6 +404,15 @@ if [ ! -L "${MNT}/usr/sbin/update-initramfs" ]; then
 else
     t_fail "live update-initramfs diversion removed" "still points to $(readlink "${MNT}/usr/sbin/update-initramfs")"
 fi
+assert_file_exists "keyd config deployed on offline GNOME target" "${MNT}/etc/keyd/default.conf"
+assert_file_not_exists "/opt/sensible payload removed on target" "${MNT}/opt/sensible"
+assert_file_exists "manual index.html survives offline install" "${MNT}/usr/share/sensible/manual/index.html"
+assert_file_exists "manual autostart template survives offline install" "${MNT}/usr/share/sensible/manual/sensible-manual-autostart.desktop"
+assert_file_exists "permanent manual launcher survives offline install" "${MNT}/usr/share/applications/sensible-manual.desktop"
+assert_file_exists "manual opener survives offline install" "${MNT}/usr/local/bin/sensible-manual"
+assert_file_exists "per-user manual first-login autostart deployed" "${MNT}/home/alice/.config/autostart/sensible-manual.desktop"
+assert_file_contains "per-user manual autostart invokes --first-login" "${MNT}/home/alice/.config/autostart/sensible-manual.desktop" "Exec=/usr/local/bin/sensible-manual --first-login"
+assert_file_not_exists "no global /etc/xdg/autostart manual entry" "${MNT}/etc/xdg/autostart/sensible-manual.desktop"
 
 t_section "Abort: live-tools diversion surviving purge is caught before initramfs generation"
 build_answers no

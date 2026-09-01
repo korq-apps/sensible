@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sensible User Manual</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to main content</a>
+
+  <div class="app-container">
+    <aside class="sidebar" aria-label="Documentation Navigation">
+      <div class="brand">
+        <div class="brand-title">
+          <span>Sensible</span>
+          <span class="brand-badge">Offline Manual</span>
+        </div>
+        <div class="brand-subtitle">Debian Testing Appliance</div>
+      </div>
+
+      <nav aria-label="Table of Contents">
+        <ul class="nav-list">
+          <li><a href="#welcome" class="nav-link">1. Welcome</a></li>
+          <li><a href="#first-five-minutes" class="nav-link">2. First Five Minutes</a></li>
+          <li><a href="#desktop-basics" class="nav-link">3. Desktop &amp; Shortcuts</a></li>
+          <li><a href="#installing-software" class="nav-link">4. Installing Software</a></li>
+          <li><a href="#included-software" class="nav-link">5. Included Software</a></li>
+          <li><a href="#storage-security" class="nav-link">6. Storage &amp; Security</a></li>
+          <li><a href="#hardware" class="nav-link">7. Hardware &amp; Peripherals</a></li>
+          <li><a href="#backups-recovery" class="nav-link">8. Backups &amp; Snapshots</a></li>
+          <li><a href="#troubleshooting" class="nav-link">9. Troubleshooting</a></li>
+          <li><a href="#getting-help" class="nav-link">10. Getting Help</a></li>
+          <li><a href="#planned-features" class="nav-link">11. Planned Features</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <div class="content-wrapper">
+      <main id="main" class="content-main" tabindex="-1">
+        <header>
+          <h1>Sensible User Manual</h1>
+          <p>This manual is permanently installed on your system at <code>/usr/share/sensible/manual/</code> and is always accessible offline from the application menu (<strong>Sensible Manual</strong>) or terminal by running <code>sensible-manual</code>.</p>
+        </header>
+
+        <section id="welcome">
+          <h2>1. Welcome to Sensible</h2>
+          <p>Sensible is an opinionated remix of <strong>Debian Testing (Forky)</strong> for 64-bit x86 (amd64) UEFI systems. The installed operating system is pure Debian: the UEFI boot entry is Debian, system packages come from Debian repositories, and Debian system administration standards apply throughout.</p>
+          <p>Sensible packages the entire system closure into an offline installer ISO, ensuring installations are predictable, reproducible, and do not depend on mirror availability during disk setup.</p>
+        </section>
+
+        <section id="first-five-minutes">
+          <h2>2. Your First Five Minutes</h2>
+          <p>Follow these quick orientation steps right after logging in:</p>
+          <ol>
+            <li><strong>Connect to Network:</strong> Use the network menu in the top-right status area (GNOME) or bottom-right system tray (KDE) to connect to Wi-Fi or Ethernet.</li>
+            <li><strong>Update Package Lists &amp; System:</strong> Open a terminal and run standard Debian updates:
+              <pre><code>sudo apt update &amp;&amp; sudo apt full-upgrade</code></pre>
+            </li>
+            <li><strong>Reboot on Core Updates:</strong> If a new kernel, systemd, or graphics driver is installed during updates, restart your system to engage the new components.</li>
+            <li><strong>Check Device Firmware:</strong> If your vendor provides updates through the Linux Vendor Firmware Service (LVFS), check with <code>fwupd</code>:
+              <pre><code>sudo fwupdmgr refresh
+sudo fwupdmgr get-updates
+sudo fwupdmgr update</code></pre>
+            </li>
+            <li><strong>Explore Applications:</strong> Open <strong>Software</strong> (GNOME) or <strong>Discover</strong> (KDE) to browse and manage installed tools and Flatpaks.</li>
+          </ol>
+        </section>
+
+        <section id="desktop-basics">
+          <h2>3. Desktop Basics &amp; Shortcuts</h2>
+          
+          <h3>GNOME Edition</h3>
+          <p>The GNOME edition is configured for a focused, fluid workflow:</p>
+          <ul>
+            <li><strong>Super (Windows key):</strong> Tap to open the Activities Overview, search applications, and switch dynamic workspaces.</li>
+            <li><strong>Clipboard Shortcuts (keyd):</strong> GNOME includes a system-level key remapping service (<code>keyd</code>) mapped for Mac-style clipboard muscle memory:
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Shortcut</th>
+                      <th scope="col">Action</th>
+                      <th scope="col">Terminal Behavior</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><kbd>Super</kbd> + <kbd>C</kbd></td>
+                      <td>Copy selection</td>
+                      <td>Sends <code>Ctrl+Insert</code> (safe: does not send <code>SIGINT</code> interrupt signal)</td>
+                    </tr>
+                    <tr>
+                      <td><kbd>Super</kbd> + <kbd>V</kbd></td>
+                      <td>Paste clipboard</td>
+                      <td>Sends <code>Shift+Insert</code> (safe paste in GUI and terminal)</td>
+                    </tr>
+                    <tr>
+                      <td><kbd>Super</kbd> + <kbd>X</kbd></td>
+                      <td>Cut selection</td>
+                      <td>Sends <code>Ctrl+X</code></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="callout info">
+                <div class="callout-title">Terminal Protection</div>
+                In traditional Linux terminals, <code>Ctrl+C</code> interrupts running processes. <code>Super+C</code> allows clean copying without terminating jobs.
+              </div>
+            </li>
+            <li><strong>Workspaces:</strong> Switch between virtual workspaces with <kbd>Super</kbd> + <kbd>Page Up</kbd> / <kbd>Page Down</kbd> or three-finger vertical touchpad gestures.</li>
+          </ul>
+
+          <h3>KDE Plasma Edition</h3>
+          <p>The KDE edition follows traditional desktop conventions:</p>
+          <ul>
+            <li>Standard bottom taskbar, application launcher menu, and system tray.</li>
+            <li>Window switching via <kbd>Alt</kbd> + <kbd>Tab</kbd>.</li>
+            <li>Standard Linux shortcut bindings (keyd is not enabled on KDE).</li>
+          </ul>
+
+          <h3>Screen Locking &amp; Session Defaults</h3>
+          <ul>
+            <li><strong>Idle Timeout:</strong> The screen locks automatically after 5 minutes of inactivity on both GNOME and KDE.</li>
+            <li><strong>Resume Lock:</strong> Resuming from suspend requires unlocking the screen.</li>
+            <li><strong>Automatic Login:</strong> If selected during an encrypted installation, automatic desktop login engages after unlocking the LUKS2 disk at boot. Unencrypted installs always require password login.</li>
+          </ul>
+        </section>
+
+        <section id="installing-software">
+          <h2>4. Installing Software</h2>
+          <p>Sensible provides standard package management tools for Debian and Flatpak:</p>
+
+          <h3>System Packages &amp; CLI Tools (APT)</h3>
+          <p>Use <code>apt</code> for system software, drivers, command-line utilities, and developer runtimes:</p>
+          <pre><code># Search for packages
+apt search &lt;name&gt;
+
+# Install packages
+sudo apt install &lt;package-name&gt;</code></pre>
+
+          <h3>Graphical &amp; Desktop Applications (Flatpak &amp; Flathub)</h3>
+          <p>Flatpak integration is included in the base installation. Because the install is performed offline, Flathub remote configuration is verified on first network connection.</p>
+          <p>To verify or add the Flathub repository:</p>
+          <pre><code># Check existing Flatpak remotes
+flatpak remotes
+
+# Add Flathub if not already present
+flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo</code></pre>
+          <p>Once Flathub is added, browse and install desktop applications (e.g., Slack, Spotify, Discord, VS Code) directly from <strong>GNOME Software</strong> or <strong>KDE Discover</strong>.</p>
+        </section>
+
+        <section id="included-software">
+          <h2>5. Included Software</h2>
+          <p>The base Sensible live installation includes a curated suite of essential software:</p>
+          <ul>
+            <li><strong>Web Browser:</strong> Firefox ESR (Extended Support Release)</li>
+            <li><strong>Media Player:</strong> VLC</li>
+            <li><strong>Text &amp; Code Editor:</strong> Neovim</li>
+            <li><strong>Core CLI Utilities:</strong>
+              <ul>
+                <li><code>ripgrep</code> (<code>rg</code>) — high-performance recursive search</li>
+                <li><code>fd-find</code> (<code>fdfind</code>) — fast and user-friendly file search</li>
+                <li><code>fzf</code> — interactive command-line fuzzy finder</li>
+                <li><code>bat</code> (<code>batcat</code>) — syntax-highlighting pager</li>
+                <li><code>eza</code> — modern directory listing utility</li>
+                <li><code>zoxide</code> — smart directory jumper</li>
+                <li><code>btop</code> — interactive terminal resource monitor</li>
+                <li><code>fastfetch</code> — system information tool</li>
+                <li><code>jq</code> — command-line JSON processor</li>
+              </ul>
+            </li>
+            <li><strong>Fonts:</strong> Noto, Liberation, and Noto Color Emoji font suites</li>
+          </ul>
+        </section>
+
+        <section id="storage-security">
+          <h2>6. Storage &amp; Security</h2>
+
+          <h3>Disk Partitioning Model</h3>
+          <p>Sensible configures a dedicated GPT layout on the target drive:</p>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Partition</th>
+                  <th scope="col">Size</th>
+                  <th scope="col">Filesystem</th>
+                  <th scope="col">Mountpoint</th>
+                  <th scope="col">Encrypted (LUKS)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Partition 1</td>
+                  <td>1024 MiB</td>
+                  <td>FAT32 (ESP)</td>
+                  <td><code>/boot/efi</code></td>
+                  <td>No (UEFI specification)</td>
+                </tr>
+                <tr>
+                  <td>Partition 2</td>
+                  <td>1024 MiB</td>
+                  <td>Ext4</td>
+                  <td><code>/boot</code></td>
+                  <td>No (Unencrypted kernel &amp; initramfs)</td>
+                </tr>
+                <tr>
+                  <td>Partition 3</td>
+                  <td>Remainder</td>
+                  <td>Btrfs or Ext4</td>
+                  <td><code>/</code> (root)</td>
+                  <td>Optional LUKS2</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Root Filesystems</h3>
+          <ul>
+            <li><strong>Btrfs:</strong> Structured with dedicated subvolumes:
+              <ul>
+                <li><code>@</code> mounted at <code>/</code></li>
+                <li><code>@home</code> mounted at <code>/home</code></li>
+                <li><code>@snapshots</code> mounted at <code>/.snapshots</code></li>
+                <li><code>@var_log</code> mounted at <code>/var/log</code></li>
+                <li><code>@swap</code> mounted at <code>/swap</code> (uncompressed swapfile host)</li>
+              </ul>
+            </li>
+            <li><strong>Ext4:</strong> Traditional single root filesystem with <code>fast_commit</code> enabled.</li>
+          </ul>
+
+          <h3>Swapfile &amp; Hibernation</h3>
+          <p>Swap is configured as a dedicated swapfile inside root (matching RAM capacity). When LUKS is enabled, the swapfile is located inside the encrypted container and is protected at rest.</p>
+          <div class="callout warn">
+            <div class="callout-title">Secure Boot &amp; Hibernation</div>
+            Under UEFI Secure Boot lockdown, the Linux kernel disables unverified hibernation resumes to protect kernel integrity. Hibernation works when Secure Boot is disabled.
+          </div>
+
+          <h3>Unencrypted <code>/boot</code> &amp; Secure Boot Chain</h3>
+          <p><code>/boot</code> is left unencrypted to enable smooth graphical boot unlock via Plymouth and avoid fragile GRUB cryptodisk drivers. The boot chain is protected by UEFI Secure Boot using Debian's Microsoft-signed shim and Debian-signed GRUB binaries.</p>
+        </section>
+
+        <section id="hardware">
+          <h2>7. Hardware &amp; Peripherals</h2>
+          <ul>
+            <li><strong>Kernel &amp; Firmware:</strong> Modern Debian Testing kernel with complete <code>non-free-firmware</code> package set (Intel, AMD, Realtek, Broadcom, MediaTek, SOF audio).</li>
+            <li><strong>Audio &amp; Bluetooth:</strong> PipeWire and WirePlumber manage audio routing and Bluetooth profiles.</li>
+            <li><strong>Power Management:</strong> <code>power-profiles-daemon</code> provides integrated power modes (Power Saver, Balanced, Performance) in desktop settings.</li>
+            <li><strong>Printing &amp; Scanning:</strong> CUPS, <code>ipp-usb</code>, and <code>sane-airscan</code> provide driverless IPP/eSCL printing and scanning support.</li>
+          </ul>
+
+          <div class="callout info">
+            <div class="callout-title">NVIDIA Hardware &amp; Secure Boot</div>
+            If your system uses a proprietary NVIDIA GPU, the kernel module requires signing to load under Secure Boot. If graphics fall back to software rendering, either enroll a Machine Owner Key (MOK) or disable Secure Boot in UEFI firmware settings.
+          </div>
+        </section>
+
+        <section id="backups-recovery">
+          <h2>8. Backups &amp; Snapshots</h2>
+          <p>Disk encryption protects data when the computer is powered off or stolen, but it is <strong>not a backup</strong>. A hardware failure, filesystem corruption, or accidental deletion can still cause permanent data loss.</p>
+          <ul>
+            <li><strong>Btrfs Readiness:</strong> The Btrfs layout includes a dedicated <code>@snapshots</code> subvolume and isolates <code>@swap</code> outside snapshots. You can install tools like Snapper or Timeshift from APT:
+              <pre><code>sudo apt install snapper</code></pre>
+            </li>
+            <li><strong>External Backups:</strong> Maintain regular backups of <code>/home</code> on external storage or remote destinations using tools like BorgBackup, Restic, or Pika Backup (available on Flathub).</li>
+          </ul>
+        </section>
+
+        <section id="troubleshooting">
+          <h2>9. Troubleshooting &amp; Diagnostics</h2>
+
+          <h3>Installation Logs</h3>
+          <p>The installer records detailed execution steps in <code>/var/log/sensible-install.log</code>. To inspect the install history:</p>
+          <pre><code>sudo less /var/log/sensible-install.log</code></pre>
+
+          <h3>Common Diagnostic Commands</h3>
+          <pre><code># Check storage devices and mountpoints
+lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS
+
+# Check network interfaces
+ip link
+
+# View system journal for the current boot
+journalctl -b --no-pager
+
+# Check system hardware and services
+systemctl status</code></pre>
+
+          <div class="callout warn">
+            <div class="callout-title">Log Sanitization Reminder</div>
+            When sharing diagnostic outputs online, always redact usernames, Wi-Fi networks, MAC addresses, and private file names. Never post passwords or encryption passphrases.
+          </div>
+        </section>
+
+        <section id="getting-help">
+          <h2>10. Getting Help</h2>
+          <ul>
+            <li><strong>Issue Tracker:</strong> Report installer or configuration bugs at <a href="https://github.com/korq-apps/sensible/issues">https://github.com/korq-apps/sensible/issues</a>.</li>
+            <li><strong>Debian Documentation:</strong> For general Debian system administration, package management, and service configuration, consult the official <a href="https://www.debian.org/doc/">Debian Documentation</a> and <a href="https://wiki.debian.org/">Debian Wiki</a>.</li>
+          </ul>
+        </section>
+
+        <section id="planned-features">
+          <h2>11. What Is Planned, Not Shipped</h2>
+          <p>The following features are part of the post-v1 roadmap and are not yet enabled in the default image:</p>
+          <ul>
+            <li><strong><code>sensible-apps</code>:</strong> An interactive post-install tool for installing developer toolchains (Docker, GitHub CLI), additional browsers, and media software with verified signatures.</li>
+            <li><strong>Biometric Authentication:</strong> Integrated fingerprint login and BioPass face recognition enrollment.</li>
+            <li><strong>Firewall Presets:</strong> Pre-configured <code>ufw</code> policies and KDE Connect firewall discovery rules.</li>
+            <li><strong>Shell Enhancements:</strong> Pre-configured Oh My Bash themes and expanded Git global defaults.</li>
+          </ul>
+        </section>
+
+        <footer>
+          <p>Sensible &copy; Korq. Debian is a registered trademark of Software in the Public Interest, Inc.</p>
+        </footer>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

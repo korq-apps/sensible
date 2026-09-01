@@ -50,11 +50,11 @@ The live ISO does **not** ship both desktops. Choose the GNOME or KDE release as
 
 ### Software (defaults vs optional)
 
-**Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak + Flathub, fonts, `fwupd`, Secure Boot chain on the installed system (shim + Debian-signed GRUB).
+**Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak, fonts, `fwupd`, Secure Boot chain on the installed system (shim + Debian-signed GRUB). The offline **Sensible Manual** is bundled at `/usr/share/sensible/manual/` and opens once on first login (launcher entry: **Sensible Manual**).
 
-**Default apps:** Firefox ESR, VLC, Neovim (LazyVim starter in `/etc/skel`), modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`).
+**Default apps:** Firefox ESR, VLC, Neovim, modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`).
 
-**Not currently offered by the offline installer:** Chromium, Brave, Audacious, Amberol, and Elisa. Install additional applications after first boot; commercial applications belong on Flathub rather than in the base image.
+**Not currently offered by the offline installer:** Chromium, Brave, Audacious, Amberol, and Elisa. Install additional applications after first boot; commercial applications belong on Flathub rather than in the base image. The Flathub remote is not pre-configured by the offline installer; add it after networking with `flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo`.
 
 **Not currently offered:** AI CLIs. If added later, they will be optional and use pinned artifacts rather than `curl | sh` from the ISO.
 

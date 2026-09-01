@@ -27,6 +27,8 @@ source "${LIB_DIR}/hardware.sh"
 source "${LIB_DIR}/desktop.sh"
 # shellcheck source=lib/apps.sh
 source "${LIB_DIR}/apps.sh"
+# shellcheck source=lib/manual.sh
+source "${LIB_DIR}/manual.sh"
 # shellcheck source=lib/verify.sh
 source "${LIB_DIR}/verify.sh"
 
@@ -543,6 +545,15 @@ virtual disk, or less RAM."
           "${MNT}/usr/local/bin/sensible-install" \
           "${MNT}/usr/local/bin/lazydeb" \
           "${MNT}/etc/issue.sensible"
+    if [ "$ENABLE_KEYD" = "true" ] && [ ! -f "${MNT}/etc/keyd/default.conf" ]; then
+        if [ -f "${MNT}/opt/sensible/configs/keyd-default.conf" ]; then
+            mkdir -p "${MNT}/etc/keyd"
+            cp "${MNT}/opt/sensible/configs/keyd-default.conf" "${MNT}/etc/keyd/default.conf"
+        elif [ -f "${CONFIG_DIR}/keyd-default.conf" ]; then
+            mkdir -p "${MNT}/etc/keyd"
+            cp "${CONFIG_DIR}/keyd-default.conf" "${MNT}/etc/keyd/default.conf"
+        fi
+    fi
     rm -rf "${MNT}/opt/sensible"
     printf 'Debian GNU/Linux testing \\n \\l\n' > "${MNT}/etc/issue"
     printf 'Debian GNU/Linux testing\n' > "${MNT}/etc/issue.net"
@@ -668,11 +679,13 @@ virtual disk, or less RAM."
         # Ensure display manager and keyd are enabled if their packages are present
         if [ "$DESKTOP_CHOICE" = "gnome" ]; then
             chroot ${MNT} systemctl enable gdm3.service 2>/dev/null || true
+            if [ -f "${MNT}/etc/keyd/default.conf" ] || [ "$ENABLE_KEYD" = "true" ]; then
+                chroot ${MNT} systemctl enable keyd.service 2>/dev/null || true
+            fi
         else
             chroot ${MNT} systemctl enable sddm.service 2>/dev/null || true
-        fi
-        if [ -f "${MNT}/etc/keyd/default.conf" ] || [ "$ENABLE_KEYD" = "true" ]; then
-            chroot ${MNT} systemctl enable keyd.service 2>/dev/null || true
+            chroot ${MNT} systemctl disable keyd.service 2>/dev/null || true
+            rm -f "${MNT}/etc/keyd/default.conf"
         fi
         # Plymouth theme already baked — ensure it matches variant
         local plymouth_theme="spinner"
@@ -734,6 +747,9 @@ EOF
         fi
         chroot ${MNT} flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
     fi
+
+    # Configure offline manual first-login autostart for the primary user
+    configure_user_manual_autostart "$USERNAME"
 
     install_progress_update 9 "Removing live-environment components"
     if [ "$DEPLOYED_FROM_LIVE" = "true" ]; then

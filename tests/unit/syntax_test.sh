@@ -22,7 +22,9 @@ sh_files=(
     installer/lib/hardware.sh
     installer/lib/desktop.sh
     installer/lib/apps.sh
+    installer/lib/manual.sh
     installer/lib/verify.sh
+    packaging/manual/sensible-manual
     live/build.sh
     live/build-stages.sh
     live/auto/config
@@ -49,6 +51,7 @@ sh_files=(
     tests/unit/fstab_test.sh
     tests/unit/desktop_test.sh
     tests/unit/apps_test.sh
+    tests/unit/manual_test.sh
     tests/unit/syntax_test.sh
     tests/unit/verify_test.sh
     tests/integration/installer_flow_test.sh
@@ -73,7 +76,7 @@ for f in "${REPO_ROOT}"/live/config/hooks/*/*; do
 done
 
 t_section "executable bits"
-for f in installer/sensible-install.sh live/build.sh scripts/run-qemu.sh scripts/smoke-boot.sh live/auto/config tests/run-tests.sh; do
+for f in installer/sensible-install.sh packaging/manual/sensible-manual live/build.sh scripts/run-qemu.sh scripts/smoke-boot.sh live/auto/config tests/run-tests.sh; do
     if [ -x "${REPO_ROOT}/${f}" ]; then t_ok; else t_fail "${f} is not executable" ""; fi
 done
 

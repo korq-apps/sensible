@@ -64,6 +64,25 @@ rsync -a --delete "${REPO_ROOT}/configs/" "${OPT_SENSIBLE}/configs/"
 rsync -a --delete "${REPO_ROOT}/docs/" "${OPT_SENSIBLE}/docs/"
 chmod -R +x "${OPT_SENSIBLE}/installer/" 2>/dev/null || true
 
+# Stage offline manual and desktop packaging
+MANUAL_DEST="${REPO_ROOT}/live/config/includes.chroot/usr/share/sensible/manual"
+mkdir -p "${MANUAL_DEST}" \
+         "${REPO_ROOT}/live/config/includes.chroot/usr/share/applications" \
+         "${REPO_ROOT}/live/config/includes.chroot/usr/local/bin"
+rsync -a --delete "${REPO_ROOT}/manual/" "${MANUAL_DEST}/"
+cp "${REPO_ROOT}/packaging/manual/sensible-manual-autostart.desktop" "${MANUAL_DEST}/"
+cp "${REPO_ROOT}/packaging/manual/sensible-manual.desktop" "${REPO_ROOT}/live/config/includes.chroot/usr/share/applications/"
+cp "${REPO_ROOT}/packaging/manual/sensible-manual" "${REPO_ROOT}/live/config/includes.chroot/usr/local/bin/"
+chmod +x "${REPO_ROOT}/live/config/includes.chroot/usr/local/bin/sensible-manual"
+
+# For GNOME, stage keyd configuration into /etc/keyd/default.conf
+if [ "${SENSIBLE_VARIANT}" = "gnome" ]; then
+    mkdir -p "${REPO_ROOT}/live/config/includes.chroot/etc/keyd"
+    cp "${REPO_ROOT}/configs/keyd-default.conf" "${REPO_ROOT}/live/config/includes.chroot/etc/keyd/default.conf"
+else
+    rm -f "${REPO_ROOT}/live/config/includes.chroot/etc/keyd/default.conf"
+fi
+
 # desktop.list.chroot is generated and intentionally ignored. Recreate it on
 # the native path exactly as live/build.sh does, or a clean checkout silently
 # produces an ISO without the selected desktop and boot closure.

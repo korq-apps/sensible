@@ -156,6 +156,9 @@ in the live session for diagnostics.
 - If skip-login was enabled, the desktop opens after disk unlock. Otherwise,
   log in with the username and user password created during installation.
 - Without encryption, there is no disk-unlock prompt; log in normally.
+- The **Sensible Manual** is installed locally at `/usr/share/sensible/manual/`
+  and is automatically opened once on first login. It can also be opened at any
+  time from the application menu, or with `sensible-manual` from a terminal.
 
 Connect to the network, then install Debian updates in a terminal:
 
@@ -165,8 +168,15 @@ sudo apt full-upgrade
 ```
 
 Restart if a kernel or core system component was updated. Use GNOME Software
-or KDE Discover to add and update Flatpak applications from Flathub. For
-supported device firmware, check LVFS through `fwupd`:
+or KDE Discover to add and update Flatpak applications from Flathub. Flathub
+is **not** pre-configured by the offline installer: check with
+`flatpak remotes` and add it when you are online:
+
+```bash
+flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+```
+
+For supported device firmware, check LVFS through `fwupd`:
 
 ```bash
 sudo fwupdmgr refresh

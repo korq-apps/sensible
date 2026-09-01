@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Sensible manual opener — launches local offline HTML documentation.
+set -euo pipefail
+
+MANUAL_PATH="/usr/share/sensible/manual/index.html"
+MANUAL_URI="file://${MANUAL_PATH}"
+
+FIRST_LOGIN=false
+
+case "${1:-}" in
+    "")
+        ;;
+    --first-login)
+        FIRST_LOGIN=true
+        ;;
+    -h|--help)
+        echo "Usage: sensible-manual [--first-login]"
+        exit 0
+        ;;
+    *)
+        echo "Error: unknown argument '${1}'" >&2
+        echo "Usage: sensible-manual [--first-login]" >&2
+        exit 1
+        ;;
+esac
+
+if [ ! -f "${MANUAL_PATH}" ]; then
+    echo "Error: Sensible manual not found at ${MANUAL_PATH}" >&2
+    exit 1
+fi
+
+open_manual() {
+    if command -v gio >/dev/null 2>&1; then
+        gio open "${MANUAL_URI}"
+    elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "${MANUAL_URI}"
+    elif command -v firefox >/dev/null 2>&1; then
+        firefox "${MANUAL_URI}" &
+    elif command -v sensible-browser >/dev/null 2>&1; then
+        sensible-browser "${MANUAL_URI}" &
+    else
+        echo "Error: No browser or URI opener (gio, xdg-open) available." >&2
+        return 1
+    fi
+}
+
+if [ "${FIRST_LOGIN}" = "true" ]; then
+    STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/sensible"
+    MARKER="${STATE_DIR}/manual-opened-v1"
+
+    if [ -f "${MARKER}" ]; then
+        exit 0
+    fi
+
+    if open_manual; then
+        mkdir -p "${STATE_DIR}"
+        touch "${MARKER}"
+        # Clean up autostart desktop entry if present in user's home
+        USER_AUTOSTART="${XDG_CONFIG_HOME:-${HOME}/.config}/autostart/sensible-manual.desktop"
+        rm -f "${USER_AUTOSTART}" 2>/dev/null || true
+    else
+        echo "Warning: Failed to launch manual on first login." >&2
+        exit 1
+    fi
+else
+    open_manual
+fi

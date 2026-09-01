@@ -44,6 +44,17 @@ rsync -a --delete "${REPO_ROOT}/configs/" "${OPT_SENSIBLE}/configs/"
 rsync -a --delete "${REPO_ROOT}/docs/" "${OPT_SENSIBLE}/docs/"
 chmod -R +x "${OPT_SENSIBLE}/installer/" 2>/dev/null || true
 
+# Stage offline manual and desktop packaging
+MANUAL_DEST="${REPO_ROOT}/live/config/includes.chroot/usr/share/sensible/manual"
+mkdir -p "${MANUAL_DEST}" \
+         "${REPO_ROOT}/live/config/includes.chroot/usr/share/applications" \
+         "${REPO_ROOT}/live/config/includes.chroot/usr/local/bin"
+rsync -a --delete "${REPO_ROOT}/manual/" "${MANUAL_DEST}/"
+cp "${REPO_ROOT}/packaging/manual/sensible-manual-autostart.desktop" "${MANUAL_DEST}/"
+cp "${REPO_ROOT}/packaging/manual/sensible-manual.desktop" "${REPO_ROOT}/live/config/includes.chroot/usr/share/applications/"
+cp "${REPO_ROOT}/packaging/manual/sensible-manual" "${REPO_ROOT}/live/config/includes.chroot/usr/local/bin/"
+chmod +x "${REPO_ROOT}/live/config/includes.chroot/usr/local/bin/sensible-manual"
+
 # Desktop variant. The ISO carries the finished system, so the desktop is
 # chosen at build time; the installer never asks.
 SENSIBLE_VARIANT="${SENSIBLE_VARIANT:-gnome}"
@@ -52,6 +63,14 @@ case "${SENSIBLE_VARIANT}" in
     *) echo "Error: unknown SENSIBLE_VARIANT '${SENSIBLE_VARIANT}' (expected gnome or kde)." >&2; exit 1 ;;
 esac
 echo "==> Variant: ${SENSIBLE_VARIANT}"
+
+# For GNOME, stage keyd configuration into /etc/keyd/default.conf
+if [ "${SENSIBLE_VARIANT}" = "gnome" ]; then
+    mkdir -p "${REPO_ROOT}/live/config/includes.chroot/etc/keyd"
+    cp "${REPO_ROOT}/configs/keyd-default.conf" "${REPO_ROOT}/live/config/includes.chroot/etc/keyd/default.conf"
+else
+    rm -f "${REPO_ROOT}/live/config/includes.chroot/etc/keyd/default.conf"
+fi
 
 VARIANT_LIST="${REPO_ROOT}/live/variants/${SENSIBLE_VARIANT}.list"
 [ -f "${VARIANT_LIST}" ] || { echo "Error: no package list at ${VARIANT_LIST}." >&2; exit 1; }

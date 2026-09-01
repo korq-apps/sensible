@@ -37,6 +37,10 @@ live/binary.modified_timestamps
 
 # Staged files in includes.chroot
 live/config/includes.chroot/opt/sensible/
+live/config/includes.chroot/usr/share/sensible/manual/
+live/config/includes.chroot/usr/share/applications/sensible-manual.desktop
+live/config/includes.chroot/usr/local/bin/sensible-manual
+live/config/includes.chroot/etc/keyd/
 
 # Temporary files
 *~
