@@ -21,5 +21,7 @@ configure_user_manual_autostart() {
     log_info "Configuring first-login manual autostart for ${username}..."
     mkdir -p "$user_autostart_dir"
     cp "$template" "$dest"
-    chroot ${MNT} chown "${username}:${username}" "/home/${username}/.config/autostart" "/home/${username}/.config/autostart/sensible-manual.desktop"
+    chroot ${MNT} chown "${username}:${username}" \
+        "/home/${username}/.config/autostart" \
+        "/home/${username}/.config/autostart/sensible-manual.desktop"
 }
