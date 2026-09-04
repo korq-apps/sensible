@@ -19,10 +19,14 @@ valid_username "speech-dispatcher"; assert_rc "future accessibility service acco
 valid_username "pipewire"; assert_rc "future audio service account rejected" 1 $?
 valid_username "Bad Name"; assert_rc "invalid username characters rejected" 1 $?
 valid_username "sensible_test_user_9274"; assert_rc "available username accepted" 0 $?
-valid_timezone "UTC"; assert_rc "UTC accepted" 0 $?
-valid_timezone "Europe/Berlin"; assert_rc "IANA timezone accepted" 0 $?
-valid_timezone "../../../etc/passwd"; assert_rc "path traversal rejected" 1 $?
-valid_timezone "/etc/passwd"; assert_rc "absolute path rejected" 1 $?
+
+zoneinfo="${fixture}/zoneinfo"
+mkdir -p "${zoneinfo}/Europe"
+touch "${zoneinfo}/UTC" "${zoneinfo}/Europe/Berlin"
+valid_timezone "UTC" "${zoneinfo}"; assert_rc "UTC accepted" 0 $?
+valid_timezone "Europe/Berlin" "${zoneinfo}"; assert_rc "IANA timezone accepted" 0 $?
+valid_timezone "../../../etc/passwd" "${zoneinfo}"; assert_rc "path traversal rejected" 1 $?
+valid_timezone "/etc/passwd" "${zoneinfo}"; assert_rc "absolute path rejected" 1 $?
 
 symbols="${fixture}/symbols"
 mkdir -p "${symbols}"
