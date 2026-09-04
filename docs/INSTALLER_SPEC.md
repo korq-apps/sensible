@@ -137,19 +137,16 @@ if [ "$ENABLE_LUKS" = true ]; then
   TARGET_ROOT=/dev/mapper/cryptroot
 else
   TARGET_ROOT=$ROOT_PART
-  mkswap -L SWAP "$SWAP_PART"
 fi
 
-# Swap is a swapfile on the encrypted root: encrypted at rest and resumable.
+# Swap is a swapfile inside root in both modes; LUKS encrypts it with root.
 # It must be created only AFTER format_and_mount has made the root filesystem
 # and mounted it (Btrfs: the @swap subvolume at /swap), otherwise the file is
 # allocated on the installer's own /mnt instead of inside the target.
-if [ "$ENABLE_LUKS" = true ]; then
-  create_swapfile "$FS_TYPE" "$SWAP_MIB"   # see §5.1
-fi
+create_swapfile "$FS_TYPE" "$SWAP_MIB"   # after mounting root; see §5.1
 ```
 
-### 5.1 Swapfile (LUKS only) and `resume_offset`
+### 5.1 Swapfile (both encryption modes) and `resume_offset`
 
 Btrfs: dedicated `@swap` subvolume mounted at `/swap` (no compression, never
 snapshotted). Ext4: `/swapfile` at the root.

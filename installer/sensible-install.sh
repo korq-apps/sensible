@@ -112,7 +112,7 @@ boot_package_closure() {
 require_live_target_closure() {
     local live_root="${LIVE_ROOT_SENTINEL:-/}"
     local missing=()
-    local pkg
+    local pkg artifact counterpart version
 
     while IFS= read -r pkg; do
         if ! dpkg-query -W -f='${db:Status-Abbrev}' "${pkg}" 2>/dev/null | grep -q '^ii '; then
@@ -120,15 +120,31 @@ require_live_target_closure() {
         fi
     done < <(boot_package_closure)
 
-    if ! compgen -G "${live_root%/}/boot/vmlinuz-*" >/dev/null; then
-        missing+=("boot/vmlinuz-*")
-    fi
-    if ! compgen -G "${live_root%/}/boot/initrd.img-*" >/dev/null; then
-        missing+=("boot/initrd.img-*")
-    fi
+    # Check every versioned image: a valid older pair must not hide a broken
+    # newer image that bootloader generation or target verification will select.
+    # An unmatched glob remains literal and fails the regular/non-empty check.
+    for artifact in "${live_root%/}"/boot/vmlinuz-* "${live_root%/}"/boot/initrd.img-*; do
+        if [ ! -f "$artifact" ] || [ ! -s "$artifact" ]; then
+            missing+=("${artifact#"${live_root%/}/"} (not a non-empty regular file)")
+            continue
+        fi
+        case "${artifact##*/}" in
+            vmlinuz-*)
+                version=${artifact##*/vmlinuz-}
+                counterpart="${live_root%/}/boot/initrd.img-${version}"
+                ;;
+            initrd.img-*)
+                version=${artifact##*/initrd.img-}
+                counterpart="${live_root%/}/boot/vmlinuz-${version}"
+                ;;
+        esac
+        if [ -z "$version" ] || [ ! -f "$counterpart" ] || [ ! -s "$counterpart" ]; then
+            missing+=("${artifact##*/} (no non-empty matching kernel/initramfs pair)")
+        fi
+    done
 
     if [ "${#missing[@]}" -gt 0 ]; then
-        log_err "Offline ISO target closure is incomplete: missing ${missing[*]}. Rebuild the ISO with the complete target package list; no disk was changed."
+        log_err "Offline ISO target closure is incomplete: missing or invalid ${missing[*]}. Rebuild the ISO with the complete target package list and boot images; no disk was changed."
         return 1
     fi
 }

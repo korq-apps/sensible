@@ -140,6 +140,17 @@ unsafe disk operation reliable.
 Partial implementation does not earn a check. The remaining unchecked items
 require release-candidate virtual or physical installation evidence.
 
+Release-blocking work is tracked in [#4: automated input](https://github.com/korq-apps/sensible/issues/4),
+[#5: installed-disk QEMU matrix](https://github.com/korq-apps/sensible/issues/5)
+(depends on #4), and [#6: physical hardware evidence](https://github.com/korq-apps/sensible/issues/6).
+The final release decision still requires candidate checksums and reviewed results.
+
+Additional follow-ups: [#7: back-navigation](https://github.com/korq-apps/sensible/issues/7),
+[#8: Secure Boot/hibernation messaging](https://github.com/korq-apps/sensible/issues/8),
+and [#9: complete offline package/asset validation](https://github.com/korq-apps/sensible/issues/9).
+Current pre-flight validates boot package status and non-empty, version-matched
+kernel/initramfs pairs; it does not validate the complete desktop/asset set.
+
 **Later UI work:** after the safety mechanics above are implemented and tested,
 add a guided/recommended path that explains defaults and keeps an advanced path
 for explicit choices. The broader UI redesign may follow; it must not be used

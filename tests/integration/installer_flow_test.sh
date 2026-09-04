@@ -17,7 +17,8 @@ sleep()       { :; }
 
 WORK="$(mktemp -d /tmp/sensible-flow-test.XXXXXX)"
 mkdir -p "${WORK}/boot"
-touch "${WORK}/boot/vmlinuz-7.1.0-amd64" "${WORK}/boot/initrd.img-7.1.0-amd64"
+printf 'mock kernel\n' > "${WORK}/boot/vmlinuz-7.1.0-amd64"
+printf 'mock initramfs\n' > "${WORK}/boot/initrd.img-7.1.0-amd64"
 ANSWERS="${WORK}/answers.txt"
 OUT="${WORK}/stdout.log"
 ERR="${WORK}/stderr.log"
@@ -372,10 +373,41 @@ assert_not_contains "incomplete live closure does not partition" "$(log_text)" "
 t_section "Missing live boot artifact is rejected before partitioning"
 rm -f "${WORK}/boot/initrd.img-7.1.0-amd64"
 run_flow
-touch "${WORK}/boot/initrd.img-7.1.0-amd64"
+printf 'mock initramfs\n' > "${WORK}/boot/initrd.img-7.1.0-amd64"
 assert_rc "missing live initramfs aborts" 1 "${RC}"
 assert_contains "pre-wipe closure error names missing initramfs" "$(output_text)" "boot/initrd.img-*"
 assert_not_contains "missing live boot artifact does not partition" "$(log_text)" "sgdisk"
+
+t_section "Invalid live boot artifacts are rejected before any wipe"
+for invalid_artifact in empty-kernel empty-initramfs mismatched-version directory broken-symlink newer-unpaired; do
+    case "$invalid_artifact" in
+        empty-kernel) : > "${WORK}/boot/vmlinuz-7.1.0-amd64" ;;
+        empty-initramfs) : > "${WORK}/boot/initrd.img-7.1.0-amd64" ;;
+        mismatched-version)
+            mv "${WORK}/boot/initrd.img-7.1.0-amd64" "${WORK}/boot/initrd.img-7.2.0-amd64" ;;
+        directory)
+            rm "${WORK}/boot/initrd.img-7.1.0-amd64"
+            mkdir "${WORK}/boot/initrd.img-7.1.0-amd64" ;;
+        broken-symlink)
+            rm "${WORK}/boot/initrd.img-7.1.0-amd64"
+            ln -s missing-image "${WORK}/boot/initrd.img-7.1.0-amd64" ;;
+        newer-unpaired)
+            printf 'newer kernel\n' > "${WORK}/boot/vmlinuz-7.2.0-amd64" ;;
+    esac
+    run_flow
+    assert_rc "$invalid_artifact aborts" 1 "${RC}"
+    assert_contains "$invalid_artifact explains no disk changed" "$(output_text)" "no disk was changed"
+    assert_not_contains "$invalid_artifact does not partition" "$(log_text)" "sgdisk"
+    assert_not_contains "$invalid_artifact does not wipe signatures" "$(log_text)" "wipefs"
+    if [ "$invalid_artifact" = directory ]; then
+        rmdir "${WORK}/boot/initrd.img-7.1.0-amd64"
+    else
+        rm -f "${WORK}/boot/initrd.img-7.1.0-amd64"
+    fi
+    rm -f "${WORK}/boot/initrd.img-7.2.0-amd64" "${WORK}/boot/vmlinuz-7.2.0-amd64"
+    printf 'mock kernel\n' > "${WORK}/boot/vmlinuz-7.1.0-amd64"
+    printf 'mock initramfs\n' > "${WORK}/boot/initrd.img-7.1.0-amd64"
+done
 
 # Normal scenarios use the baked live-root fixture.
 t_section "Combo 1: Btrfs + LUKS, single password, Intel GPU"
