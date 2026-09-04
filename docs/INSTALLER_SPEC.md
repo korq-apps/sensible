@@ -97,7 +97,7 @@ keyboard        = "us"
 
 ```bash
 RAM_MIB=$(free -m | awk '/^Mem:/{print $2}')
-SWAP_MIB=$((RAM_MIB + RAM_MIB / 10))
+SWAP_MIB=$RAM_MIB
 
 sgdisk --zap-all "$DISK"
 wipefs --all --force "$DISK"

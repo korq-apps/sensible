@@ -60,7 +60,7 @@ for f in "${sh_files[@]}"; do
     if ${checker} "${REPO_ROOT}/${f}" 2>/dev/null; then
         t_ok
     else
-        t_fail "${checker} ${f}" "$(${checker} "${REPO_ROOT}/${f}" 2>&1 | head -3)"
+        t_fail "${checker} ${f}" "$(${checker} "${REPO_ROOT}/${f}" 2>&1 | head -n 3)"
     fi
 done
 
@@ -71,6 +71,14 @@ if suppressed_errors=$(git -C "${REPO_ROOT}" grep -nF -- "${blanket_suppression}
 else
     t_ok
 fi
+
+for helper in valid_hostname valid_username valid_timezone validate_keyboard_layout \
+    detect_keyboard_layout apply_live_keyboard configure_keyboard; do
+    helper_count=$(grep -hEc "^${helper}\\(\\)" \
+        "${REPO_ROOT}/installer/lib/common.sh" \
+        "${REPO_ROOT}/installer/lib/setup-form.sh" | awk '{ total += $1 } END { print total + 0 }')
+    assert_eq "${helper} has one source of truth" "1" "${helper_count}"
+done
 
 t_section "live-build hooks use the executed naming convention"
 # live-build only runs config/hooks/*/*.hook.{chroot,binary}; any other name

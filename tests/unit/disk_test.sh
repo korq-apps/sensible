@@ -75,7 +75,7 @@ btrfs()       { mlog "btrfs $*"; if [ "$1" = "inspect-internal" ]; then echo "38
 chattr()      { mlog "chattr $*"; }
 fallocate()   { mlog "fallocate $*"; touch "$3"; }
 
-format_and_mount /dev/sda btrfs true "test-pass-123" 9011
+format_and_mount /dev/sda btrfs true "test-pass-123" 8192
 assert_contains "LUKS2 argon2id format"     "$(cat "${MOCK_LOG}")" "cryptsetup luksFormat --type luks2 --pbkdf argon2id"
 assert_contains "opens cryptroot"           "$(cat "${MOCK_LOG}")" "cryptsetup open /dev/sda3 cryptroot"
 assert_eq "TARGET_ROOT is mapper device" "/dev/mapper/cryptroot" "${TARGET_ROOT}"
@@ -90,7 +90,7 @@ assert_contains "@swap mounted"     "$(cat "${MOCK_LOG}")" "mount -o noatime,sub
 assert_contains "root mounted with subvol=@" "$(cat "${MOCK_LOG}")" "mount -o noatime,compress=zstd:1,space_cache=v2,discard=async,subvol=@ /dev/mapper/cryptroot ${MNT}"
 assert_contains "EFI mounted umask=0077" "$(cat "${MOCK_LOG}")" "mount -o umask=0077 /dev/sda1 ${MNT}/boot/efi"
 assert_contains "NOCOW flag on swapfile" "$(cat "${MOCK_LOG}")" "chattr +C ${MNT}/swap/swapfile"
-assert_contains "swapfile sized RAM+10%" "$(cat "${MOCK_LOG}")" "fallocate -l 9011M ${MNT}/swap/swapfile"
+assert_contains "swapfile mirrors RAM" "$(cat "${MOCK_LOG}")" "fallocate -l 8192M ${MNT}/swap/swapfile"
 assert_contains "swapfile formatted" "$(cat "${MOCK_LOG}")" "mkswap ${MNT}/swap/swapfile"
 assert_eq "resume_offset via map-swapfile" "38400" "${RESUME_OFFSET}"
 assert_not_contains "no swap partition formatting with LUKS" "$(cat "${MOCK_LOG}")" "mkswap -L SWAP"
@@ -108,9 +108,9 @@ mount()       { mlog "mount $*"; }
 fallocate()   { mlog "fallocate $*"; touch "$3"; }
 filefrag()    { printf 'Filesystem type is: ef53\nFile size of %s is 9011 blocks (256-bit extents)\n 0:        0..   32767:    123456..  1267334:   32768:\n' "$1"; }
 
-format_and_mount /dev/sda ext4 true "test-pass-123" 9011
+format_and_mount /dev/sda ext4 true "test-pass-123" 8192
 assert_eq "SWAP_PART empty with LUKS" "" "${SWAP_PART}"
-assert_contains "swapfile at ext4 root" "$(cat "${MOCK_LOG}")" "fallocate -l 9011M ${MNT}/swapfile"
+assert_contains "swapfile at ext4 root" "$(cat "${MOCK_LOG}")" "fallocate -l 8192M ${MNT}/swapfile"
 assert_contains "swapfile formatted" "$(cat "${MOCK_LOG}")" "mkswap ${MNT}/swapfile"
 assert_eq "resume_offset via filefrag" "123456" "${RESUME_OFFSET}"
 assert_contains "ext4 fast_commit" "$(cat "${MOCK_LOG}")" "mkfs.ext4 -F -L ROOT -O fast_commit /dev/mapper/cryptroot"
