@@ -109,6 +109,7 @@ mkdir -p "${T}/etc/cryptsetup-initramfs"
 printf 'CRYPTSETUP=y\n' > "${T}/etc/cryptsetup-initramfs/conf-hook"
 OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
 assert_rc "crypttab alone does not substitute for a valid generated initramfs" 1 "${rc}"
+assert_contains "and identifies the empty initramfs" "${OUT}" "initramfs is empty"
 
 printf '# cryptroot UUID=LUKS-UUID none luks\n' > "${T}/etc/crypttab"
 OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1

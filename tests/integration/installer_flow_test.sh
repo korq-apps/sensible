@@ -195,10 +195,10 @@ chroot() {
             fi
             ;;
         update-initramfs)
-            # Simulate a real regeneration: stamp the initrd newer than the kernel.
-            # update-initramfs also stamps it after itself, so a missing/old stamp
-            # in the target means it never ran -- exactly the screenshot bug.
-            touch "${MNT}/boot/initrd.img-7.1.0-amd64" ;;
+            # Simulate a real regeneration: write a non-empty image newer than
+            # the kernel. The matching unmkinitramfs mock below exposes the
+            # embedded crypttab produced by that regeneration.
+            printf 'mock generated initramfs\n' > "${MNT}/boot/initrd.img-7.1.0-amd64" ;;
         plymouth-set-default-theme) : ;;
         grub-install) mkdir -p "${MNT}/boot/efi/EFI/debian"; touch "${MNT}/boot/efi/EFI/debian/grubx64.efi" "${MNT}/boot/efi/EFI/debian/shimx64.efi" ;;
         update-grub) mkdir -p "${MNT}/boot/grub"; printf "menuentry 'Debian GNU/Linux' {\n    linux /boot/vmlinuz-7.1.0-amd64 root=UUID=ROOT ro\n    initrd /boot/initrd.img-7.1.0-amd64\n}\n" > "${MNT}/boot/grub/grub.cfg" ;;
