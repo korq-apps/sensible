@@ -139,12 +139,27 @@ export GUM_FILTER_PLACEHOLDER_FOREGROUND="8"
 # Styling is presentation, never installation control flow. Always render it
 # on the console rather than stdout (which may carry a selected value), and do
 # not abort the installer if a terminal rejects a cosmetic capability query.
+_ui_plain_style_fallback() {
+    local text="$1"
+    if _ui_has_controlling_tty; then
+        if printf '%s\n' "${text}" >/dev/tty 2>/dev/null; then
+            return 0
+        fi
+    fi
+    if ! printf '%s\n' "${text}" >&2; then
+        : # Presentation output must never control installation flow.
+    fi
+    return 0
+}
+
 ui_style() {
     local fallback_text="${!#}"
     if ! gum style "$@" >/dev/tty 2>&1; then
-        printf '%s\n' "${fallback_text}" >/dev/tty
+        _ui_plain_style_fallback "${fallback_text}"
         if [ "$SENSIBLE_STYLE_WARNING_SHOWN" != "true" ]; then
-            log_warn "Terminal styling is unavailable; continuing with plain installer output."
+            if ! log_warn "Terminal styling is unavailable; continuing with plain installer output."; then
+                : # stderr may have closed along with the controlling terminal.
+            fi
             SENSIBLE_STYLE_WARNING_SHOWN="true"
         fi
     fi

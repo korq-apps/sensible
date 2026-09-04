@@ -16,11 +16,14 @@ check_uefi()  { :; }
 sleep()       { :; }
 
 WORK="$(mktemp -d /tmp/sensible-flow-test.XXXXXX)"
+mkdir -p "${WORK}/boot"
+touch "${WORK}/boot/vmlinuz-7.1.0-amd64" "${WORK}/boot/initrd.img-7.1.0-amd64"
 ANSWERS="${WORK}/answers.txt"
 OUT="${WORK}/stdout.log"
 ERR="${WORK}/stderr.log"
 MOCK_NVIDIA=0
 MOCK_LIVE_USER=1
+MOCK_MISSING_LIVE_PACKAGE=""
 MOCK_MISSING_PACKAGE=""
 MOCK_LEAVE_LIVE_INITRAMFS=0
 MOCK_SYSTEMCTL_REBOOT_RC=0
@@ -136,6 +139,12 @@ chattr()      { mlog "chattr $*"; }
 fallocate()   { mlog "fallocate $*"; touch "$3"; }
 filefrag()    { mlog "filefrag $*"; echo " 0:        0..       0:    38400..    38400:       1:"; }
 debootstrap() { mlog "debootstrap $*"; }
+dpkg-query()  {
+    local queried_package="${*: -1}"
+    mlog "dpkg-query $*"
+    [ "${MOCK_MISSING_LIVE_PACKAGE:-}" != "${queried_package}" ] || return 1
+    printf 'ii  %s  1.0  amd64  test\n' "${queried_package}"
+}
 timedatectl() { mlog "timedatectl $*"; echo "Europe/Berlin"; }
 setupcon()     { mlog "setupcon $*"; }
 sync()         { mlog "sync $*"; }
@@ -349,6 +358,24 @@ mock_teardown
 assert_rc "missing live source aborts" 1 "${rc}"
 assert_contains "missing source explains no disk change" "$(cat "${OUT}" "${ERR}")" "no disk was changed"
 assert_not_contains "missing source does not partition" "$(cat "${WORK}/calls.log")" "sgdisk"
+
+t_section "Incomplete live closure is rejected before partitioning"
+build_answers no
+MOCK_MISSING_LIVE_PACKAGE="shim-signed"
+run_flow
+MOCK_MISSING_LIVE_PACKAGE=""
+assert_rc "missing live closure package aborts" 1 "${RC}"
+assert_contains "pre-wipe closure error names missing package" "$(output_text)" "shim-signed"
+assert_contains "pre-wipe closure error confirms disk unchanged" "$(output_text)" "no disk was changed"
+assert_not_contains "incomplete live closure does not partition" "$(log_text)" "sgdisk"
+
+t_section "Missing live boot artifact is rejected before partitioning"
+rm -f "${WORK}/boot/initrd.img-7.1.0-amd64"
+run_flow
+touch "${WORK}/boot/initrd.img-7.1.0-amd64"
+assert_rc "missing live initramfs aborts" 1 "${RC}"
+assert_contains "pre-wipe closure error names missing initramfs" "$(output_text)" "boot/initrd.img-*"
+assert_not_contains "missing live boot artifact does not partition" "$(log_text)" "sgdisk"
 
 # Normal scenarios use the baked live-root fixture.
 t_section "Combo 1: Btrfs + LUKS, single password, Intel GPU"

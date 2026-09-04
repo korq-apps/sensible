@@ -73,18 +73,20 @@ restore_host_ownership() {
         echo "Error: could not restore build-output ownership to ${host_uid}:${host_gid}." >&2
         return 1
     fi
-    # chroot/ can contain mountpoints (we bind-mounted /dev nodes above);
-    # chown is harmless on the dir itself, but a busy mount would block it.
-    # release_dev_nodes runs before this in the EXIT trap, so this is safe.
+    # chroot/ can contain the /dev bind mounts created above, and recursive
+    # chown would cross them. The caller must invoke this only after
+    # release_dev_nodes has succeeded for every node.
 }
 
 cleanup_build() {
     local status=$?
-    if ! release_dev_nodes; then
+    if release_dev_nodes; then
+        if ! restore_host_ownership; then
+            status=1
+        fi
+    else
         status=1
-    fi
-    if ! restore_host_ownership; then
-        status=1
+        echo "Warning: skipping ownership restoration while chroot /dev mounts remain active." >&2
     fi
     trap - EXIT
     exit "${status}"

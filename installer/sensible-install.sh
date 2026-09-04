@@ -98,12 +98,47 @@ sanitize_live_target() {
     fi
 }
 
-require_target_boot_packages() {
-    local required=(grub-efi-amd64 grub-efi-amd64-signed shim-signed cryptsetup plymouth)
+boot_package_closure() {
+    printf '%s\n' \
+        linux-image-amd64 \
+        grub-efi-amd64 \
+        grub-efi-amd64-signed \
+        shim-signed \
+        cryptsetup \
+        cryptsetup-initramfs \
+        plymouth
+}
+
+require_live_target_closure() {
+    local live_root="${LIVE_ROOT_SENTINEL:-/}"
     local missing=()
     local pkg
 
-    [ "${ENABLE_LUKS}" = "true" ] && required+=(cryptsetup-initramfs)
+    while IFS= read -r pkg; do
+        if ! dpkg-query -W -f='${db:Status-Abbrev}' "${pkg}" 2>/dev/null | grep -q '^ii '; then
+            missing+=("${pkg}")
+        fi
+    done < <(boot_package_closure)
+
+    if ! compgen -G "${live_root%/}/boot/vmlinuz-*" >/dev/null; then
+        missing+=("boot/vmlinuz-*")
+    fi
+    if ! compgen -G "${live_root%/}/boot/initrd.img-*" >/dev/null; then
+        missing+=("boot/initrd.img-*")
+    fi
+
+    if [ "${#missing[@]}" -gt 0 ]; then
+        log_err "Offline ISO target closure is incomplete: missing ${missing[*]}. Rebuild the ISO with the complete target package list; no disk was changed."
+        return 1
+    fi
+}
+
+require_target_boot_packages() {
+    local required=()
+    local missing=()
+    local pkg
+
+    mapfile -t required < <(boot_package_closure)
     for pkg in "${required[@]}"; do
         if ! chroot "${MNT}" dpkg-query -W -f='${db:Status-Abbrev}' "${pkg}" 2>/dev/null | grep -q '^ii '; then
             missing+=("${pkg}")
@@ -367,6 +402,7 @@ main() {
         log_err "This ISO does not contain the complete offline target system. Installation cannot continue; no disk was changed."
         exit 1
     fi
+    require_live_target_closure
     if target_mount_tree_busy "$MNT"; then
         ui_msgbox "Error: Installation Mount In Use" "${MNT} or a path below it is already mounted. Sensible will not reuse or unmount resources it did not create. Unmount that path, then restart the installer."
         exit 1

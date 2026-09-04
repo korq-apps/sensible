@@ -115,6 +115,27 @@ assert_contains "forms share the UI terminal detector" "${setup_source}" $'_setu
 assert_contains "welcome offers an explicit start action" "${ui_source}" "Press Enter to start"
 assert_contains "installer opens the welcome before keyboard setup" "$(<"${REPO_ROOT}/installer/sensible-install.sh")" $'    welcome_screen\n\n    # ── 1. Keyboard'
 assert_contains "terminal size is measured from its controlling TTY" "${ui_source}" 'stty size </dev/tty'
+style_fallback_output="$(bash -c '
+    set -e
+    gum() { return 1; }
+    source "$1"
+    _ui_has_controlling_tty() { return 1; }
+    ui_style --bold "plain fallback"
+    printf "continued\n"
+' _ "${REPO_ROOT}/installer/lib/ui.sh" 2>&1)"
+style_fallback_rc=$?
+assert_rc "failed Gum styling remains non-fatal without a controlling TTY" 0 "${style_fallback_rc}"
+assert_contains "plain styling falls back to stderr" "${style_fallback_output}" "plain fallback"
+assert_contains "installer continues after plain styling fallback" "${style_fallback_output}" "continued"
+closed_style_rc="$(run_exiting bash -c '
+    set -e
+    gum() { return 1; }
+    source "$1"
+    _ui_has_controlling_tty() { return 1; }
+    exec 2>&-
+    ui_style --bold "closed output"
+' _ "${REPO_ROOT}/installer/lib/ui.sh")"
+assert_rc "styling remains non-fatal when stderr is also closed" 0 "${closed_style_rc}"
 assert_file_contains "live console uses readable installer typography" "${REPO_ROOT}/live/config/includes.chroot/etc/default/console-setup" 'FONTSIZE="14x28"'
 assert_contains "keyboard uses searchable system choices" "${setup_source}" '_prompt_searchable "Keyboard layout"'
 assert_contains "enumerated prompts use Gum filter" "${setup_source}" 'gum filter --limit 1 --strict'
@@ -202,6 +223,8 @@ assert_contains "fetch-pins installs the Nerd Font into the image" "${fetch_pins
 assert_contains "fetch-pins stages the pinned LazyVim starter" "${fetch_pins_source}" "etc/skel/.config/nvim"
 assert_contains "fetch-pins stages the GNOME keyd mapping" "${fetch_pins_source}" "configs/keyd-default.conf"
 assert_contains "build stages the pins before live-build runs" "${stages_source}" "scripts/fetch-pins.sh"
+assert_contains "cleanup restores ownership only after releasing device mounts" "${stages_source}" $'if release_dev_nodes; then\n        if ! restore_host_ownership'
+assert_contains "cleanup explains why ownership restoration was skipped" "${stages_source}" "skipping ownership restoration while chroot /dev mounts remain active"
 for pkg in fprintd libpam-fprintd ufw ipp-usb sane-airscan; do
     assert_file_contains "target closure bakes ${pkg}" \
         "${REPO_ROOT}/live/config/package-lists/sensible-target.list.chroot" "${pkg}"
