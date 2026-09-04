@@ -75,9 +75,13 @@ sanitize_live_target() {
         fi
     done
 
+    # Debian live-config writes its SDDM autologin to /etc/sddm.conf, which
+    # takes precedence over our installed-user drop-in. Remove it along with
+    # the live account or SDDM tries the deleted user and shows the greeter.
     rm -f "${MNT}/etc/systemd/system/getty@tty1.service.d/autologin.conf" \
           "${MNT}/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf" \
           "${MNT}/etc/gdm3/daemon.conf" \
+          "${MNT}/etc/sddm.conf" \
           "${MNT}/etc/sddm.conf.d/autologin.conf" \
           "${MNT}/etc/profile.d/99-sensible-autostart.sh" \
           "${MNT}/etc/profile.d/98-sensible-serial-ready.sh" \

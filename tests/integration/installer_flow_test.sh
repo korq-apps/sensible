@@ -68,6 +68,9 @@ rsync()       {
         mkdir -p "${MNT}/etc/gdm3" "${MNT}/etc/sddm.conf.d"
         printf '[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=user\n' > "${MNT}/etc/gdm3/daemon.conf"
         printf '[Autologin]\nUser=user\n' > "${MNT}/etc/sddm.conf.d/autologin.conf"
+        # Debian live-config's 0085-sddm writes this higher-priority file.
+        # Leaving it behind overrides the installed user's autologin drop-in.
+        printf '[Autologin]\nUser=user\nSession=plasma.desktop\n' > "${MNT}/etc/sddm.conf"
     fi
     touch "${MNT}/etc/profile.d/99-sensible-autostart.sh" \
           "${MNT}/etc/profile.d/99-sensible-firmware-check.sh" \
@@ -237,6 +240,7 @@ build_answers() {
     local luks="$1"  # yes/no
     local final_confirm="${2:-yes}" username="${3:-alice}" completion_action="${4:-live}"
     local filesystem_choice="${5:-btrfs}" filesystem_answer="1"
+    local autologin_answer="${6:-yes}"
     local enc_answer="y" # y=encrypted, n=unencrypted
     [ "$luks" = "yes" ] && enc_answer="y" || enc_answer="n"
     [ "$filesystem_choice" = "ext4" ] && filesystem_answer="2"
@@ -253,7 +257,9 @@ build_answers() {
         printf '1\n'                      # disk menu -> /dev/sda (first entry)
         printf '%s\n' "${filesystem_answer}" # filesystem: 1=btrfs, 2=ext4
         printf '%s\n' "${enc_answer}"     # encryption yes/no (text mode ui_yesno)
-        if [ "$luks" = "yes" ]; then printf 'y\n'; fi  # autologin prompt (LUKS only)
+        if [ "$luks" = "yes" ]; then
+            if [ "$autologin_answer" = yes ]; then printf 'y\n'; else printf 'n\n'; fi
+        fi
         if [ "$final_confirm" = "no" ]; then printf 'n\n'; else printf 'y\n'; fi
         if [ "${completion_action}" = "reboot" ]; then
             printf '1\n'                   # reboot/eject in completion menu
@@ -488,6 +494,35 @@ assert_not_contains "plain ext4 uses no cryptsetup" "$(log_text)" "luksFormat"
 assert_contains "plain ext4 swapfile created at root" "$(log_text)" "fallocate -l 8192M ${MNT}/swapfile"
 assert_file_contains "plain ext4 root in fstab" "${MNT}/etc/fstab" "UUID=ROOTPART-FS-UUID-4444  /            ext4"
 assert_file_contains "plain ext4 resume offset" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTPART-FS-UUID-4444 resume_offset=38400"
+
+t_section "KDE: disk unlock leads to autologin, while screen locking stays enabled"
+SENSIBLE_VARIANT=kde
+build_answers yes
+run_flow
+assert_rc "encrypted KDE installation succeeds" 0 "${RC}"
+assert_file_not_exists "live SDDM main config cannot override installed-user autologin" "${MNT}/etc/sddm.conf"
+assert_file_contains "KDE autologin targets the installed account" "${MNT}/etc/sddm.conf.d/autologin.conf" "User=alice"
+assert_file_contains "KDE autologin has an explicit session on first boot" "${MNT}/etc/sddm.conf.d/autologin.conf" "Session=plasma"
+assert_file_contains "KDE idle screen lock remains enabled" "${MNT}/etc/xdg/kscreenlockerrc" "Autolock=true"
+assert_file_contains "KDE still locks on resume" "${MNT}/etc/xdg/kscreenlockerrc" "LockOnResume=true"
+assert_contains "KDE user keeps a password for screen unlock" "$(log_text)" "chpasswd"
+assert_contains "KDE enables SDDM" "$(log_text)" "systemctl enable sddm.service"
+
+t_section "KDE: declining autologin still removes the live-account override"
+build_answers yes yes alice live btrfs no
+run_flow
+assert_rc "KDE installation with password login succeeds" 0 "${RC}"
+assert_file_not_exists "declined autologin has no live SDDM override" "${MNT}/etc/sddm.conf"
+assert_file_not_exists "declined autologin creates no SDDM autologin drop-in" "${MNT}/etc/sddm.conf.d/autologin.conf"
+
+t_section "KDE: unencrypted installs retain password login"
+build_answers no
+run_flow
+assert_rc "unencrypted KDE installation succeeds" 0 "${RC}"
+assert_file_not_exists "unencrypted KDE has no live SDDM override" "${MNT}/etc/sddm.conf"
+assert_file_not_exists "unencrypted KDE has no autologin drop-in" "${MNT}/etc/sddm.conf.d/autologin.conf"
+assert_file_contains "unencrypted KDE still locks on idle" "${MNT}/etc/xdg/kscreenlockerrc" "Autolock=true"
+unset SENSIBLE_VARIANT
 
 t_section "Live-copy deploy path: excludes keep API dirs, mountpoints exist (offline skips apt)"
 build_answers no
