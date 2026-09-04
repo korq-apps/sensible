@@ -156,10 +156,12 @@ block_display_property() {
 }
 
 get_disk_identity() {
-    local device="$1" size vendor model label
+    local device="$1" size vendor model serial wwn label
     size=$(block_display_property "$device" SIZE)
     vendor=$(block_display_property "$device" VENDOR)
     model=$(block_display_property "$device" MODEL)
+    serial=$(block_display_property "$device" SERIAL)
+    wwn=$(block_display_property "$device" WWN)
     label=""
     if [[ -n $vendor && -n $model ]]; then
         if [[ $model == *$vendor* ]]; then label="$model"; else label="$vendor $model"; fi
@@ -169,6 +171,8 @@ get_disk_identity() {
     local display="$device"
     [[ -n $size ]] && display="$display ($size)"
     [[ -n $label ]] && display="$display - $label"
+    [[ -n $serial ]] && display="$display | serial: $serial"
+    [[ -n $wwn ]] && display="$display | WWN: $wwn"
     printf '%s\n' "$display"
 }
 

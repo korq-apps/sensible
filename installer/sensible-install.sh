@@ -55,6 +55,62 @@ cleanup() {
     restore_terminal
 }
 
+sanitize_live_target() {
+    local live_user="user"
+    local sudoers_file
+
+    if chroot "${MNT}" getent passwd "${live_user}" >/dev/null 2>&1; then
+        chroot "${MNT}" userdel -r "${live_user}"
+    fi
+    rm -rf "${MNT}/home/${live_user}"
+
+    for sudoers_file in "${MNT}"/etc/sudoers.d/*; do
+        [ -f "${sudoers_file}" ] || continue
+        if grep -Eq '(^|[[:space:]])NOPASSWD([[:space:]:]|$)' "${sudoers_file}"; then
+            rm -f "${sudoers_file}"
+        fi
+    done
+
+    rm -f "${MNT}/etc/systemd/system/getty@tty1.service.d/autologin.conf" \
+          "${MNT}/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf" \
+          "${MNT}/etc/gdm3/daemon.conf" \
+          "${MNT}/etc/sddm.conf.d/autologin.conf" \
+          "${MNT}/etc/profile.d/99-sensible-autostart.sh" \
+          "${MNT}/etc/profile.d/98-sensible-serial-ready.sh" \
+          "${MNT}/etc/profile.d/99-sensible-firmware-check.sh" \
+          "${MNT}/usr/local/bin/sensible-install" \
+          "${MNT}/usr/local/bin/lazydeb" \
+          "${MNT}/etc/issue.sensible"
+    rm -rf "${MNT}/opt/sensible"
+    printf 'Debian GNU/Linux testing \\n \\l\n' > "${MNT}/etc/issue"
+    printf 'Debian GNU/Linux testing\n' > "${MNT}/etc/issue.net"
+    : > "${MNT}/etc/motd"
+
+    : > "${MNT}/etc/machine-id"
+    if [ -L "${MNT}/var/lib/dbus/machine-id" ]; then
+        :
+    else
+        rm -f "${MNT}/var/lib/dbus/machine-id"
+    fi
+}
+
+require_target_boot_packages() {
+    local required=(grub-efi-amd64 grub-efi-amd64-signed shim-signed cryptsetup plymouth)
+    local missing=()
+    local pkg
+
+    [ "${ENABLE_LUKS}" = "true" ] && required+=(cryptsetup-initramfs)
+    for pkg in "${required[@]}"; do
+        if ! chroot "${MNT}" dpkg-query -W -f='${db:Status-Abbrev}' "${pkg}" 2>/dev/null | grep -q '^ii '; then
+            missing+=("${pkg}")
+        fi
+    done
+    if [ "${#missing[@]}" -gt 0 ]; then
+        log_err "Offline ISO target closure is missing required boot package(s): ${missing[*]}. Rebuild the ISO with the complete target package list."
+        return 1
+    fi
+}
+
 # ── Helpers for Omarchy-style flow ──
 
 abort() {
@@ -294,6 +350,10 @@ main() {
     DESKTOP_CHOICE=$(detect_install_variant)
 
     CURRENT_STAGE="pre-flight"
+    if [ ! -d "${LIVE_ROOT_SENTINEL:-/lib/live}" ] && [ ! -f /etc/issue.sensible ]; then
+        log_err "This ISO does not contain the complete offline target system. Installation cannot continue; no disk was changed."
+        exit 1
+    fi
     if target_mount_tree_busy "$MNT"; then
         ui_msgbox "Error: Installation Mount In Use" "${MNT} or a path below it is already mounted. Sensible will not reuse or unmount resources it did not create. Unmount that path, then restart the installer."
         exit 1
@@ -517,40 +577,17 @@ virtual disk, or less RAM."
 
     CURRENT_STAGE="deploying the Debian base system"
     install_progress_update 3 "Copying the Debian system"
-    log_info "Deploying base system..."
-    local DEPLOYED_FROM_LIVE="false"
-    if [ -d "${LIVE_ROOT_SENTINEL:-/lib/live}" ] || [ -f /etc/issue.sensible ]; then
-        DEPLOYED_FROM_LIVE="true"
-        log_info "Copying live environment root to ${MNT} with rsync..."
-        rsync -aAX --info=progress2 \
-            --exclude='/dev/*' --exclude='/proc/*' --exclude='/sys/*' --exclude='/tmp/*' \
-            --exclude='/run/*' --exclude="${MNT}/*" --exclude='/media/*' --exclude=/lost+found \
-            --exclude=/etc/systemd/system/getty@tty1.service.d/autologin.conf \
-            --exclude=/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf \
-            / "${MNT}/"
-    else
-        log_info "Bootstrapping Debian Testing to ${MNT} with debootstrap..."
-        debootstrap --arch=amd64 testing ${MNT} https://deb.debian.org/debian
-    fi
+    log_info "Copying live environment root to ${MNT} with rsync..."
+    local DEPLOYED_FROM_LIVE="true"
+    rsync -aAX --info=progress2 \
+        --exclude='/dev/*' --exclude='/proc/*' --exclude='/sys/*' --exclude='/tmp/*' \
+        --exclude='/run/*' --exclude="${MNT}/*" --exclude='/media/*' --exclude=/lost+found \
+        --exclude=/etc/systemd/system/getty@tty1.service.d/autologin.conf \
+        --exclude=/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf \
+        / "${MNT}/"
+    sanitize_live_target
     mkdir -p "${MNT}/dev" "${MNT}/proc" "${MNT}/sys" "${MNT}/run" "${MNT}/tmp" "${MNT}/mnt" "${MNT}/media"
     chmod 1777 "${MNT}/tmp"
-    rm -f ${MNT}/etc/systemd/system/getty@tty1.service.d/autologin.conf \
-          ${MNT}/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf
-
-    rm -f "${MNT}/etc/profile.d/99-sensible-autostart.sh" \
-          "${MNT}/etc/profile.d/98-sensible-serial-ready.sh" \
-          "${MNT}/etc/profile.d/99-sensible-firmware-check.sh" \
-          "${MNT}/usr/local/bin/sensible-install" \
-          "${MNT}/usr/local/bin/lazydeb" \
-          "${MNT}/etc/issue.sensible"
-    rm -rf "${MNT}/opt/sensible"
-    printf 'Debian GNU/Linux testing \\n \\l\n' > "${MNT}/etc/issue"
-    printf 'Debian GNU/Linux testing\n' > "${MNT}/etc/issue.net"
-    : > "${MNT}/etc/motd"
-
-    : > "${MNT}/etc/machine-id"
-    [ -L "${MNT}/var/lib/dbus/machine-id" ] || rm -f "${MNT}/var/lib/dbus/machine-id"
-
     # live-build disables update-initramfs inside the image (update_initramfs=no
     # in update-initramfs.conf) so the ISO build doesn't churn initramfs. The
     # copied target inherits that flag, and then EVERY regeneration here —
@@ -615,9 +652,6 @@ virtual disk, or less RAM."
     if [ -d /sys/firmware/efi/efivars ] && [ -d "${MNT}/sys/firmware/efi" ]; then
         mount --bind /sys/firmware/efi/efivars "${MNT}/sys/firmware/efi/efivars" || true
     fi
-    rm -f "${MNT}/etc/resolv.conf"
-    cp -L /etc/resolv.conf "${MNT}/etc/resolv.conf"
-
     # Strip live-environment markers from the chroot.  Keep dpkg's package
     # metadata intact so the later purge can run maintainer scripts and undo
     # diversions cleanly.
@@ -627,11 +661,7 @@ virtual disk, or less RAM."
     # baked in the ISO. Do not apt-get update or install — it would hit
     # deb.debian.org and fail offline, as in the screenshot. The check-packages
     # gate guarantees the closure at build time.
-    if [ "${DEPLOYED_FROM_LIVE}" != "true" ]; then
-        configure_apt_sources
-    else
-        log_info "Offline install — skipping apt update (live root already contains the closure)"
-    fi
+    log_info "Offline install — using the closure copied from the live image"
     generate_crypttab_and_fstab "$TARGET_ROOT" "$BOOT_PART" "$EFI_PART" "$SWAP_PART" "$ROOT_PART" "$FS_CHOICE" "$ENABLE_LUKS"
 
     log_info "Configuring hostname and locale..."
@@ -642,43 +672,37 @@ virtual disk, or less RAM."
     echo "$LOCALE UTF-8" > ${MNT}/etc/locale.gen
     echo "LANG=$LOCALE" > ${MNT}/etc/default/locale
 
-    CURRENT_STAGE="installing hardware support"
+    CURRENT_STAGE="configuring hardware support"
     install_progress_update 5 "Configuring hardware support"
-    if [ "${DEPLOYED_FROM_LIVE}" != "true" ]; then
-        install_hardware_packages
-    else
-        log_info "Offline install — skipping hardware apt install (firmware baked in)"
-        # Still enable services that would have been enabled
-        chroot ${MNT} systemctl enable NetworkManager.service 2>/dev/null || true
-        chroot ${MNT} systemctl enable bluetooth.service 2>/dev/null || true
-        chroot ${MNT} systemctl enable power-profiles-daemon.service 2>/dev/null || true
-        chroot ${MNT} systemctl enable fwupd.service 2>/dev/null || true
-    fi
+    log_info "Offline install — hardware support is already in the copied live image"
+    chroot ${MNT} systemctl enable NetworkManager.service 2>/dev/null || true
+    chroot ${MNT} systemctl enable bluetooth.service 2>/dev/null || true
+    chroot ${MNT} systemctl enable power-profiles-daemon.service 2>/dev/null || true
+    chroot ${MNT} systemctl enable fwupd.service 2>/dev/null || true
 
     chroot ${MNT} locale-gen 2>/dev/null || log_warn "locale-gen failed (locales not yet in closure?)"
 
     configure_keyboard "$KEYBOARD_LAYOUT"
 
-    CURRENT_STAGE="installing the desktop"
+    CURRENT_STAGE="configuring the desktop"
     install_progress_update 6 "Configuring the ${DESKTOP_CHOICE} desktop"
-    if [ "${DEPLOYED_FROM_LIVE}" != "true" ]; then
-        install_desktop "$DESKTOP_CHOICE" "$ENABLE_KEYD" "$CONFIG_DIR"
-    else
-        log_info "Offline install — skipping desktop apt install (DE baked in)"
-        # Ensure display manager and keyd are enabled if their packages are present
-        if [ "$DESKTOP_CHOICE" = "gnome" ]; then
-            chroot ${MNT} systemctl enable gdm3.service 2>/dev/null || true
-        else
-            chroot ${MNT} systemctl enable sddm.service 2>/dev/null || true
-        fi
-        if [ -f "${MNT}/etc/keyd/default.conf" ] || [ "$ENABLE_KEYD" = "true" ]; then
+    log_info "Offline install — desktop is already in the copied live image"
+    if [ "$DESKTOP_CHOICE" = "gnome" ]; then
+        chroot ${MNT} systemctl enable gdm3.service 2>/dev/null || true
+        if [ -f "${MNT}/etc/keyd/default.conf" ]; then
             chroot ${MNT} systemctl enable keyd.service 2>/dev/null || true
+        else
+            log_warn "GNOME keyd mapping is missing; leaving keyd.service disabled."
         fi
-        # Plymouth theme already baked — ensure it matches variant
-        local plymouth_theme="spinner"
-        [ "$DESKTOP_CHOICE" = "kde" ] && plymouth_theme="breeze"
-        chroot ${MNT} plymouth-set-default-theme -R "$plymouth_theme" 2>/dev/null || true
+    else
+        chroot ${MNT} systemctl enable sddm.service 2>/dev/null || true
+        chroot ${MNT} systemctl disable keyd.service 2>/dev/null || true
+        rm -f "${MNT}/etc/keyd/default.conf"
     fi
+    # Plymouth theme is already baked; regenerate after target-specific setup.
+    local plymouth_theme="spinner"
+    [ "$DESKTOP_CHOICE" = "kde" ] && plymouth_theme="breeze"
+    chroot ${MNT} plymouth-set-default-theme -R "$plymouth_theme" 2>/dev/null || true
 
     CURRENT_STAGE="creating the user account"
     install_progress_update 7 "Creating your user account"
@@ -716,73 +740,55 @@ EOF
 
     configure_login "$DESKTOP_CHOICE" "$ENABLE_AUTOLOGIN" "$USERNAME"
 
-    CURRENT_STAGE="installing applications"
-    install_progress_update 8 "Preparing applications"
-    if [ "${DEPLOYED_FROM_LIVE}" != "true" ]; then
-        install_default_apps "$USERNAME"
-    else
-        log_info "Offline install — skipping default-apps apt install (apps baked in)"
-        # Still ensure LazyVim skel and flathub where possible, without network
-        mkdir -p "${MNT}/etc/skel/.config/nvim" 2>/dev/null || true
-        if [ ! -f "${MNT}/etc/skel/.config/nvim/init.lua" ] && [ -d "${MNT}/usr/share/sensible/nvim-starter" ]; then
-            cp -r "${MNT}/usr/share/sensible/nvim-starter" "${MNT}/etc/skel/.config/nvim" 2>/dev/null || true
-        fi
-        if [ -n "$USERNAME" ] && [ -d "${MNT}/home/$USERNAME" ] && [ -d "${MNT}/etc/skel/.config/nvim" ]; then
-            mkdir -p "${MNT}/home/$USERNAME/.config"
-            cp -r "${MNT}/etc/skel/.config/nvim" "${MNT}/home/$USERNAME/.config/" 2>/dev/null || true
-            chroot ${MNT} chown -R "${USERNAME}:${USERNAME}" "/home/${USERNAME}/.config" 2>/dev/null || true
-        fi
-        chroot ${MNT} flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
+    CURRENT_STAGE="preparing installed applications"
+    install_progress_update 8 "Preparing installed applications"
+    log_info "Offline install — applications are already in the copied live image"
+    mkdir -p "${MNT}/etc/skel/.config/nvim"
+    if [ ! -f "${MNT}/etc/skel/.config/nvim/init.lua" ] && [ -d "${MNT}/usr/share/sensible/nvim-starter" ]; then
+        cp -r "${MNT}/usr/share/sensible/nvim-starter" "${MNT}/etc/skel/.config/nvim"
+    fi
+    mkdir -p "${MNT}/home/${USERNAME}/.config"
+    if [ -d "${MNT}/etc/skel/.config/nvim" ]; then
+        cp -r "${MNT}/etc/skel/.config/nvim" "${MNT}/home/${USERNAME}/.config/"
+        chroot ${MNT} chown -R "${USERNAME}:${USERNAME}" "/home/${USERNAME}/.config"
     fi
 
     install_progress_update 9 "Removing live-environment components"
-    if [ "$DEPLOYED_FROM_LIVE" = "true" ]; then
-        CURRENT_STAGE="removing live-environment packages"
-        # Purge the whole live stack in ONE transaction. Purging one at a time
-        # hits an unsatisfiable dependency state: `live-config` Depends:
-        # `live-config-systemd`, so removing only the -systemd split makes apt's
-        # solver fail with "Unable to satisfy dependencies ... Solver timed out"
-        # (exit 100) — after the disk was already written. All live-* packages
-        # are local removals; `dpkg --purge` needs no network and no solver.
-        local LIVE_PKGS=()
-        local live_pkg
-        # live-tools is boot-critical here: it diverts Debian's real
-        # /usr/sbin/update-initramfs to live-update-initramfs.  Inside this
-        # chroot that wrapper still sees "boot=live" through the bound /proc,
-        # but the fresh /run deliberately hides /run/live/medium, so it exits
-        # 0 without rebuilding anything.  Its postrm restores the original
-        # command when live-tools is removed.  Remove the live initramfs hooks
-        # at the same time so later kernel upgrades build an installed-system
-        # initramfs rather than a live one.
-        for live_pkg in live-boot live-boot-initramfs-tools live-config live-config-systemd live-tools; do
-            if chroot ${MNT} dpkg-query -W -f='${db:Status-Abbrev}' "$live_pkg" 2>/dev/null | grep -q '^ii '; then
-                LIVE_PKGS+=("$live_pkg")
-            fi
-        done
-        if [ ${#LIVE_PKGS[@]} -gt 0 ]; then
-            log_info "Purging live packages offline: ${LIVE_PKGS[*]}"
-            DEBIAN_FRONTEND=noninteractive chroot ${MNT} dpkg --purge "${LIVE_PKGS[@]}" \
-                || record_warning "Live packages could not be purged cleanly: ${LIVE_PKGS[*]}"
+    CURRENT_STAGE="removing live-environment packages"
+    # Purge the whole live stack in ONE transaction. Purging one at a time
+    # hits an unsatisfiable dependency state: `live-config` Depends:
+    # `live-config-systemd`, so removing only the -systemd split makes apt's
+    # solver fail with "Unable to satisfy dependencies ... Solver timed out"
+    # (exit 100) — after the disk was already written. All live-* packages
+    # are local removals; `dpkg --purge` needs no network and no solver.
+    local LIVE_PKGS=()
+    local live_pkg
+    # live-tools is boot-critical here: it diverts Debian's real
+    # /usr/sbin/update-initramfs to live-update-initramfs. Inside this chroot
+    # that wrapper can exit successfully without rebuilding the target.
+    for live_pkg in live-boot live-boot-initramfs-tools live-config live-config-systemd live-tools; do
+        if chroot ${MNT} dpkg-query -W -f='${db:Status-Abbrev}' "$live_pkg" 2>/dev/null | grep -q '^ii '; then
+            LIVE_PKGS+=("$live_pkg")
         fi
-        rm -rf "${MNT}/lib/live" "${MNT}/usr/lib/live" "${MNT}/var/lib/live"
+    done
+    if [ ${#LIVE_PKGS[@]} -gt 0 ]; then
+        log_info "Purging live packages offline: ${LIVE_PKGS[*]}"
+        DEBIAN_FRONTEND=noninteractive chroot ${MNT} dpkg --purge "${LIVE_PKGS[@]}"
+    fi
+    rm -rf "${MNT}/lib/live" "${MNT}/usr/lib/live" "${MNT}/var/lib/live"
 
-        # Do not trust dpkg's aggregate exit alone: a maintainer-script failure
-        # can leave the live-tools diversion behind, and the wrapper deliberately
-        # exits 0 after printing that update-initramfs is disabled.  That exact
-        # state produces a stale initramfs with no cryptroot mapping.
-        local update_initramfs_path="${MNT}/usr/sbin/update-initramfs"
-        local update_initramfs_target=""
-        if [ -L "${update_initramfs_path}" ]; then
-            update_initramfs_target=$(readlink "${update_initramfs_path}" 2>/dev/null || true)
-        fi
-        if [ ! -x "${update_initramfs_path}" ]; then
-            log_err "The target has no executable /usr/sbin/update-initramfs after removing live packages."
-            return 1
-        fi
-        if [ "${update_initramfs_target##*/}" = "live-update-initramfs" ]; then
-            log_err "live-tools still diverts update-initramfs in the target; refusing to build an initramfs with the live-system wrapper."
-            return 1
-        fi
+    local update_initramfs_path="${MNT}/usr/sbin/update-initramfs"
+    local update_initramfs_target=""
+    if [ -L "${update_initramfs_path}" ]; then
+        update_initramfs_target=$(readlink "${update_initramfs_path}")
+    fi
+    if [ ! -x "${update_initramfs_path}" ]; then
+        log_err "The target has no executable /usr/sbin/update-initramfs after removing live packages."
+        return 1
+    fi
+    if [ "${update_initramfs_target##*/}" = "live-update-initramfs" ]; then
+        log_err "live-tools still diverts update-initramfs in the target; refusing to build an initramfs with the live-system wrapper."
+        return 1
     fi
 
     CURRENT_STAGE="installing the bootloader"
@@ -814,17 +820,7 @@ EOF
     sed -i "s|quiet splash loglevel=3|quiet splash loglevel=3 resume=UUID=${ROOTFS_UUID} resume_offset=${RESUME_OFFSET}|" ${MNT}/etc/default/grub.d/installer.cfg
     echo "RESUME=UUID=${ROOTFS_UUID}" > ${MNT}/etc/initramfs-tools/conf.d/resume
 
-    if [ "${DEPLOYED_FROM_LIVE}" != "true" ]; then
-        DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y --no-install-recommends grub-efi-amd64 grub-efi-amd64-signed shim-signed cryptsetup-initramfs
-    else
-        log_info "Offline install — skipping grub/shim/cryptsetup apt install (already in closure)"
-        # Verify required packages are present offline
-        for pkg in grub-efi-amd64 shim-signed cryptsetup-initramfs; do
-            if ! chroot ${MNT} dpkg-query -W -f='${db:Status-Abbrev}' "$pkg" 2>/dev/null | grep -q '^ii '; then
-                log_warn "Offline closure missing $pkg — boot may fail (rebuild ISO with variant closure)"
-            fi
-        done
-    fi
+    require_target_boot_packages
 
     log_info "Installing GRUB to EFI System Partition..."
     chroot ${MNT} grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=debian --recheck

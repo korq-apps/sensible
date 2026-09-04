@@ -86,7 +86,24 @@ for name in ${NAMES}; do
     TO_CHECK+="${name}"$'\n'
 done
 
-if command -v podman >/dev/null 2>&1; then
+# The native build already runs as root on a Debian Testing host and has just
+# refreshed APT. Allow that explicitly selected path to query the host cache so
+# the containerless entry point does not secretly require a container engine.
+if [ "${SENSIBLE_PACKAGE_CHECK_NATIVE:-0}" = "1" ]; then
+    MISSING=""
+    while read -r package; do
+        [ -n "${package}" ] || continue
+        apt-cache show "${package}" >/dev/null 2>&1 || MISSING+="${package}"$'\n'
+    done <<< "${TO_CHECK}"
+    if [ -n "${MISSING}" ]; then
+        echo >&2
+        echo "The following packages do not exist in the configured Debian archive:" >&2
+        printf '  %s\n' ${MISSING} >&2
+        exit 1
+    fi
+    echo "==> All package names resolve."
+    exit 0
+elif command -v podman >/dev/null 2>&1; then
     ENGINE="podman"
 elif command -v docker >/dev/null 2>&1; then
     ENGINE="docker"

@@ -164,9 +164,15 @@ sudo apt update
 sudo apt full-upgrade
 ```
 
-Restart if a kernel or core system component was updated. Use GNOME Software
-or KDE Discover to add and update Flatpak applications from Flathub. For
-supported device firmware, check LVFS through `fwupd`:
+Restart if a kernel or core system component was updated. Until the planned
+`sensible-apps` tool lands, add Flathub once before using GNOME Software or KDE
+Discover to install Flatpak applications:
+
+```bash
+flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+```
+
+For supported device firmware, check LVFS through `fwupd`:
 
 ```bash
 sudo fwupdmgr refresh

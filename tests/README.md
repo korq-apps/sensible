@@ -34,10 +34,10 @@ function mock that records its invocation. Asserts, per scenario:
 - Aborts: undersized/no-disk, surviving live initramfs diversion, missing cryptsetup closure, declined destructive confirmation, and a mandatory post-wipe failure
 - Re-prompts: invalid username rejected, valid accepted
 
-Assertions cover generated files (fstab, crypttab, sources.list, hostname,
+Assertions cover generated files (fstab, crypttab, hostname,
 locale, keyboard, grub `resume=` rules, keyd, brave origin), call sequences
 (partition types/sizes, LUKS format args, live keyboard setup,
-stable disk identity, group creation, sudo membership, package sets, theme,
+stable disk identity, group creation, sudo membership, offline closure checks, theme,
 bootloader, owned teardown, and preserved failure logs), plus success/abort exit
 codes.
 
@@ -57,5 +57,6 @@ codes.
   having a buildable ISO environment (podman/docker + qemu + expect). The CI
   boot smoke (`build-iso.yml`) asserts UEFI boot reaches a stable marker from
   the live serial autologin shell.
-- Plymouth graphical unlock, `systemctl` behavior of the installed system,
-  APT resolution of the package sets against a live Testing mirror.
+- Plymouth graphical unlock and `systemctl` behavior of the installed system.
+- The local suite tests package-gate failure handling; CI performs the live
+  Debian Testing archive query before each variant build.

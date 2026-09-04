@@ -44,8 +44,23 @@ plymouth-themes
 
 # Apps — default set (apps.sh:install_default_apps)
 firefox-esr
+chromium
 vlc
 neovim
+
+# Everyday productivity
+libreoffice-writer
+libreoffice-calc
+libreoffice-impress
+thunderbird
+keepassxc
+
+# Archive support used by the desktop archive managers
+7zip
+unzip
+zip
+
+# Terminal tools
 ripgrep
 fd-find
 fzf
@@ -69,3 +84,17 @@ dconf-cli
 # Optional but expected to be available without fetching
 # (keyd, plymouth themes) — keyd is in variant? ensure target has it if GNOME
 keyd
+
+# Phase 6 extras — baked, no question asked (PLAN.md "Bake into the ISO")
+# Fingerprint login: enrollment lives in GNOME/Plasma settings; dormant
+# without a reader.
+fprintd
+libpam-fprintd
+
+# Printing/scanning: driverless IPP-over-USB printing and eSCL/WSD scanning
+# (cups + printer-driver-all are in the variant lists)
+ipp-usb
+sane-airscan
+
+# Firewall: enabled by live/config/hooks/live/0300-ufw.hook.chroot
+ufw

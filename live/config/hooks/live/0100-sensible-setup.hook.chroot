@@ -6,6 +6,3 @@ chmod +x /usr/local/bin/sensible-install /usr/local/bin/lazydeb 2>/dev/null || t
 
 # Enable NetworkManager
 systemctl enable NetworkManager.service 2>/dev/null || true
-
-# Set root password to empty or allow passwordless root console
-passwd -d root 2>/dev/null || true

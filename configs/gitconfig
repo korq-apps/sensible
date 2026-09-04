@@ -1,9 +1,8 @@
 # Sensible system-wide git defaults — installed to /etc/gitconfig.
-# Identity (user.name / user.email) is per-user: the installer writes the first
-# user's ~/.gitconfig from the optional name/email prompts. Anything here is
-# overridable in ~/.gitconfig.
+# Identity (user.name / user.email) is per-user: users set their own in
+# ~/.gitconfig. Anything here is overridable in ~/.gitconfig.
 #
-# Status: planned (PLAN Phase 6) — not yet wired into the installer.
+# Staged into the image by scripts/fetch-pins.sh.
 
 [init]
 	defaultBranch = main

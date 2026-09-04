@@ -32,6 +32,8 @@ sh_files=(
     live/config/hooks/live/0020-live-boot-to-console.hook.chroot
     live/config/hooks/live/0100-grub-serial-timeout.hook.binary
     live/config/hooks/live/0200-sb-efi-prefix.hook.binary
+    live/config/hooks/live/0300-ufw.hook.chroot
+    scripts/fetch-pins.sh
     live/config/includes.chroot/usr/local/bin/sensible-install
     live/config/includes.chroot/etc/profile.d/98-sensible-serial-ready.sh
     live/config/includes.chroot/etc/profile.d/99-sensible-firmware-check.sh
@@ -127,6 +129,12 @@ assert_contains "package query status is checked" "$package_check_source" 'CHECK
 assert_contains "container build takes the shared lock" "$container_build_source" 'flock -n 9'
 assert_contains "native build takes the shared lock" "$native_build_source" 'flock -n 9'
 assert_contains "native build stages its selected desktop list" "$native_build_source" 'desktop.list.chroot'
+assert_contains "native build records the selected variant" "$native_build_source" 'etc/sensible/variant'
+assert_contains "native build runs the package gate" "$native_build_source" 'scripts/check-packages.sh'
+assert_contains "native build stages the same pinned defaults" "$native_build_source" 'scripts/fetch-pins.sh'
+workflow_source="$(<"${REPO_ROOT}/.github/workflows/build-iso.yml")"
+assert_contains "CI builds the GNOME and KDE variants" "$workflow_source" 'variant: [gnome, kde]'
+assert_contains "CI enforces the Secure Boot smoke path" "$workflow_source" 'SMOKE_FIRMWARE: sb'
 assert_file_contains "offline closure carries the NVIDIA driver" "${REPO_ROOT}/live/config/package-lists/sensible-target.list.chroot" "nvidia-driver"
 assert_contains "Debian browser package uses ESR name" "$apps_source" "firefox-esr"
 assert_not_contains "unsupported plain Firefox package is absent" "$apps_source" $'\n        firefox\n'
@@ -154,6 +162,50 @@ missing_img_dir="$(mktemp -d /tmp/sensible-sb-hook.XXXXXX)"
 missing_img_rc=$?
 rm -rf "${missing_img_dir}"
 assert_rc "Secure Boot hook fails when efi.img is absent" 1 "${missing_img_rc}"
+
+t_section "Phase 6 extras are baked into the image, not fetched at install time"
+pins_source="$(<"${REPO_ROOT}/live/pins.env")"
+source "${REPO_ROOT}/live/pins.env"
+fetch_pins_source="$(<"${REPO_ROOT}/scripts/fetch-pins.sh")"
+stages_source="$(<"${REPO_ROOT}/live/build-stages.sh")"
+target_list="$(<"${REPO_ROOT}/live/config/package-lists/sensible-target.list.chroot")"
+ufw_hook="$(<"${REPO_ROOT}/live/config/hooks/live/0300-ufw.hook.chroot")"
+omb_bashrc="$(<"${REPO_ROOT}/configs/omb-bashrc")"
+for var in OH_MY_BASH_COMMIT OH_MY_BASH_TARBALL_SHA256 NERD_FONTS_TAG NERD_FONTS_JETBRAINS_MONO_ZIP_SHA256 LAZYVIM_STARTER_COMMIT LAZYVIM_STARTER_TARBALL_SHA256; do
+    assert_contains "pins.env pins ${var}" "${pins_source}" "${var}="
+done
+assert_contains "pins.env pins the oh-my-bash tarball by SHA256" "${pins_source}" "${OH_MY_BASH_TARBALL_SHA256}"
+assert_contains "pins.env pins the Nerd Font zip by SHA256" "${pins_source}" "${NERD_FONTS_JETBRAINS_MONO_ZIP_SHA256}"
+assert_contains "fetch-pins verifies every download against the pin" "${fetch_pins_source}" "sha256sum -c"
+assert_contains "fetch-pins fails closed on a checksum mismatch" "${fetch_pins_source}" "does not match the pinned SHA256"
+assert_contains "fetch-pins stages oh-my-bash for all new users" "${fetch_pins_source}" "etc/skel/.bashrc"
+assert_contains "fetch-pins stages the system-wide git defaults" "${fetch_pins_source}" "etc/gitconfig"
+assert_contains "fetch-pins installs the Nerd Font into the image" "${fetch_pins_source}" "jetbrains-mono-nerd"
+assert_contains "fetch-pins stages the pinned LazyVim starter" "${fetch_pins_source}" "etc/skel/.config/nvim"
+assert_contains "fetch-pins stages the GNOME keyd mapping" "${fetch_pins_source}" "configs/keyd-default.conf"
+assert_contains "build stages the pins before live-build runs" "${stages_source}" "scripts/fetch-pins.sh"
+for pkg in fprintd libpam-fprintd ufw ipp-usb sane-airscan; do
+    assert_file_contains "target closure bakes ${pkg}" \
+        "${REPO_ROOT}/live/config/package-lists/sensible-target.list.chroot" "${pkg}"
+done
+assert_file_contains "GNOME variant bakes simple-scan" "${REPO_ROOT}/live/variants/gnome.list" "simple-scan"
+assert_file_contains "KDE variant bakes skanlite" "${REPO_ROOT}/live/variants/kde.list" "skanlite"
+for pkg in chromium libreoffice-writer libreoffice-calc libreoffice-impress thunderbird keepassxc 7zip unzip zip; do
+    assert_file_contains "common closure bakes ${pkg}" \
+        "${REPO_ROOT}/live/config/package-lists/sensible-target.list.chroot" "${pkg}"
+done
+for pkg in file-roller amberol; do
+    assert_file_contains "GNOME variant bakes ${pkg}" \
+        "${REPO_ROOT}/live/variants/gnome.list" "${pkg}"
+done
+for pkg in okular ark gwenview kate kcalc kde-spectacle elisa; do
+    assert_file_contains "KDE variant bakes ${pkg}" \
+        "${REPO_ROOT}/live/variants/kde.list" "${pkg}"
+done
+assert_contains "ufw hook never runs ufw enable in the chroot" "${ufw_hook}" "Never \`ufw enable\` here"
+assert_contains "ufw hook enables by config file" "${ufw_hook}" 's/^ENABLED=no/ENABLED=yes/'
+assert_contains "ufw hook opens KDE Connect ports on KDE" "${ufw_hook}" '1714:1764'
+assert_contains "skel bashrc wires the shared oh-my-bash install" "${omb_bashrc}" 'OSH=/usr/share/oh-my-bash'
 
 t_section "text UI strips Gum presentation flags"
 plain_output="$(UI_TOOL=text; source "${REPO_ROOT}/installer/lib/ui.sh"; say --foreground 8 --bold "Readable fallback" 2>&1)"

@@ -78,6 +78,11 @@ trap 'release_dev_nodes; restore_host_ownership' EXIT
 rm -rf chroot binary .build cache
 lb clean --purge >/dev/null 2>&1 || true
 
+# Phase 6 extras: fetch pinned oh-my-bash / Nerd Font and stage the shell and
+# git defaults into includes.chroot, so every user of the installed system
+# inherits them. Fails the build on a rotted pin (see live/pins.env).
+bash /workspace/scripts/fetch-pins.sh
+
 lb config
 lb bootstrap
 repair_dev_nodes

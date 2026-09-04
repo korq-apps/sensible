@@ -107,8 +107,8 @@ assert_contains "and explains the volume is never unlocked" "${OUT}" "never be u
 printf 'cryptroot UUID=LUKS-UUID none luks,discard,initramfs\n' > "${T}/etc/crypttab"
 mkdir -p "${T}/etc/cryptsetup-initramfs"
 printf 'CRYPTSETUP=y\n' > "${T}/etc/cryptsetup-initramfs/conf-hook"
-validate_installed_boot "${T}" true >/dev/null
-assert_rc "a real crypttab mapping validates" 0 $?
+OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
+assert_rc "crypttab alone does not substitute for a valid generated initramfs" 1 "${rc}"
 
 printf '# cryptroot UUID=LUKS-UUID none luks\n' > "${T}/etc/crypttab"
 OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
@@ -199,15 +199,23 @@ OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
 assert_rc "stale initramfs (older than kernel) fails when LUKS is on" 1 "${rc}"
 assert_contains "and points at the live/leak cause" "${OUT}" "was never regenerated"
 
-# Sanity: initramfs touched at the same instant as the kernel (or newer) passes.
+# Sanity: a fresh, extractable initramfs carrying the mapping passes. Fresh
+# timestamps alone are deliberately insufficient now that validation inspects
+# the generated image contents.
 make_bootable_target "${T}"
 printf 'cryptroot UUID=LUKS-UUID none luks,discard,initramfs\n' > "${T}/etc/crypttab"
 mkdir -p "${T}/etc/cryptsetup-initramfs"
 printf 'CRYPTSETUP=y\n' > "${T}/etc/cryptsetup-initramfs/conf-hook"
-touch "${T}/boot/vmlinuz-7.1.0-amd64"
-touch "${T}/boot/initrd.img-7.1.0-amd64"
-validate_installed_boot "${T}" true >/dev/null
-assert_rc "fresh initramfs (mtime >= kernel) validates" 0 $?
+if make_initramfs_fixture "${T}/boot/initrd.img-7.1.0-amd64" \
+    'cryptroot UUID=LUKS-UUID none luks,discard,initramfs
+'; then
+    touch "${T}/boot/vmlinuz-7.1.0-amd64"
+    touch "${T}/boot/initrd.img-7.1.0-amd64"
+    validate_installed_boot "${T}" true >/dev/null
+    assert_rc "fresh initramfs carrying the mapping validates" 0 $?
+else
+    echo "SKIP: cpio or unmkinitramfs unavailable; fresh initramfs fixture not exercised" >&2
+fi
 
 t_section "show_failure_screen never blocks a run with no human present"
 # The suite itself runs with stdin redirected, so this is the real condition:

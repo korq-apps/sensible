@@ -33,7 +33,7 @@ wiped disk on the user's.
 | Variants | Two ISOs: GNOME (base), KDE (alternative) | Parameterised build, two artifacts, two CI builds; the installer never asks which desktop |
 | Live session | Graphical, with an "Install Sensible" launcher | Users see what they are getting and have a browser and Wi-Fi GUI if they want them |
 | Identity setup | Delegate to `gnome-initial-setup` on GNOME | Installer drops user/name/timezone/locale prompts on the GNOME variant |
-| Third-party apps | Out of the installer, into a post-install tool | Brave/Chromium/Flatpak need network and third-party origins; they cannot run offline |
+| Third-party setup | Out of the installer, into a post-install tool | Brave and the Flathub remote need network and third-party origins; Debian's Chromium and Flatpak packages are baked into the ISO |
 | TUI toolkit | `gum` | In Testing `main`, depends only on `libc6` (~21 MB) |
 | Swap | Swapfile inside root, mirroring RAM; no swap partition | Encryption no longer changes the partition layout; minimum disk still scales with RAM |
 
@@ -136,7 +136,8 @@ Each phase leaves the tree releasable.
 4. **Prompt rework** — `gum`, the reduced screen set, and first-boot
    delegation on GNOME.
 5. **KDE variant** — second ISO and its account-creation path.
-6. **Post-install app tool** — `sensible-apps` for Brave, Chromium, Flatpak.
+6. **Post-install app tool** — `sensible-apps` for Brave, optional alternatives,
+   and Flathub remote setup.
 
 ## Open questions
 

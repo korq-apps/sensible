@@ -40,7 +40,7 @@ DEPS=(
     syslinux-utils isolinux xorriso squashfs-tools mtools dosfstools
     grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed grub-efi-ia32-bin
     shim-signed sbsigntool
-    rsync curl ca-certificates git coreutils util-linux findutils cpio bc procps
+    rsync curl ca-certificates git coreutils util-linux findutils cpio bc procps unzip
 )
 
 echo "==> Installing live-build toolchain (apt)..."
@@ -71,6 +71,17 @@ VARIANT_LIST="${REPO_ROOT}/live/variants/${SENSIBLE_VARIANT}.list"
 [ -f "${VARIANT_LIST}" ] \
     || { echo "Error: no package list at ${VARIANT_LIST}." >&2; exit 1; }
 cp "${VARIANT_LIST}" "${REPO_ROOT}/live/config/package-lists/desktop.list.chroot"
+
+VARIANT_MARKER="${REPO_ROOT}/live/config/includes.chroot/etc/sensible/variant"
+mkdir -p "$(dirname "${VARIANT_MARKER}")"
+printf '%s\n' "${SENSIBLE_VARIANT}" > "${VARIANT_MARKER}"
+
+echo "==> Checking package names resolve against the configured Debian Testing archive..."
+SENSIBLE_PACKAGE_CHECK_NATIVE=1 \
+    "${REPO_ROOT}/scripts/check-packages.sh" "${SENSIBLE_VARIANT}"
+
+# Keep build-time third-party/default assets identical to live/build.sh.
+bash "${REPO_ROOT}/scripts/fetch-pins.sh"
 
 echo "==> Running live-build (lb clean --purge && lb config && lb build)..."
 cd "${REPO_ROOT}/live"

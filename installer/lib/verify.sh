@@ -162,7 +162,9 @@ validate_installed_boot() {
         # straight to busybox with no prompt. Extract the initramfs and demand
         # a non-empty entry for the cryptroot mapping. A non-empty image that
         # cannot be extracted is corrupt and must fail verification.
-        if command -v unmkinitramfs >/dev/null 2>&1; then
+        if ! command -v unmkinitramfs >/dev/null 2>&1; then
+            problems+=("- unmkinitramfs is required to verify the encrypted initramfs but is not available")
+        else
             local initrd inspect_dir entry_file
             initrd=$(compgen -G "${root}/boot/initrd.img-*" | sort -V | tail -n 1 || true)
             if [ -n "$initrd" ] && [ -s "$initrd" ]; then

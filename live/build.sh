@@ -57,6 +57,12 @@ VARIANT_LIST="${REPO_ROOT}/live/variants/${SENSIBLE_VARIANT}.list"
 [ -f "${VARIANT_LIST}" ] || { echo "Error: no package list at ${VARIANT_LIST}." >&2; exit 1; }
 cp "${VARIANT_LIST}" "${REPO_ROOT}/live/config/package-lists/desktop.list.chroot"
 
+# Record the variant in the image; chroot hooks (e.g. ufw KDE Connect rules)
+# and installed-system scripts read it from /etc/sensible/variant.
+VARIANT_MARKER="${REPO_ROOT}/live/config/includes.chroot/etc/sensible/variant"
+mkdir -p "$(dirname "${VARIANT_MARKER}")"
+printf '%s\n' "${SENSIBLE_VARIANT}" > "${VARIANT_MARKER}"
+
 # Resolve every package name before building. A name that has been dropped from
 # Testing is otherwise only discovered mid-install, on the user's machine, after
 # the disk is wiped -- which is exactly how vdpau-driver-all failed.

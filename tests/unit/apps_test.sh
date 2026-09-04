@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Unit tests for installer/lib/apps.sh — default app set, LazyVim skel,
-# Flatpak/Flathub, optional apps and Brave origin.
+# Flatpak, baked LazyVim defaults, optional apps and Brave origin.
 TEST_NAME="apps_test"
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/harness.sh"
 source "${INSTALLER_DIR}/lib/common.sh"
@@ -9,6 +9,8 @@ source "${INSTALLER_DIR}/lib/apps.sh"
 TMP_MNT="$(mktemp -d)"
 MNT="${TMP_MNT}"
 mkdir -p "${MNT}/etc/apt" "${MNT}/home/alice"
+mkdir -p "${MNT}/etc/skel/.config/nvim"
+echo "vim.cmd.colorscheme habamax" > "${MNT}/etc/skel/.config/nvim/init.lua"
 
 chroot() { mlog "chroot $*"; }
 git() {
@@ -25,12 +27,12 @@ t_section "Default apps: canonical package list (Architecture §7)"
 mock_setup
 install_default_apps "alice"
 apt_line="$(mock_last_call 'apt-get install -y --no-install-recommends')"
-for pkg in firefox-esr vlc neovim ripgrep fd-find fzf bat eza zoxide btop fastfetch jq sudo curl git ca-certificates flatpak fonts-noto-core fonts-noto-color-emoji fonts-liberation; do
+for pkg in firefox-esr chromium vlc neovim libreoffice-writer libreoffice-calc libreoffice-impress thunderbird keepassxc 7zip unzip zip ripgrep fd-find fzf bat eza zoxide btop fastfetch jq sudo curl git ca-certificates flatpak fonts-noto-core fonts-noto-color-emoji fonts-liberation; do
     if [[ " ${apt_line} " == *" ${pkg} "* ]]; then t_ok; else t_fail "package ${pkg} in apt install call" "line: ${apt_line}"; fi
 done
 calls="$(cat "${MOCK_LOG}")"
-assert_contains "flathub remote added" "${calls}" "flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo"
-assert_contains "LazyVim starter cloned" "${calls}" "git clone --depth 1 https://github.com/LazyVim/starter"
+assert_not_contains "Flathub setup stays out of the installer" "${calls}" "flatpak remote-add"
+assert_not_contains "LazyVim starter is not cloned during install" "${calls}" "git clone"
 assert_file_exists "skel nvim config" "${MNT}/etc/skel/.config/nvim/init.lua"
 assert_file_exists "copied to created user" "${MNT}/home/alice/.config/nvim/init.lua"
 assert_contains "ownership fixed via chroot" "${calls}" "chown -R alice:alice /home/alice/.config"

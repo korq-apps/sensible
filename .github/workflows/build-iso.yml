@@ -38,8 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # KDE joins once its variant lands (offline rework, phase 5).
-        variant: [gnome]
+        variant: [gnome, kde]
     # Read-only: this job runs for pull_request and executes PR-controlled
     # build scripts, so it must never hold a token that can write the repo.
     # Publishing happens in the tag-only `release` job below.
@@ -172,6 +171,12 @@ jobs:
         # green local smoke and a green CI smoke exercise identical logic.
         run: |
           chmod +x scripts/smoke-boot.sh
+          scripts/smoke-boot.sh sensible-${{ matrix.variant }}-debian-testing-amd64.iso
+
+      - name: Headless QEMU Secure Boot Smoke Test
+        env:
+          SMOKE_FIRMWARE: sb
+        run: |
           scripts/smoke-boot.sh sensible-${{ matrix.variant }}-debian-testing-amd64.iso
 
       - name: Upload ISO and Checksum Artifacts

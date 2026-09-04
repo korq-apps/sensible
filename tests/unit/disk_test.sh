@@ -147,6 +147,8 @@ lsblk() {
         *"-dno SIZE"*) case "$dev" in /dev/vda) echo "50G" ;; /dev/vda1) echo "1G" ;; /dev/vda2) echo "49G" ;; esac ;;
         *"-dno VENDOR"*) [ "$dev" = /dev/vda ] && echo "QEMU" ;;
         *"-dno MODEL"*) [ "$dev" = /dev/vda ] && echo "QEMU HARDDISK" ;;
+        *"-dno SERIAL"*) [ "$dev" = /dev/vda ] && echo "QM00001" ;;
+        *"-dno WWN"*) [ "$dev" = /dev/vda ] && echo "0x5000c500abcd1234" ;;
         *"-dno FSTYPE"*) case "$dev" in /dev/vda1) echo "vfat" ;; /dev/vda2) echo "btrfs" ;; esac ;;
         *"-dno LABEL"*) case "$dev" in /dev/vda1) echo "EFI" ;; /dev/vda2) echo "Sensible Root" ;; esac ;;
         *"-dno PARTLABEL"*) : ;;
@@ -157,6 +159,8 @@ lsblk() {
 DISK_ENTRY="$(get_disk_inventory_entry /dev/vda)"
 assert_contains "disk identity includes capacity" "$DISK_ENTRY" "/dev/vda (50G)"
 assert_contains "disk identity includes model without duplicate vendor" "$DISK_ENTRY" "QEMU HARDDISK"
+assert_contains "disk identity shows the serial used for revalidation" "$DISK_ENTRY" "serial: QM00001"
+assert_contains "disk identity shows the WWN used for revalidation" "$DISK_ENTRY" "WWN: 0x5000c500abcd1234"
 assert_contains "EFI volume includes name size filesystem and label" "$DISK_ENTRY" "vda1  1G  vfat  label: EFI"
 assert_contains "mounted volume includes mount point" "$DISK_ENTRY" "mounted: /boot/efi"
 assert_contains "root volume includes filesystem and spaced label" "$DISK_ENTRY" "vda2  49G  btrfs  label: Sensible Root"

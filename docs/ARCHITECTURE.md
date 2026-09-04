@@ -11,7 +11,7 @@
 │ Layer 4: Desktop (one variant carried in the offline ISO)   │
 │   GNOME or KDE Plasma                                       │
 │   GNOME: keyd Mac clipboard (Super+C/V/X)                   │
-│   Flatpak + Flathub · Firefox ESR · Neovim · CLI extras     │
+│   Flatpak · Firefox ESR · Neovim · CLI extras               │
 ├─────────────────────────────────────────────────────────────┤
 │ Layer 3: Hardware services (on the target)                  │
 │   Testing kernel + microcode + non-free firmware            │
@@ -167,7 +167,7 @@ keyring is not unlocked by autologin. SDDM autologin requires `Session=`
 alongside `User=` — the installer writes `Session=plasma` (the Wayland
 session file name); with only `User=` autologin never engages.
 
-### Biometric login (planned — Phase 6)
+### Biometric login
 
 Two tiers, because fingerprint and face have very different maturity on Debian:
 
@@ -192,8 +192,8 @@ Facts to not relearn later:
 | Audio | PipeWire, WirePlumber, `pipewire-pulse`, `pipewire-audio`, `pipewire-alsa` |
 | GPU | `mesa-vulkan-drivers`, `va-driver-all` (VDPAU comes from `mesa-libgallium` via mesa; `vdpau-driver-all` was removed from Testing); the offline closure includes `nvidia-driver`, while NVIDIA KMS configuration is enabled only when `lspci` sees matching hardware |
 | Power | `power-profiles-daemon` (not TLP — it fights PPD and both DEs) |
-| Biometrics | `fprintd`, `libpam-fprintd`; BioPass optional — see §5 **(planned — Phase 6)** |
-| Print / scan | `cups`, `ipp-usb` (driverless IPP-over-USB), `sane-airscan`; `simple-scan` with GNOME, `skanlite` with KDE **(planned — Phase 6)** |
+| Biometrics | `fprintd`, `libpam-fprintd` (baked); BioPass optional — see §5 **(planned — post-install tool)** |
+| Print / scan | `cups`, `ipp-usb` (driverless IPP-over-USB), `sane-airscan`; `simple-scan` with GNOME, `skanlite` with KDE |
 | Updates | `fwupd` (LVFS), `wireless-regdb` |
 | Repos on the target | `main`, `contrib`, `non-free`, `non-free-firmware` |
 
@@ -211,27 +211,34 @@ Keep this list the single source of truth. README and the installer spec should 
 
 `sudo`, `locales`, `keyboard-configuration`, `console-setup`, NetworkManager, `fwupd`, Flatpak, fonts (`fonts-noto-core`, `fonts-noto-color-emoji`, `fonts-liberation`), `git`, `curl`, `ca-certificates`.
 
-**Planned — Phase 6:** JetBrainsMono Nerd Font from a pinned nerd-fonts release (Debian packages no Nerd Fonts; LazyVim and the fancier prompt themes want one), and `ufw` enabled with default deny incoming / allow outgoing — on KDE, ports 1714–1764 tcp/udp are allowed so KDE Connect keeps working (a silent-breakage trap otherwise).
+JetBrainsMono Nerd Font from a pinned nerd-fonts release (Debian packages no Nerd Fonts; LazyVim and the fancier prompt themes want one), and `ufw` enabled with default deny incoming / allow outgoing — on KDE, ports 1714–1764 tcp/udp are allowed so KDE Connect keeps working (a silent-breakage trap otherwise). Both are baked at build time: the font by `scripts/fetch-pins.sh` (pin + SHA256 in `live/pins.env`), `ufw` by `live/config/hooks/live/0300-ufw.hook.chroot`, which writes allow rules while ufw is still disabled and flips `ENABLED=yes` in `/etc/ufw/ufw.conf` — never `ufw enable` in a chroot.
 
 ### Default apps
 
 | Kind | Package |
 | :--- | :--- |
 | Browser | Firefox ESR (`firefox-esr`) |
+| Alternate browser | Chromium (`chromium`) |
+| Office | LibreOffice Writer, Calc, and Impress |
+| Mail | Thunderbird |
+| Passwords | KeePassXC |
 | Media | VLC |
 | Editor | Neovim + LazyVim starter copied to `/etc/skel/.config/nvim` |
+| Archives | `7zip`, `unzip`, `zip`; File Roller on GNOME, Ark on KDE |
+| GNOME utilities | The `gnome-core` PDF/image viewers, text editor, calculator, disks and calendar; plus Amberol |
+| KDE utilities | Okular, Gwenview, Kate, KCalc, Spectacle, and Elisa |
 | CLI | `ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`, `jq` |
 
-### Shell (all users) — planned, Phase 6
+### Shell (all users)
 
 oh-my-bash from a **shared, read-only install** — not per-user clones:
 
-- A pinned upstream tag vendored to `/usr/share/oh-my-bash` (`.git` stripped).
+- A pinned upstream commit vendored to `/usr/share/oh-my-bash` (pin + SHA256 in `live/pins.env`; staged by `scripts/fetch-pins.sh` at build time).
 - `/etc/skel/.bashrc` comes from `configs/omb-bashrc`: `OSH=/usr/share/oh-my-bash`, the `font` theme (no patched-font dependency), auto-update off (the install is root-owned; updates come with the OS), git/ssh completions.
 - The same file **activates the CLI set we already install** — `zoxide init`, fzf keybindings, `eza` ls aliases, and `bat`/`fd` aliases for Debian's renamed `batcat`/`fdfind` binaries. Installing tools nobody wired up is not sensible.
-- Requires `/etc/skel` to be complete **before** `useradd -m` (today the installer copies LazyVim into the created user's home as a workaround — that reordering lands with this work). Root keeps the stock Debian bashrc.
+- `/etc/skel` is populated when the ISO is built, so the installer's `useradd -m` inherits it — the ordering problem the network design had does not exist here. Root keeps the stock Debian bashrc.
 
-### Git (all users) — planned, Phase 6
+### Git (all users)
 
 System-wide defaults in `/etc/gitconfig` from `configs/gitconfig` — `init.defaultBranch=main`, `pull.rebase=true`, `push.autoSetupRemote=true`, `fetch.prune=true`, `rebase.autostash=true`. Nothing else; users override in `~/.gitconfig`.
 
@@ -241,15 +248,15 @@ No credential helper is configured: Debian ships no packaged libsecret helper (`
 
 ### Optional software
 
-**Not currently offered by the offline installer:** Chromium; Brave; Audacious; Amberol; Elisa. These belong in a post-install application tool or the desktop's software center.
+**Not currently offered by the offline installer:** Brave and Audacious. These belong in a post-install application tool or the desktop's software center.
 
 **Later, not implemented:** AI CLIs may be added as an optional module with pinned artifacts. They are not current installer checkboxes.
 
-**Planned — Phase 6:** BioPass face login (pinned `.deb`, see §5); Developer tools — `docker.io`, `docker-compose` (the v2 rewrite in Testing), `lazygit`, `gh`. Developer tools deliberately do **not** add the user to the `docker` group — membership is root-equivalent, so the default is `sudo docker` (a user can opt in later, knowing the tradeoff).
+**Planned (post-install tool):** BioPass face login (pinned `.deb`, see §5); Developer tools — `docker.io`, `docker-compose` (the v2 rewrite in Testing), `lazygit`, `gh`. Developer tools deliberately do **not** add the user to the `docker` group — membership is root-equivalent, so the default is `sudo docker` (a user can opt in later, knowing the tradeoff).
 
 ### Explicitly not installed
 
-Steam, Slack, WhatsApp, Zoom, Discord, Spotify, Snapd, any SaaS “default client”. Flathub is configured so the user can add them.
+Steam, Slack, WhatsApp, Zoom, Discord, Spotify, Snapd, any SaaS “default client”. The planned post-install tool configures Flathub so the user can add them without making the offline installer contact a third-party origin.
 
 ---
 
@@ -257,7 +264,7 @@ Steam, Slack, WhatsApp, Zoom, Discord, Spotify, Snapd, any SaaS “default clien
 
 **In v1:** amd64, UEFI only, single-disk wipe, Btrfs or Ext4 with LUKS on/off, separate GNOME and KDE images, selectable locales, and working Wi-Fi/audio/GPU on common laptops.
 
-**Planned (Phase 6):** biometrics (§5), oh-my-bash + git defaults (§7), ufw, printing/scanning, developer tools, `--config` unattended installs.
+**Planned (post-install tool):** developer tools and BioPass (§5, §7). `--config` unattended installs are release-test infrastructure (PLAN.md).
 
 **Later:** Btrfs Snapper (+ `grub-btrfs` boot-menu rollback), TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis; PCR policy must account for the unencrypted `/boot`), FIDO2 keys for sudo/polkit (`libpam-u2f`), GUI NVIDIA/MOK enrollment flow, Calamares if someone wants a GUI, other arches.
 
