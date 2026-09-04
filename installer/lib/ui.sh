@@ -36,6 +36,7 @@ SENSIBLE_LOGO_TEXT="Sensible"
 SENSIBLE_LOGO_WIDTH=40
 SENSIBLE_CONTENT_WIDTH=72
 SENSIBLE_STTY_STATE=""
+SENSIBLE_STYLE_WARNING_SHOWN="false"
 INSTALL_PROGRESS_STARTED_AT=0
 INSTALL_PROGRESS_TOTAL=1
 
@@ -53,13 +54,21 @@ _ui_has_controlling_tty() {
 prepare_terminal() {
     _ui_has_controlling_tty || return 0
     [ -z "$SENSIBLE_STTY_STATE" ] || return 0
-    SENSIBLE_STTY_STATE=$(stty -g </dev/tty 2>/dev/null || true)
-    stty -echoctl </dev/tty 2>/dev/null || true
+    if ! SENSIBLE_STTY_STATE=$(stty -g </dev/tty 2>/dev/null); then
+        SENSIBLE_STTY_STATE=""
+        log_warn "Could not read terminal settings; control-character echo will be unchanged."
+        return 0
+    fi
+    if ! stty -echoctl </dev/tty 2>/dev/null; then
+        log_warn "Could not disable control-character echo for the installer terminal."
+    fi
 }
 
 restore_terminal() {
     [ -n "$SENSIBLE_STTY_STATE" ] || return 0
-    stty "$SENSIBLE_STTY_STATE" </dev/tty 2>/dev/null || true
+    if ! stty "$SENSIBLE_STTY_STATE" </dev/tty 2>/dev/null; then
+        log_warn "Could not restore the original terminal settings."
+    fi
     SENSIBLE_STTY_STATE=""
 }
 
@@ -68,11 +77,15 @@ measure_terminal() {
     # still the real interactive console. Measure that console first.
     local tty_size=""
     if _ui_has_controlling_tty; then
-        tty_size=$(stty size </dev/tty 2>/dev/null || true)
+        if ! tty_size=$(stty size </dev/tty 2>/dev/null); then
+            tty_size=""
+        fi
         TERM_HEIGHT=${tty_size%% *}
         TERM_WIDTH=${tty_size##* }
     elif [ -t 0 ] || [ -t 2 ]; then
-        tty_size=$(stty size 2>/dev/null || true)
+        if ! tty_size=$(stty size 2>/dev/null); then
+            tty_size=""
+        fi
         TERM_HEIGHT=${tty_size%% *}
         TERM_WIDTH=${tty_size##* }
     else
@@ -127,7 +140,15 @@ export GUM_FILTER_PLACEHOLDER_FOREGROUND="8"
 # on the console rather than stdout (which may carry a selected value), and do
 # not abort the installer if a terminal rejects a cosmetic capability query.
 ui_style() {
-    gum style "$@" >/dev/tty 2>&1 || true
+    local fallback_text="${!#}"
+    if ! gum style "$@" >/dev/tty 2>&1; then
+        printf '%s\n' "${fallback_text}" >/dev/tty
+        if [ "$SENSIBLE_STYLE_WARNING_SHOWN" != "true" ]; then
+            log_warn "Terminal styling is unavailable; continuing with plain installer output."
+            SENSIBLE_STYLE_WARNING_SHOWN="true"
+        fi
+    fi
+    return 0
 }
 
 ui_blank() {
@@ -170,7 +191,7 @@ clear_logo() {
     if _ui_use_gum; then
         printf "\033[H\033[2J" >/dev/tty
         render_logo 1
-        centered_style --foreground 8 "${installer_caption}" || true
+        centered_style --foreground 8 "${installer_caption}"
         printf '\n' >/dev/tty
     else
         # Text/whiptail mode: simple header
@@ -192,13 +213,17 @@ welcome_screen() {
     printf "\033[?25l\033[H\033[2J" >/dev/tty
     render_logo "$top_padding"
     printf '\n' >/dev/tty
-    centered_style --bold "Welcome to Sensible" || true
-    centered_style --foreground 8 "Debian Testing  •  ${edition}" || true
+    centered_style --bold "Welcome to Sensible"
+    centered_style --foreground 8 "Debian Testing  •  ${edition}"
     printf '\n' >/dev/tty
     printf '\n\n' >/dev/tty
-    centered_style --bold --foreground 2 "Press Enter to start" || true
+    centered_style --bold --foreground 2 "Press Enter to start"
 
-    IFS= read -r _ </dev/tty || true
+    if ! IFS= read -r _ </dev/tty; then
+        printf "\033[?25h" >/dev/tty
+        log_err "The installer terminal closed before setup began."
+        return 1
+    fi
     printf "\033[?25h\033[H\033[2J" >/dev/tty
 }
 
@@ -329,7 +354,9 @@ ui_msgbox() {
         ui_blank
         if [ -t 0 ]; then
             ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 8 "Press Return to continue"
-            read -r _ </dev/tty || true
+            if ! read -r _ </dev/tty; then
+                log_warn "The acknowledgement prompt closed without input."
+            fi
         fi
     elif [ "$UI_TOOL" = "whiptail" ] || [ "$UI_TOOL" = "dialog" ]; then
         local gh gw

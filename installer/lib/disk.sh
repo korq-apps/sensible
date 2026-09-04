@@ -250,9 +250,26 @@ wait_for_device() {
     local i
     for i in $(seq 1 10); do
         [[ -b "$1" ]] && return 0
-        udevadm settle 2>/dev/null || true
+        if command -v udevadm >/dev/null 2>&1; then
+            if ! udevadm settle 2>/dev/null; then
+                log_warn "udevadm settle failed while waiting for $1; retrying."
+            fi
+        fi
         sleep 1
     done
+    return 1
+}
+
+get_live_boot_source() {
+    local source
+    if source=$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null); then
+        printf '%s\n' "${source}"
+        return 0
+    fi
+    if source=$(findmnt -no SOURCE /run/live/medium 2>/dev/null); then
+        printf '%s\n' "${source}"
+        return 0
+    fi
     return 1
 }
 
@@ -284,9 +301,15 @@ list_candidate_disks() {
             # the mounted-filesystem check as well.
             # Also exclude the live boot disk itself
             local boot_source exclude_disk
-            boot_source=$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || findmnt -no SOURCE /run/live/medium 2>/dev/null || true)
+            boot_source=""
+            if ! boot_source=$(get_live_boot_source); then
+                boot_source=""
+            fi
             if [ -n "$boot_source" ]; then
-                exclude_disk=$(get_root_disk "$boot_source" 2>/dev/null || true)
+                exclude_disk=""
+                if ! exclude_disk=$(get_root_disk "$boot_source" 2>/dev/null); then
+                    log_warn "Could not resolve the live medium's parent disk; mounted-device checks remain active."
+                fi
                 if [ -n "$exclude_disk" ] && [ "$name" = "$exclude_disk" ]; then
                     continue
                 fi
@@ -327,8 +350,10 @@ partition_disk() {
     local enable_luks="$3"
 
     log_info "Wiping existing partition tables on ${disk}..."
-    sgdisk --zap-all "$disk" >/dev/null 2>&1 || true
-    wipefs --all --force "$disk" >/dev/null 2>&1 || true
+    disk_step "wiping the existing GPT metadata on ${disk}" \
+        sgdisk --zap-all "$disk" || return $?
+    disk_step "wiping filesystem signatures on ${disk}" \
+        wipefs --all --force "$disk" || return $?
 
     # One layout in both modes: EFI, BOOT, ROOT. Swap is always a swapfile
     # inside the root filesystem, never a partition -- so it inherits the
@@ -336,15 +361,21 @@ partition_disk() {
     # later without touching the partition table, and enabling encryption does
     # not change the partition layout at all.
     log_info "Creating GPT layout (EFI: 1024M, BOOT: 1024M, ROOT+swapfile: rest)..."
-    sgdisk -n 1:0:+1024M -t 1:ef00 -c 1:"EFI System Partition" "$disk"
-    sgdisk -n 2:0:+1024M -t 2:8300 -c 2:"Linux Boot" "$disk"
+    disk_step "creating the EFI partition on ${disk}" \
+        sgdisk -n 1:0:+1024M -t 1:ef00 -c 1:"EFI System Partition" "$disk" || return $?
+    disk_step "creating the boot partition on ${disk}" \
+        sgdisk -n 2:0:+1024M -t 2:8300 -c 2:"Linux Boot" "$disk" || return $?
     if [ "$enable_luks" = "true" ]; then
-        sgdisk -n 3:0:0 -t 3:8309 -c 3:"Linux LUKS" "$disk"
+        disk_step "creating the encrypted root partition on ${disk}" \
+            sgdisk -n 3:0:0 -t 3:8309 -c 3:"Linux LUKS" "$disk" || return $?
     else
-        sgdisk -n 3:0:0 -t 3:8300 -c 3:"Linux Root" "$disk"
+        disk_step "creating the root partition on ${disk}" \
+            sgdisk -n 3:0:0 -t 3:8300 -c 3:"Linux Root" "$disk" || return $?
     fi
 
-    partprobe "$disk" 2>/dev/null || true
+    if ! partprobe "$disk"; then
+        log_warn "partprobe could not notify the kernel about ${disk}; waiting for the partition devices directly."
+    fi
     sleep 2
 }
 

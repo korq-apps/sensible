@@ -60,7 +60,9 @@ Full log: ${log_file}" \
                 ;;
             shell)
                 echo "Starting a shell. Type 'exit' to return to this screen." >&2
-                "${SHELL:-/bin/bash}" || true
+                if ! "${SHELL:-/bin/bash}"; then
+                    echo "Warning: troubleshooting shell exited unsuccessfully." >&2
+                fi
                 ;;
             reboot)   command -v systemctl >/dev/null 2>&1 && systemctl reboot   || reboot;   return 0 ;;
             poweroff) command -v systemctl >/dev/null 2>&1 && systemctl poweroff || poweroff; return 0 ;;
@@ -166,7 +168,8 @@ validate_installed_boot() {
             problems+=("- unmkinitramfs is required to verify the encrypted initramfs but is not available")
         else
             local initrd inspect_dir entry_file
-            initrd=$(compgen -G "${root}/boot/initrd.img-*" | sort -V | tail -n 1 || true)
+            initrd=$(find "${root}/boot" -maxdepth 1 -type f -name 'initrd.img-*' -print \
+                | sort -V | tail -n 1)
             if [ -n "$initrd" ] && [ -s "$initrd" ]; then
                 mkdir -p "${root}/var/tmp"
                 inspect_dir=$(mktemp -d "${root}/var/tmp/initrd-check.XXXXXX" 2>/dev/null) || inspect_dir=""

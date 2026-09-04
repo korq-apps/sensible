@@ -41,6 +41,25 @@ assert_not_contains "no swap partition without LUKS either" "$(cat "${MOCK_LOG}"
 assert_not_contains "no p4 without LUKS" "$(cat "${MOCK_LOG}")" "-n 4:0:0"
 mock_teardown
 
+t_section "partition_disk: wipe failure aborts before repartitioning"
+mock_setup
+sgdisk() {
+    mlog "sgdisk $*"
+    [ "${1:-}" != "--zap-all" ]
+}
+wipefs()    { mlog "wipefs $*"; }
+partprobe() { mlog "partprobe $*"; }
+if partition_disk /dev/sda 8192 false; then
+    t_fail "partition_disk rejects a failed GPT wipe" "unexpected success"
+else
+    t_ok
+fi
+assert_not_contains "no signatures are wiped after GPT wipe failure" \
+    "$(cat "${MOCK_LOG}")" "wipefs"
+assert_not_contains "no new partition is created after wipe failure" \
+    "$(cat "${MOCK_LOG}")" "sgdisk -n"
+mock_teardown
+
 t_section "format_and_mount: LUKS on, btrfs (swapfile on @swap subvol)"
 mock_setup
 TMP_MNT="$(mktemp -d)"

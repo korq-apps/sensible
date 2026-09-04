@@ -27,10 +27,16 @@ fi
 
 echo "==> Using container engine: ${CONTAINER_ENGINE}"
 
-# Ensure executable permissions on auto scripts & hooks
-chmod +x "${REPO_ROOT}/live/auto/"* 2>/dev/null || true
-chmod -R +x "${REPO_ROOT}/live/config/hooks/" 2>/dev/null || true
-chmod -R +x "${REPO_ROOT}/live/config/includes.chroot/usr/local/bin/" 2>/dev/null || true
+# These files are executed by live-build or from the live image. Missing paths
+# are a broken source tree, and chmod failures must stop the build.
+for executable_dir in \
+    "${REPO_ROOT}/live/auto" \
+    "${REPO_ROOT}/live/config/hooks" \
+    "${REPO_ROOT}/live/config/includes.chroot/usr/local/bin"; do
+    [ -d "${executable_dir}" ] \
+        || { echo "Error: required executable directory is missing: ${executable_dir}" >&2; exit 1; }
+    find "${executable_dir}" -type f -exec chmod 0755 {} +
+done
 
 # Stage installer and configs into includes.chroot/opt/sensible
 OPT_SENSIBLE="${REPO_ROOT}/live/config/includes.chroot/opt/sensible"
@@ -42,7 +48,7 @@ mkdir -p "${OPT_SENSIBLE}/installer" "${OPT_SENSIBLE}/configs" "${OPT_SENSIBLE}/
 rsync -a --delete "${REPO_ROOT}/installer/" "${OPT_SENSIBLE}/installer/"
 rsync -a --delete "${REPO_ROOT}/configs/" "${OPT_SENSIBLE}/configs/"
 rsync -a --delete "${REPO_ROOT}/docs/" "${OPT_SENSIBLE}/docs/"
-chmod -R +x "${OPT_SENSIBLE}/installer/" 2>/dev/null || true
+chmod 0755 "${OPT_SENSIBLE}/installer/sensible-install.sh"
 
 # Desktop variant. The ISO carries the finished system, so the desktop is
 # chosen at build time; the installer never asks.

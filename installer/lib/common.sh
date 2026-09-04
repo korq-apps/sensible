@@ -12,8 +12,12 @@ INSTALL_OUTPUT_QUIET="false"
 start_install_log() {
     mkdir -p "$(dirname "$INSTALL_LOG")"
     : > "$INSTALL_LOG"
-    chgrp sudo "$INSTALL_LOG" 2>/dev/null || true
-    chmod 640 "$INSTALL_LOG"
+    if chgrp sudo "$INSTALL_LOG"; then
+        chmod 640 "$INSTALL_LOG"
+    else
+        chmod 600 "$INSTALL_LOG"
+        log_warn "Could not assign ${INSTALL_LOG} to the sudo group; keeping it root-only."
+    fi
     # The normal graphical installer keeps command/package chatter in the log
     # and reserves the console for the progress UI. --debug and non-Gum runs
     # still mirror everything to the terminal. Secrets are never echoed and
@@ -47,8 +51,12 @@ preserve_install_log() {
     [ -d "${MNT}" ] || return 0
     mkdir -p "${MNT}/var/log"
     cp "$INSTALL_LOG" "${MNT}/var/log/sensible-install.log"
-    chgrp sudo "${MNT}/var/log/sensible-install.log" 2>/dev/null || true
-    chmod 640 "${MNT}/var/log/sensible-install.log"
+    if chroot "${MNT}" chgrp sudo /var/log/sensible-install.log; then
+        chmod 640 "${MNT}/var/log/sensible-install.log"
+    else
+        chmod 600 "${MNT}/var/log/sensible-install.log"
+        log_warn "Could not assign the target install log to its sudo group; keeping it root-only."
+    fi
 }
 
 require_id() {
@@ -223,9 +231,13 @@ the connection again. Choose No to leave the installer safely." "yes"; then
         fi
 
         if command -v nmtui-connect >/dev/null 2>&1; then
-            nmtui-connect || true
+            if ! nmtui-connect; then
+                log_info "Network setup was closed without selecting a connection."
+            fi
         elif command -v nmtui >/dev/null 2>&1; then
-            nmtui || true
+            if ! nmtui; then
+                log_info "Network setup was closed without applying a connection."
+            fi
         else
             ui_msgbox "Network Setup Unavailable" "NetworkManager's setup screen is unavailable. Configure the network from the shell, then run sensible-install again."
             return 1

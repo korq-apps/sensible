@@ -111,7 +111,7 @@ mount()       {
         # Simulate a real tmpfs mount: the target now shows an empty filesystem
         # even if the rsync mock previously copied live markers into it. This is
         # what the chroot would see and what update-initramfs cares about.
-        rm -rf "${target:?}"/* 2>/dev/null || true
+        find "${target:?}" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
     fi
 }
 declare -A MOCK_TMPFS_MOUNTS=()

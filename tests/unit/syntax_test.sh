@@ -64,6 +64,14 @@ for f in "${sh_files[@]}"; do
     fi
 done
 
+t_section "errors are handled explicitly"
+blanket_suppression=$(printf '\174\174 true')
+if suppressed_errors=$(git -C "${REPO_ROOT}" grep -nF -- "${blanket_suppression}" -- installer live scripts); then
+    t_fail "production scripts contain blanket error suppression" "${suppressed_errors}"
+else
+    t_ok
+fi
+
 t_section "live-build hooks use the executed naming convention"
 # live-build only runs config/hooks/*/*.hook.{chroot,binary}; any other name
 # is silently skipped — which is how the Secure Boot hook once shipped inert.
@@ -132,6 +140,8 @@ assert_contains "native build stages its selected desktop list" "$native_build_s
 assert_contains "native build records the selected variant" "$native_build_source" 'etc/sensible/variant'
 assert_contains "native build runs the package gate" "$native_build_source" 'scripts/check-packages.sh'
 assert_contains "native build stages the same pinned defaults" "$native_build_source" 'scripts/fetch-pins.sh'
+assert_contains "target enables fwupd's refresh timer" \
+    "$(<"${REPO_ROOT}/installer/sensible-install.sh")" 'systemctl enable fwupd-refresh.timer'
 workflow_source="$(<"${REPO_ROOT}/.github/workflows/build-iso.yml")"
 assert_contains "CI builds the GNOME and KDE variants" "$workflow_source" 'variant: [gnome, kde]'
 assert_contains "CI enforces the Secure Boot smoke path" "$workflow_source" 'SMOKE_FIRMWARE: sb'

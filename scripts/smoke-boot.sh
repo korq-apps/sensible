@@ -76,7 +76,11 @@ esac
 if [ "${SMOKE_FIRMWARE}" != "bios" ] \
     && { [ -z "${OVMF_CODE}" ] || [ -z "${OVMF_VARS}" ]; }; then
     echo "Error: no OVMF code/vars pair found for SMOKE_FIRMWARE=${SMOKE_FIRMWARE}. Install 'ovmf' (Debian/Ubuntu) or 'edk2-ovmf' (Arch)." >&2
-    ls -la /usr/share/OVMF 2>/dev/null || true
+    if [ -d /usr/share/OVMF ]; then
+        if ! ls -la /usr/share/OVMF >&2; then
+            echo "Warning: could not list /usr/share/OVMF while diagnosing missing firmware." >&2
+        fi
+    fi
     exit 1
 fi
 echo "==> Firmware: ${SMOKE_FIRMWARE}${OVMF_CODE:+ (${OVMF_CODE})}"
@@ -133,7 +137,9 @@ set -e
 echo "==> QEMU exit code: ${rc} (124 = stopped after the boot window, expected)"
 if [ "${rc}" -ne 0 ] && [ "${rc}" -ne 124 ]; then
     echo "----- last 50 lines of serial log -----" >&2
-    tail -n 50 "${SERIAL_LOG}" >&2 || true
+    if ! tail -n 50 "${SERIAL_LOG}" >&2; then
+        echo "Warning: serial log could not be read." >&2
+    fi
     echo "Error: QEMU exited unexpectedly (rc=${rc}) before completing the boot window." >&2
     exit 1
 fi
@@ -160,7 +166,9 @@ fi
 
 if [ "${fail}" -ne 0 ]; then
     echo "----- last 50 lines of serial log (cleaned) -----" >&2
-    tail -n 50 "${CLEAN}" >&2 || true
+    if ! tail -n 50 "${CLEAN}" >&2; then
+        echo "Warning: cleaned serial log could not be read." >&2
+    fi
     echo "Smoke test FAILED." >&2
     exit 1
 fi

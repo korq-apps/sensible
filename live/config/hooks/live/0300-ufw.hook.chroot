@@ -14,4 +14,4 @@ if [ "${VARIANT}" = "kde" ]; then
 fi
 
 sed -i 's/^ENABLED=no/ENABLED=yes/' /etc/ufw/ufw.conf
-systemctl enable ufw.service >/dev/null 2>&1 || true
+systemctl enable ufw.service >/dev/null

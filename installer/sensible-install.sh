@@ -38,7 +38,9 @@ cleanup() {
         local failure_text="Installation interrupted or failed during ${CURRENT_STAGE:-pre-flight} (exit code ${exit_code})."
         if [ "$INSTALL_LOG_ACTIVE" = "true" ]; then
             log_err "$failure_text"
-            stop_install_log || true
+            if ! stop_install_log; then
+                log_warn "Could not finish flushing ${INSTALL_LOG}."
+            fi
         else
             log_err "$failure_text"
         fi
@@ -50,7 +52,9 @@ cleanup() {
         if ! unmount_target; then
             log_err "Automatic cleanup was incomplete. Do not reboot until ${MNT} is unmounted and the cryptroot mapping is closed."
         fi
-        show_failure_screen "${CURRENT_STAGE:-pre-flight}" "$exit_code" "$INSTALL_LOG" || true
+        if ! show_failure_screen "${CURRENT_STAGE:-pre-flight}" "$exit_code" "$INSTALL_LOG"; then
+            log_warn "The interactive failure screen could not be displayed."
+        fi
     fi
     restore_terminal
 }
@@ -186,7 +190,9 @@ keyboard_form() {
         return $rc
     fi
     if [[ $(tty 2>/dev/null) == "/dev/tty"* ]]; then
-        loadkeys "$keyboard" 2>/dev/null || true
+        if ! loadkeys "$keyboard" 2>/dev/null; then
+            log_warn "Could not apply keyboard layout ${keyboard} to the live console; it will still be configured on the target."
+        fi
     fi
     return 0
 }
@@ -195,16 +201,23 @@ disk_form() {
     disk=""
     step "Let's select where to install Sensible..."
     local boot_source exclude_disk
-    boot_source=$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || findmnt -no SOURCE /run/live/medium 2>/dev/null || true)
+    boot_source=""
+    if ! boot_source=$(get_live_boot_source); then
+        boot_source=""
+    fi
     exclude_disk=""
     if [ -n "$boot_source" ]; then
-        exclude_disk=$(get_root_disk "$boot_source" 2>/dev/null || true)
+        if ! exclude_disk=$(get_root_disk "$boot_source" 2>/dev/null); then
+            log_warn "Could not resolve the live medium's parent disk; mounted-device checks remain active."
+            exclude_disk=""
+        fi
     fi
 
     local available
-    available=$(lsblk -dpno NAME,TYPE | awk '$2=="disk"{print $1}' | grep -E '/dev/(sd|hd|vd|nvme|mmcblk|xv)' || true)
+    available=$(lsblk -dpno NAME,TYPE | awk \
+        '$2 == "disk" && $1 ~ /^\/dev\/(sd|hd|vd|nvme|mmcblk|xv)/ { print $1 }')
     if [ -n "$exclude_disk" ]; then
-        available=$(echo "$available" | grep -Fvx "$exclude_disk" || true)
+        available=$(awk -v excluded="$exclude_disk" '$0 != excluded' <<< "$available")
     fi
 
     # Filter to only candidates (in-use checks)
@@ -444,7 +457,9 @@ virtual disk, or less RAM."
             rescan) continue ;;
             shell)
                 echo "Starting a shell. Type 'exit' to return to the installer." >&2
-                "${SHELL:-/bin/bash}" || true
+                if ! "${SHELL:-/bin/bash}"; then
+                    log_warn "The troubleshooting shell exited unsuccessfully; rescanning disks."
+                fi
                 ;;
             *) exit 1 ;;
         esac
@@ -650,12 +665,15 @@ virtual disk, or less RAM."
     # then only warns "EFI variables cannot be set on this system", leaving the
     # machine without a boot entry. Bind it explicitly.
     if [ -d /sys/firmware/efi/efivars ] && [ -d "${MNT}/sys/firmware/efi" ]; then
-        mount --bind /sys/firmware/efi/efivars "${MNT}/sys/firmware/efi/efivars" || true
+        if ! mount --bind /sys/firmware/efi/efivars "${MNT}/sys/firmware/efi/efivars"; then
+            log_err "Could not bind efivarfs into the target. GRUB would be unable to create the firmware boot entry."
+            return 1
+        fi
     fi
     # Strip live-environment markers from the chroot.  Keep dpkg's package
     # metadata intact so the later purge can run maintainer scripts and undo
     # diversions cleanly.
-    rm -f "${MNT}/etc/live/version" "${MNT}"/etc/initramfs-tools/scripts/*-live 2>/dev/null || true
+    rm -f "${MNT}/etc/live/version" "${MNT}"/etc/initramfs-tools/scripts/*-live
 
     # Offline: when we copied the live root, the package closure is already
     # baked in the ISO. Do not apt-get update or install — it would hit
@@ -675,10 +693,10 @@ virtual disk, or less RAM."
     CURRENT_STAGE="configuring hardware support"
     install_progress_update 5 "Configuring hardware support"
     log_info "Offline install — hardware support is already in the copied live image"
-    chroot ${MNT} systemctl enable NetworkManager.service 2>/dev/null || true
-    chroot ${MNT} systemctl enable bluetooth.service 2>/dev/null || true
-    chroot ${MNT} systemctl enable power-profiles-daemon.service 2>/dev/null || true
-    chroot ${MNT} systemctl enable fwupd.service 2>/dev/null || true
+    chroot "${MNT}" systemctl enable NetworkManager.service
+    chroot "${MNT}" systemctl enable bluetooth.service
+    chroot "${MNT}" systemctl enable power-profiles-daemon.service
+    chroot "${MNT}" systemctl enable fwupd-refresh.timer
 
     chroot ${MNT} locale-gen 2>/dev/null || log_warn "locale-gen failed (locales not yet in closure?)"
 
@@ -688,21 +706,22 @@ virtual disk, or less RAM."
     install_progress_update 6 "Configuring the ${DESKTOP_CHOICE} desktop"
     log_info "Offline install — desktop is already in the copied live image"
     if [ "$DESKTOP_CHOICE" = "gnome" ]; then
-        chroot ${MNT} systemctl enable gdm3.service 2>/dev/null || true
+        chroot "${MNT}" systemctl enable gdm3.service
         if [ -f "${MNT}/etc/keyd/default.conf" ]; then
-            chroot ${MNT} systemctl enable keyd.service 2>/dev/null || true
+            chroot "${MNT}" systemctl enable keyd.service
         else
-            log_warn "GNOME keyd mapping is missing; leaving keyd.service disabled."
+            log_err "GNOME keyd mapping is missing from the offline image."
+            return 1
         fi
     else
-        chroot ${MNT} systemctl enable sddm.service 2>/dev/null || true
-        chroot ${MNT} systemctl disable keyd.service 2>/dev/null || true
+        chroot "${MNT}" systemctl enable sddm.service
+        chroot "${MNT}" systemctl disable keyd.service
         rm -f "${MNT}/etc/keyd/default.conf"
     fi
     # Plymouth theme is already baked; regenerate after target-specific setup.
     local plymouth_theme="spinner"
     [ "$DESKTOP_CHOICE" = "kde" ] && plymouth_theme="breeze"
-    chroot ${MNT} plymouth-set-default-theme -R "$plymouth_theme" 2>/dev/null || true
+    chroot "${MNT}" plymouth-set-default-theme -R "$plymouth_theme"
 
     CURRENT_STAGE="creating the user account"
     install_progress_update 7 "Creating your user account"
@@ -725,7 +744,9 @@ virtual disk, or less RAM."
 
     # Store optional identity for git/GECOS if provided
     if [ -n "${full_name:-}" ]; then
-        chroot ${MNT} chfn -f "$full_name" "$USERNAME" 2>/dev/null || true
+        if ! chroot "${MNT}" chfn -f "$full_name" "$USERNAME"; then
+            record_warning "Could not store the optional full name for ${USERNAME}."
+        fi
         mkdir -p "${MNT}/home/${USERNAME}"
         # git identity for user (per-user, not system)
         if [ -n "${email_address:-}" ]; then
@@ -734,7 +755,7 @@ virtual disk, or less RAM."
 	name = $full_name
 	email = $email_address
 EOF
-            chroot ${MNT} chown "${USERNAME}:${USERNAME}" "/home/${USERNAME}/.gitconfig" 2>/dev/null || true
+            chroot "${MNT}" chown "${USERNAME}:${USERNAME}" "/home/${USERNAME}/.gitconfig"
         fi
     fi
 
