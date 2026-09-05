@@ -46,9 +46,13 @@ class DesktopApps(unittest.TestCase):
         for filename, key in (("oh-my-bash-omb.tar.gz", "OH_MY_BASH_TARBALL_SHA256"),
                               ("lazyvim-starter-vim.tar.gz", "LAZYVIM_STARTER_TARBALL_SHA256")):
             with tarfile.open(cache / filename, "w:gz") as archive:
-                info = tarfile.TarInfo("root/fixture")
-                info.size = 4
-                archive.addfile(info, io.BytesIO(b"test"))
+                members = ["root/fixture"]
+                if filename.startswith("oh-my-bash"):
+                    members.append("root/themes/powerline-multiline/powerline-multiline.theme.sh")
+                for member in members:
+                    info = tarfile.TarInfo(member)
+                    info.size = 4
+                    archive.addfile(info, io.BytesIO(b"test"))
             pins[key] = hashlib.sha256((cache / filename).read_bytes()).hexdigest()
         with zipfile.ZipFile(cache / "JetBrainsMono-font.zip", "w") as archive:
             for face in ("Regular", "Italic", "Bold", "BoldItalic"):
@@ -200,6 +204,8 @@ printf 'ufw %s\n' "$*" >> "$MOCK_LOG"
         self.assertTrue({"libgtk-3-0t64", "libsecret-1-0", "libegl1", "libgles2",
                          "libegl-mesa0", "libgl1-mesa-dri", "xdg-desktop-portal"} <= packages(
                              "live/config/package-lists/sensible-target.list.chroot"))
+        self.assertIn("fonts-powerline", packages(
+            "live/config/package-lists/sensible-target.list.chroot"))
         self.assertNotIn("snapper", gnome | kde | packages(
             "live/config/package-lists/sensible-target.list.chroot"))
 

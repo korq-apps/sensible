@@ -77,7 +77,7 @@ distinction between finding filenames, searching contents and filtering lists.
 
 **Not currently offered:** AI CLIs. If added later, they will be optional and use pinned artifacts rather than `curl | sh` from the ISO.
 
-**Included, no question asked:** fingerprint login (`fprintd`, dormant without a reader), oh-my-bash for all users with a sensible `.bashrc`, system-wide git defaults, JetBrainsMono Nerd Font, `ufw` firewall (deny incoming / allow outgoing, KDE Connect-aware), and printing/scanning (CUPS driverless + `sane-airscan`) — all baked into the image at build time.
+**Included, no question asked:** fingerprint login (`fprintd`, dormant without a reader), oh-my-bash for all users with a two-line Powerline prompt, system-wide git defaults, Powerline symbols and JetBrainsMono Nerd Font, `ufw` firewall (deny incoming / allow outgoing, KDE Connect-aware), and printing/scanning (CUPS driverless + `sane-airscan`) — all baked into the image at build time.
 
 **Planned ([Phase 6](docs/PLAN.md#phase-6--sensible-extras-re-scoped-for-offline), post-install tool):** BioPass face login (pinned `.deb`), developer-tools checkbox (Docker + Compose, `lazygit`, `gh`), and unattended `--config` installs.
 

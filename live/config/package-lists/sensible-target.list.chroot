@@ -93,6 +93,7 @@ xdg-desktop-portal
 fonts-noto-core
 fonts-noto-color-emoji
 fonts-liberation
+fonts-powerline
 # dconf-cli needed for GNOME lock defaults
 dconf-cli
 

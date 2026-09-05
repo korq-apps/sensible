@@ -56,6 +56,10 @@ rm -rf "${OMB_DEST:?}"
 mkdir -p "${OMB_DEST}"
 tar -xzf "${OMB_TARBALL}" -C "${OMB_DEST}" --strip-components=1
 rm -rf "${OMB_DEST}/.github"
+if [ ! -s "${OMB_DEST}/themes/powerline-multiline/powerline-multiline.theme.sh" ]; then
+    echo "Error: pinned oh-my-bash archive lacks the configured powerline-multiline theme." >&2
+    exit 1
+fi
 
 mkdir -p "${CHROOT}/etc/skel"
 install -m 0644 "${REPO_ROOT}/configs/omb-bashrc" "${CHROOT}/etc/skel/.bashrc"
