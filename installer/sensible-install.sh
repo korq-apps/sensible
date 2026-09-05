@@ -61,19 +61,15 @@ cleanup() {
 
 sanitize_live_target() {
     local live_user="user"
-    local sudoers_file
 
     if chroot "${MNT}" getent passwd "${live_user}" >/dev/null 2>&1; then
         chroot "${MNT}" userdel -r "${live_user}"
     fi
     rm -rf "${MNT}/home/${live_user}"
 
-    for sudoers_file in "${MNT}"/etc/sudoers.d/*; do
-        [ -f "${sudoers_file}" ] || continue
-        if grep -Eq '(^|[[:space:]])NOPASSWD([[:space:]:]|$)' "${sudoers_file}"; then
-            rm -f "${sudoers_file}"
-        fi
-    done
+    # Debian live-config's 0040-sudo owns this drop-in. Other NOPASSWD rules
+    # can belong to installed packages or administrators and must survive.
+    rm -f "${MNT}/etc/sudoers.d/live"
 
     # Debian live-config writes its SDDM autologin to /etc/sddm.conf, which
     # takes precedence over our installed-user drop-in. Remove it along with

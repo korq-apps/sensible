@@ -56,6 +56,7 @@ sh_files=(
     tests/unit/verify_test.sh
     tests/unit/ci_runtime_test.sh
     tests/unit/build_cache_test.sh
+    tests/unit/package_check_test.sh
     tests/integration/installer_flow_test.sh
 )
 for f in "${sh_files[@]}"; do
@@ -171,6 +172,7 @@ assert_contains "native build takes the shared lock" "$native_build_source" 'flo
 assert_contains "native build stages its selected desktop list" "$native_build_source" 'desktop.list.chroot'
 assert_contains "native build records the selected variant" "$native_build_source" 'etc/sensible/variant'
 assert_contains "native build runs the package gate" "$native_build_source" 'scripts/check-packages.sh'
+assert_contains "native dependencies include the package collector and Debian keyring" "$native_build_source" 'python3 debian-archive-keyring'
 assert_contains "native build stages the same pinned defaults" "$native_build_source" 'scripts/fetch-pins.sh'
 assert_contains "target enables fwupd's refresh timer" \
     "$(<"${REPO_ROOT}/installer/sensible-install.sh")" 'systemctl enable fwupd-refresh.timer'

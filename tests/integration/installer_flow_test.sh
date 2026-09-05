@@ -14,6 +14,7 @@ SENSIBLE_TEST_MODE=1
 check_root() { :; }
 check_uefi()  { :; }
 sleep()       { :; }
+wait_for_device() { mlog "wait_for_device $*"; [ "$1" != "${MOCK_MISSING_PARTITION:-}" ]; }
 
 WORK="$(mktemp -d /tmp/sensible-flow-test.XXXXXX)"
 mkdir -p "${WORK}/boot"
@@ -62,7 +63,7 @@ rsync()       {
         printf 'user:x:999:999:Live User:/home/user:/bin/bash\n' > "${MNT}/etc/passwd"
         printf 'user:!:20000:0:99999:7:::\n' > "${MNT}/etc/shadow"
         printf 'sudo:x:27:user\n' > "${MNT}/etc/group"
-        printf 'user ALL=(ALL) NOPASSWD: ALL\n' > "${MNT}/etc/sudoers.d/live-user"
+        printf 'user ALL=(ALL) NOPASSWD: ALL\n' > "${MNT}/etc/sudoers.d/live"
         mkdir -p "${MNT}/home/user"
         touch "${MNT}/home/user/.bashrc"
         mkdir -p "${MNT}/etc/gdm3" "${MNT}/etc/sddm.conf.d"
@@ -72,6 +73,8 @@ rsync()       {
         # Leaving it behind overrides the installed user's autologin drop-in.
         printf '[Autologin]\nUser=user\nSession=plasma.desktop\n' > "${MNT}/etc/sddm.conf"
     fi
+    printf 'backup ALL=(root) NOPASSWD: /usr/bin/rsync\n' > "${MNT}/etc/sudoers.d/backup"
+    printf '# NOPASSWD is intentionally not enabled here\nadmin ALL=(ALL) ALL\n' > "${MNT}/etc/sudoers.d/admin"
     touch "${MNT}/etc/profile.d/99-sensible-autostart.sh" \
           "${MNT}/etc/profile.d/99-sensible-firmware-check.sh" \
           "${MNT}/usr/local/bin/sensible-install" "${MNT}/usr/local/bin/lazydeb"
@@ -100,7 +103,7 @@ rsync()       {
           "${MNT}/var/lib/dpkg/info/cryptsetup-initramfs.md5sums"
 }
 wipefs()      { mlog "wipefs $*"; }
-partprobe()   { mlog "partprobe $*"; }
+partprobe()   { mlog "partprobe $*"; return "${MOCK_PARTPROBE_RC:-0}"; }
 mkfs.vfat()   { mlog "mkfs.vfat $*"; }
 mkfs.ext4()   { mlog "mkfs.ext4 $*"; }
 mkfs.btrfs()  { mlog "mkfs.btrfs $*"; }
@@ -336,7 +339,9 @@ assert_common_success() {
     assert_file_exists "baked LazyVim starter copied to the user" "${MNT}/home/alice/.config/nvim/init.lua"
     assert_file_exists "GNOME keyd mapping survives de-living" "${MNT}/etc/keyd/default.conf"
     assert_contains "GNOME keyd service enabled" "$(log_text)" "systemctl enable keyd.service"
-    assert_file_not_exists "no passwordless live sudo policy remains" "${MNT}/etc/sudoers.d/live-user"
+    assert_file_not_exists "no passwordless live sudo policy remains" "${MNT}/etc/sudoers.d/live"
+    assert_file_contains "unrelated package sudo policy survives" "${MNT}/etc/sudoers.d/backup" 'backup ALL=(root) NOPASSWD: /usr/bin/rsync'
+    assert_file_contains "comment mentioning NOPASSWD cannot delete admin policy" "${MNT}/etc/sudoers.d/admin" 'admin ALL=(ALL) ALL'
     assert_file_not_exists "live user home removed" "${MNT}/home/user"
     if grep -q '^user:' "${MNT}/etc/passwd" 2>/dev/null; then
         t_fail "live user removed from passwd" "user entry remains"
@@ -414,6 +419,26 @@ for invalid_artifact in empty-kernel empty-initramfs mismatched-version director
     printf 'mock kernel\n' > "${WORK}/boot/vmlinuz-7.1.0-amd64"
     printf 'mock initramfs\n' > "${WORK}/boot/initrd.img-7.1.0-amd64"
 done
+
+t_section "Missing partition devices abort before any formatting"
+for partition in /dev/sda1 /dev/sda2 /dev/sda3; do
+    build_answers no
+    MOCK_MISSING_PARTITION="$partition"
+    run_flow
+    assert_rc "missing $partition aborts" 1 "${RC}"
+    assert_contains "failure names $partition" "$(output_text)" "Partition device $partition did not appear"
+    assert_not_contains "no filesystem formatted with missing $partition" "$(log_text)" "mkfs."
+    assert_not_contains "no encryption started with missing $partition" "$(log_text)" "cryptsetup luksFormat"
+done
+MOCK_MISSING_PARTITION=""
+
+t_section "Failed kernel partition-table reread aborts before formatting"
+MOCK_PARTPROBE_RC=1
+run_flow
+MOCK_PARTPROBE_RC=0
+assert_rc "failed partition-table reread aborts" 1 "${RC}"
+assert_contains "stale device risk explained" "$(output_text)" 'potentially stale partition devices'
+assert_not_contains "no filesystem formatting after reread failure" "$(log_text)" 'mkfs.'
 
 # Normal scenarios use the baked live-root fixture.
 t_section "Combo 1: Btrfs + LUKS, single password, Intel GPU"

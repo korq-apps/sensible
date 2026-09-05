@@ -41,6 +41,7 @@ DEPS=(
     grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed grub-efi-ia32-bin
     shim-signed sbsigntool
     rsync curl ca-certificates git coreutils util-linux findutils cpio bc procps unzip
+    python3 debian-archive-keyring
 )
 
 echo "==> Installing live-build toolchain (apt)..."
@@ -82,7 +83,7 @@ VARIANT_MARKER="${REPO_ROOT}/live/config/includes.chroot/etc/sensible/variant"
 mkdir -p "$(dirname "${VARIANT_MARKER}")"
 printf '%s\n' "${SENSIBLE_VARIANT}" > "${VARIANT_MARKER}"
 
-echo "==> Checking package names resolve against the configured Debian Testing archive..."
+echo "==> Checking package names against an isolated Debian Testing archive index..."
 SENSIBLE_PACKAGE_CHECK_NATIVE=1 \
     "${REPO_ROOT}/scripts/check-packages.sh" "${SENSIBLE_VARIANT}"
 

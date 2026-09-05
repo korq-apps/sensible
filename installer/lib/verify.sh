@@ -188,11 +188,18 @@ validate_installed_boot() {
                         entry_file=""
                     done
                     if [ -n "$entry_file" ]; then
-                        local mapping_name
-                        mapping_name=$(awk '$1 !~ /^#/ && NF >= 3 { print $1; exit }' "${crypttab}" 2>/dev/null)
-                        mapping_name=${mapping_name:-cryptroot}
-                        if ! grep -Eq "^[[:space:]]*${mapping_name}[[:space:]]" "$entry_file"; then
-                            problems+=("- initramfs /cryptroot/crypttab has no ${mapping_name} mapping; the boot would drop to a busybox prompt without asking for the passphrase (stale or mis-generated initramfs?)")
+                        local mapping_name="" mapping_source=""
+                        if [ -s "${crypttab}" ]; then
+                            mapping_name=$(awk '$1 !~ /^#/ && NF >= 3 { print $1; exit }' "${crypttab}")
+                            mapping_source=$(awk '$1 !~ /^#/ && NF >= 3 { print $2; exit }' "${crypttab}")
+                        fi
+                        # Compare literal fields, not a regex or just the
+                        # mapping name: a previous install's UUID is stale too.
+                        if [ -n "${mapping_name}" ] && ! awk \
+                            -v name="${mapping_name}" -v source="${mapping_source}" \
+                            '$1 == name && $2 == source && NF >= 3 { found = 1 } END { exit !found }' \
+                            "$entry_file"; then
+                            problems+=("- initramfs /cryptroot/crypttab has no ${mapping_name} mapping for ${mapping_source}; the boot would drop to a busybox prompt (stale or mis-generated initramfs?)")
                         fi
                     else
                         problems+=("- initramfs has no /cryptroot/crypttab at all; the encrypted root cannot be unlocked at boot")

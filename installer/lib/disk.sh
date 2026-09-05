@@ -251,13 +251,13 @@ wait_for_device() {
     for i in $(seq 1 10); do
         [[ -b "$1" ]] && return 0
         if command -v udevadm >/dev/null 2>&1; then
-            if ! udevadm settle 2>/dev/null; then
+            if ! udevadm settle --timeout=1 2>/dev/null; then
                 log_warn "udevadm settle failed while waiting for $1; retrying."
             fi
         fi
         sleep 1
     done
-    return 1
+    [[ -b "$1" ]]
 }
 
 get_live_boot_source() {
@@ -374,9 +374,17 @@ partition_disk() {
     fi
 
     if ! partprobe "$disk"; then
-        log_warn "partprobe could not notify the kernel about ${disk}; waiting for the partition devices directly."
+        log_err "Could not reread the partition table on ${disk}; refusing to format potentially stale partition devices."
+        return 1
     fi
-    sleep 2
+    local number partition
+    for number in 1 2 3; do
+        partition=$(get_partition_name "$disk" "$number")
+        if ! wait_for_device "$partition"; then
+            log_err "Partition device ${partition} did not appear; refusing to format the disk."
+            return 1
+        fi
+    done
 }
 
 resume_offset_of() {

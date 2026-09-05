@@ -18,6 +18,8 @@ tests/run-tests.sh    # no root, no container, no network — plain bash
 | `syntax_test.sh` | `bash -n` over every shell script in the repo, executable bits, and live-build hook naming (`*.hook.{chroot,binary}` — anything else is silently skipped) |
 | `ci_runtime_test.sh` | Smoke-test early readiness, deadline failures, premature guest exits, settling, QEMU cancellation, and named-container status/cleanup using process mocks |
 | `build_cache_test.sh` | Real stage-driver filesystem operations with mocked build commands: clean state, package-only cache restore, successful snapshot refresh, and preservation of the prior snapshot after failure |
+| `package_check_test.sh` | Native Testing-only APT configuration, host-state isolation, missing packages, archive refresh failures, and incomplete package collection |
+| `verify_test.sh` | Installed boot artifacts and extracted initramfs mapping/source identity, including stale UUIDs and literal mapping-name matching |
 
 ### Integration test (`tests/integration/installer_flow_test.sh`)
 
@@ -33,7 +35,7 @@ function mock that records its invocation. Asserts, per scenario:
 - Ext4 + no LUKS on the raw root partition
 - Live-copy deploy path: API mountpoints remain available while live-only installer artifacts are removed
 - Completion: stay-live, successful reboot request, and failed reboot fallback
-- Aborts: undersized/no-disk, surviving live initramfs diversion, missing cryptsetup closure, declined destructive confirmation, and a mandatory post-wipe failure
+- Aborts: undersized/no-disk, failed partition-table reread, missing partition devices before formatting, surviving live initramfs diversion, missing cryptsetup closure, declined destructive confirmation, and a mandatory post-wipe failure
 - Re-prompts: invalid username rejected, valid accepted
 
 Assertions cover generated files (fstab, crypttab, hostname,
@@ -62,3 +64,7 @@ codes.
 - Plymouth graphical unlock and `systemctl` behavior of the installed system.
 - The local suite tests package-gate failure handling; CI performs the live
   Debian Testing archive query before each variant build.
+- Native builds query a disposable Testing-only APT index; host repositories,
+  installed-package records, update hooks and index files are not used or changed
+  by the package gate. The native toolchain installs Python and Debian's archive
+  keyring before running it.

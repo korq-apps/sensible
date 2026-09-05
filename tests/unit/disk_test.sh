@@ -20,6 +20,16 @@ assert_eq "min disk = 2048 + swap + 20480" "30720" "$(calc_min_disk_mb)"
 
 t_section "partition_disk: GPT layout per spec"
 mock_setup
+# Exercise the real device wait independently before substituting it for the
+# synthetic /dev/sda paths used by partitioning tests.
+udevadm() { mlog "udevadm $*"; }
+sleep() { mlog "sleep $*"; }
+if wait_for_device /dev/sensible-nonexistent-test-device; then
+    t_fail "missing block device must time out"
+else t_ok; fi
+assert_eq "device wait retries a bounded ten times" 10 "$(mock_count_calls 'udevadm settle --timeout=1')"
+mock_reset
+wait_for_device() { mlog "wait_for_device $*"; }
 sgdisk()   { mlog "sgdisk $*"; }
 wipefs()   { mlog "wipefs $*"; }
 partprobe() { mlog "partprobe $*"; }
@@ -39,6 +49,25 @@ partition_disk /dev/sda 8192 false
 assert_contains "p3 plain root type 8300" "$(cat "${MOCK_LOG}")" "sgdisk -n 3:0:0 -t 3:8300"
 assert_not_contains "no swap partition without LUKS either" "$(cat "${MOCK_LOG}")" "8200"
 assert_not_contains "no p4 without LUKS" "$(cat "${MOCK_LOG}")" "-n 4:0:0"
+for number in 1 2 3; do
+    assert_contains "waits for partition ${number}" "$(cat "${MOCK_LOG}")" "wait_for_device /dev/sda${number}"
+done
+
+t_section "partition_disk: table reread failure rejects even existing nodes"
+mock_reset
+partprobe() { mlog "partprobe $*"; return 1; }
+if partition_disk /dev/sda 8192 false; then t_fail "reread failure accepted"; else t_ok; fi
+assert_not_contains "does not trust old device nodes after failed reread" "$(cat "${MOCK_LOG}")" "wait_for_device"
+
+t_section "partition_disk: every expected node is mandatory"
+partprobe() { mlog "partprobe $*"; }
+for missing in 1 2 3; do
+    mock_reset
+    wait_for_device() { mlog "wait_for_device $*"; [ "$1" != "/dev/nvme0n1p${missing}" ]; }
+    if partition_disk /dev/nvme0n1 8192 false; then t_fail "missing partition ${missing} accepted"; else t_ok; fi
+    assert_contains "waits for digit-suffixed disk partition ${missing}" "$(cat "${MOCK_LOG}")" "wait_for_device /dev/nvme0n1p${missing}"
+done
+wait_for_device() { mlog "wait_for_device $*"; }
 mock_teardown
 
 t_section "partition_disk: wipe failure aborts before repartitioning"

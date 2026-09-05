@@ -162,6 +162,13 @@ if make_bootable_target "${T}" \
     assert_rc "initramfs entry for a different mapping fails" 1 "${rc}"
 
     make_initramfs_fixture "${T}/boot/initrd.img-7.1.0-amd64" \
+        'cryptroot UUID=PREVIOUS-INSTALL none luks,discard,initramfs
+'
+    OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
+    assert_rc "real initramfs with the same mapping but an old UUID fails" 1 "${rc}"
+    assert_contains "stale image diagnostic names the expected source" "${OUT}" 'UUID=LUKS-UUID'
+
+    make_initramfs_fixture "${T}/boot/initrd.img-7.1.0-amd64" \
         'cryptroot UUID=LUKS-UUID none luks,discard,initramfs
 '
     rm -f "${T}"/etc/cryptsetup-initramfs/*
@@ -170,6 +177,33 @@ if make_bootable_target "${T}" \
 else
     echo "SKIP: cpio or unmkinitramfs unavailable; initramfs content fixtures not exercised" >&2
 fi
+
+t_section "embedded mapping must match both literal name and source"
+# Mock only extraction so these regressions run even without cpio installed.
+make_bootable_target "${T}"
+printf 'cryptroot UUID=LUKS-UUID none luks,initramfs\n' > "${T}/etc/crypttab"
+printf 'mock non-empty image\n' > "${T}/boot/initrd.img-7.1.0-amd64"
+unmkinitramfs() {
+    mkdir -p "$2/main/cryptroot"
+    printf '%s\n' "$EMBEDDED_CRYPTTAB" > "$2/main/cryptroot/crypttab"
+}
+for EMBEDDED_CRYPTTAB in \
+    'cryptroot UUID=OLD-UUID none luks' \
+    'otherroot UUID=LUKS-UUID none luks' \
+    '# cryptroot UUID=LUKS-UUID none luks' \
+    'cryptroot UUID=LUKS-UUID-extra none luks'; do
+    OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
+    assert_rc "rejects stale or wrong embedded entry: $EMBEDDED_CRYPTTAB" 1 "$rc"
+    assert_contains "diagnostic names required UUID" "$OUT" 'UUID=LUKS-UUID'
+done
+EMBEDDED_CRYPTTAB=$'# comment\nother UUID=OTHER none luks\ncryptroot\tUUID=LUKS-UUID\tnone\tluks'
+validate_installed_boot "${T}" true >/dev/null
+assert_rc "correct entry matches literal fields amid other mappings" 0 $?
+printf 'crypt.root UUID=LUKS-UUID none luks,initramfs\n' > "${T}/etc/crypttab"
+EMBEDDED_CRYPTTAB='cryptXroot UUID=LUKS-UUID none luks'
+OUT="$(validate_installed_boot "${T}" true)" && rc=0 || rc=1
+assert_rc "mapping names are not regex patterns" 1 "$rc"
+unset -f unmkinitramfs
 
 # A non-empty file that is not an initramfs is corrupt, even when its mtime is
 # fresh. Force the extractor failure so this guard is exercised on hosts that
