@@ -165,8 +165,9 @@ downloads under `live/.cache/live-build` and checksum-verified pins under
 `live/local/pins`; chroots, bootstrap snapshots, APT indexes and stage state are
 rebuilt. CI restores those downloads after checkout and saves a new per-edition
 snapshot after successful runs, including weekly rebuilds. Package-name
-validation runs once inside the build entry point, and ISO uploads disable
-additional artifact compression.
+validation runs once inside the build entry point. Each ISO and checksum is
+uploaded as a direct, unarchived file so release assets do not incur redundant
+ZIP wrapping.
 
 ---
 

@@ -130,9 +130,9 @@ below, not an optional follow-up.
 
 ## Phase 5 — CI and release plumbing
 
-- [x] `.github/workflows/build-iso.yml`: container `live-build`, APT cache, QEMU UEFI boot smoke, ISO + SHA256 artifacts
+- [x] `.github/workflows/build-iso.yml`: container `live-build`, APT cache, QEMU UEFI boot smoke, and direct, unarchived ISO + SHA256 artifacts
 - [x] Scheduled rebuilds so Testing does not rot
-- [x] Tag-only GitHub Release job for both variant ISOs + SHA256 files, isolated from PR-controlled code and gated by repository variable `SENSIBLE_RELEASE_READY == 'true'`
+- [x] Tag-only GitHub Release job attaches both variant ISOs + SHA256 files, isolated from PR-controlled code and gated by repository variable `SENSIBLE_RELEASE_READY == 'true'`
 
 The job existing is not approval to publish. Keep
 `SENSIBLE_RELEASE_READY` unset or `false` until every release-gate item below
