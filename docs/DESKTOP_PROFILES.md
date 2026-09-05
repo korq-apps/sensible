@@ -30,19 +30,23 @@ land, and review those costs explicitly.
 | Keep awake | Caffeine | Native Plasma power-management controls | Available; keep-awake mode off by default |
 | Clipboard history | Clipboard Indicator | Native Plasma clipboard/Klipper | Include; review retention/privacy defaults |
 | Dock/panel | Dash to Dock | Plasma panel with Icons-only Task Manager | Configure a usable default; exact layout still to be chosen |
+| Window controls | Close, Minimize and Maximize titlebar buttons | Native Plasma titlebar controls | Apply as a fresh-user GNOME default; never overwrite later user changes |
 | Battery estimate | Battery Time | Native battery widget | Show useful laptop information; avoid empty desktop indicators |
 | Screenshot search, OCR and QR | Shotzy | Retain Spectacle; investigate an OCR/search companion | GNOME scope agreed; KDE feature parity still exploratory |
-| Themes | User Themes | Native Plasma appearance settings | Prepare support; retain stock appearance until themes are selected |
+| Themes | User Themes plus the shortlist below | Native Plasma appearance settings; theme shortlist still pending | Evaluate in a separate appearance slice; no new default selected |
 
 The requested GNOME extensions are Vitals, GSConnect, Caffeine, Clipboard
 Indicator, Dash to Dock, Battery Time, Shotzy and User Themes. Do not silently
 substitute similarly named extensions. Record each selected extension's UUID,
 upstream URL, version and supported Shell versions when packaging it.
 
-### Additional candidates
+### Additional considerations
 
-- Include GNOME Tweaks for advanced appearance/font settings.
-- Include GNOME AppIndicator support for applications with tray indicators.
+- GNOME Tweaks is included by the application slice. The GNOME profile follow-up
+  uses a system dconf default to enable the Close, Minimize and Maximize
+  titlebar buttons for fresh users; users remain free to change that layout.
+- GNOME AppIndicator support is packaged by the application slice. Enabling and
+  validating it belongs with the other curated extensions.
 - Evaluate personal-file backups: Déjà Dup on GNOME and Kup on KDE. The need
   for a backup workflow is identified; the exact applications and default
   configuration need validation before being treated as committed packages.
@@ -118,6 +122,41 @@ Document what is uploaded and to which service, and require an explicit user
 action before sending screenshot content. Do not claim Spectacle alone offers
 the same OCR/search workflow on KDE.
 
+## Theme shortlist for the appearance follow-up
+
+Recorded from the user-supplied candidates on 2026-09-05. These are inputs to a
+separate appearance slice, not installed assets or a choice of default theme.
+Preserve all five sources and the exact Good-Old-Shell branch below. Upstream
+claims are planning evidence, not proof of compatibility with the Shell version
+in a Sensible image.
+
+| Candidate / source | Scope | Packaging and compatibility notes |
+| :--- | :--- | :--- |
+| [Flat Remix GNOME](https://drasite.com/flat-remix-gnome) | GNOME Shell | Upstream provides version-specific downloads and currently lists through Shell 49. Check the actual build's Shell version before selecting an artifact; do not assume Shell 50 support. The project states CC BY-SA 4.0. |
+| [Marble](https://github.com/imarkoff/Marble-shell-theme) | GNOME Shell | Upstream advertises GNOME 42–50, User Themes and Python 3.10+. Generate selected variants during the image build, not first login. Repository identifies GPL-3.0. |
+| [Transparent Shell Theme](https://github.com/mrbrownstone07/Transparent-Shell-Theme) | GNOME Shell | README requires User Themes but does not state a supported Shell range. Redistribution licensing is not established by the reviewed README/top-level listing; verify licensing and compatibility before bundling. Test contrast over varied wallpapers. |
+| [Good-Old-Shell — `good-old-shell-50`](https://github.com/mx-2/gnome-shell-sass/tree/good-old-shell-50) | GNOME Shell 50 | Keep this requested branch, not the different branch in the README's generic build link. Pin a commit and build its CSS. Full-color shell icons require an appropriate separate icon theme. README states GPL-2.0-or-later. |
+| [Graphite GTK](https://github.com/vinceliuice/Graphite-gtk-theme) | GTK application theme, with Shell-related options | Assess application and Shell components separately. Upstream lists GTK >=3.20, theme-engine dependencies and `sassc` for building; it also offers GDM and libadwaita options. Repository identifies GPL-3.0. |
+
+Appearance-slice boundaries and acceptance:
+
+- Aim for selectable, offline-installed options; do not silently pick a new
+  default, accent color or light/dark variant from this list.
+- Record exact revisions/checksums, licenses, notices and build dependencies
+  for accepted artifacts. Resolve unclear redistribution terms before bundling;
+  retain any blocked candidate here with the reason rather than substituting it.
+- Use the existing User Themes/management-tool plan for ordinary Shell theme
+  selection. GDM resource replacement, extra login/lock-screen extensions and
+  bootloader theming are outside this shortlist's implementation scope.
+- Do not automatically apply Graphite's libadwaita configuration links or
+  Flatpak overrides. Review those separately, preserve user settings and test
+  GTK3, GTK4/libadwaita and Flatpak applications before claiming consistency.
+- Test Shell menus, notifications, overview, Dash to Dock, scaling, light/dark
+  appearance and transparent-surface contrast on the actual target version.
+  Verify login/lock behavior still works and document a return to stock styling.
+- These GNOME/GTK selections do not constitute a Plasma theme shortlist.
+  Keep KDE appearance selection open rather than inventing equivalents.
+
 ## Configuration policy
 
 - Store maintainable, edition-specific defaults in the repository; choose the
@@ -126,14 +165,17 @@ the same OCR/search workflow on KDE.
   hardware identifiers, personal files, tokens, or paired devices.
 - Let subsequent user customization take precedence. Do not overwrite it on
   every login or ordinary package update. Provide a documented reset path.
+- Enable GNOME's Close, Minimize and Maximize titlebar buttons through a
+  fresh-user dconf default. Preserve the normal right-side order unless the
+  broader profile explicitly changes it.
 - Preserve the existing authentication model: optional autologin only with
   LUKS, with idle/resume locking. Installing Caffeine must not permanently
   disable those protections.
 - Review clipboard history limits, persistence and clearing behavior. Do not
   promise that a clipboard manager can reliably recognize every secret.
-- Keep themes stock until the user supplies the shortlist. Theme selection
-  includes readability, contrast, GTK/Qt consistency and update compatibility,
-  not just screenshots.
+- Keep the default theme stock until a replacement is explicitly selected and
+  validated. The shortlist above is now supplied; evaluation includes
+  readability, contrast, GTK/Qt consistency and update compatibility.
 - Record package/extension versions in build artifacts so a broken Testing
   upgrade can be reproduced and diagnosed.
 
@@ -146,7 +188,7 @@ each profile change is implemented and validated.
 | Change | Scope | Required evidence |
 | :--- | :--- | :--- |
 | 1. Applications and dependencies | Photo tools, LocalSend, phone integration, management tools and approved support packages | Both images build; applications start offline; network integrations work with the firewall |
-| 2. GNOME profile | Package/pin the selected extensions and apply fresh-user defaults | Correct Shell compatibility, enabled state, dependency checks, reboot/login/lock tests |
+| 2. GNOME profile | Package/pin the selected extensions and apply fresh-user defaults, including titlebar buttons | Correct Shell compatibility, enabled state, dependency checks, user-overridable defaults, reboot/login/lock tests |
 | 3. KDE profile | Native feature configuration, selected apps and evaluation of screenshot OCR/search | Equivalent task coverage, correct panel behavior, reboot/login/lock tests |
 | 4. Optional appearance and backups | User-selected themes; validated backup workflow | Readability/accessibility review; successful backup and restore before recommending defaults |
 
@@ -186,6 +228,8 @@ Do not advertise planned features as shipped while this checklist is open.
 - [ ] Caffeine/native inhibition is off initially; idle lock, resume lock and autologin remain correct.
 - [ ] Clipboard limits, persistence and clearing behavior are tested and documented.
 - [ ] Defaults survive reboot without resetting user customizations.
+- [ ] Close, Minimize and Maximize titlebar buttons appear for a fresh GNOME
+      user, and later user changes survive logout, reboot and upgrades.
 - [ ] Multi-monitor layout and battery/no-battery behavior are checked.
 - [ ] Before/after image size, build duration and idle resource use are recorded.
 - [ ] The offline manual accurately describes the shipped profile and recovery/reset paths.
@@ -196,6 +240,9 @@ These checks supplement, not replace, the release blockers in
 [physical hardware evidence #6](https://github.com/korq-apps/sensible/issues/6).
 The expanded asset set also belongs in
 [complete offline validation #9](https://github.com/korq-apps/sensible/issues/9).
+GNOME extension activation and fresh-user defaults, including the titlebar
+buttons, are tracked in
+[desktop-profile issue #13](https://github.com/korq-apps/sensible/issues/13).
 
 ## Upstream references
 

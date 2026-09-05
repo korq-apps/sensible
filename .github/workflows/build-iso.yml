@@ -198,22 +198,30 @@ jobs:
         run: |
           scripts/smoke-boot.sh sensible-${{ matrix.variant }}-debian-testing-amd64.iso
 
-      - name: Upload ISO and Checksum Artifacts
-        uses: actions/upload-artifact@v4
+      # Direct-file artifacts avoid wrapping already-compressed ISOs in ZIP
+      # archives. upload-artifact v7 accepts exactly one file in this mode, so
+      # publish the ISO and its checksum separately.
+      - name: Upload ISO Artifact
+        uses: actions/upload-artifact@v7
         with:
-          name: sensible-${{ matrix.variant }}-debian-testing-amd64
-          path: |
-            sensible-${{ matrix.variant }}-debian-testing-amd64.iso
-            sensible-${{ matrix.variant }}-debian-testing-amd64.iso.sha256
+          path: sensible-${{ matrix.variant }}-debian-testing-amd64.iso
           if-no-files-found: error
-          compression-level: 0
+          archive: false
+          retention-days: 14
+
+      - name: Upload Checksum Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          path: sensible-${{ matrix.variant }}-debian-testing-amd64.iso.sha256
+          if-no-files-found: error
+          archive: false
           retention-days: 14
 
   # Publication is isolated in its own job so that `contents: write` exists only
   # on tag pushes and never in a run that builds PR-controlled code. Keep
   # SENSIBLE_RELEASE_READY unset/false until the real installed-disk matrix and
   # documented release gate pass; enabling it is the final publication switch.
-  # This job consumes the build artifact rather than rebuilding.
+  # This job consumes the direct-file build artifacts rather than rebuilding.
   release:
     name: Publish Release Assets
     needs: build
@@ -224,16 +232,50 @@ jobs:
 
     steps:
       - name: Download built ISO artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          pattern: sensible-*-debian-testing-amd64
+          pattern: sensible-*-debian-testing-amd64.iso*
           merge-multiple: true
+
+      - name: Verify complete release asset set
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_assets=(
+            "sensible-gnome-debian-testing-amd64.iso"
+            "sensible-gnome-debian-testing-amd64.iso.sha256"
+            "sensible-kde-debian-testing-amd64.iso"
+            "sensible-kde-debian-testing-amd64.iso.sha256"
+          )
+          missing=0
+          for asset in "${expected_assets[@]}"; do
+            if [ ! -s "$asset" ]; then
+              echo "::error file=${asset}::Expected release asset is missing or empty."
+              missing=1
+            fi
+          done
+          if (( missing != 0 )); then
+            exit 1
+          fi
+
+          for variant in gnome kde; do
+            iso="sensible-${variant}-debian-testing-amd64.iso"
+            checksum="${iso}.sha256"
+            actual_checksum="$(sha256sum "$iso")"
+            if [ "$(<"$checksum")" != "$actual_checksum" ]; then
+              echo "::error file=${checksum}::Checksum does not match ${iso}."
+              exit 1
+            fi
+          done
 
       - name: Publish Release Assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            sensible-*-debian-testing-amd64.iso
-            sensible-*-debian-testing-amd64.iso.sha256
+            sensible-gnome-debian-testing-amd64.iso
+            sensible-gnome-debian-testing-amd64.iso.sha256
+            sensible-kde-debian-testing-amd64.iso
+            sensible-kde-debian-testing-amd64.iso.sha256
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

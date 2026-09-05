@@ -21,7 +21,7 @@ library only) for multi-page manual and desktop-app validation, plus `tar` and
 | `desktop_apps_test.sh` | Real pin-staging script with tiny cached artifacts: checksum/identity failures, cache reuse, fixed local-deb path, license/pin staging; installed-version/asset hook failures; both editions' firewall rules and failure propagation; edition ownership |
 | `apps_test.sh` | Canonical default app set (Architecture §7), Flathub, LazyVim skel + user copy + ownership, Brave official apt origin + signed keyring, quoted whiptail checklist matching, amberol/elisa per tag, no Slack/Zoom/Steam/Snapd |
 | `manual_test.sh` | Offline chapter assets/links, current app-list coverage, both build paths, missing payload rejection, launcher fallback/retry/idempotency, and scoped per-user autostart ownership |
-| `syntax_test.sh` | `bash -n` over every shell script in the repo, executable bits, and live-build hook naming (`*.hook.{chroot,binary}` — anything else is silently skipped) |
+| `syntax_test.sh` | `bash -n` over every shell script in the repo, executable bits, live-build hook naming (`*.hook.{chroot,binary}` — anything else is silently skipped), and direct-file/release CI guards |
 | `ci_runtime_test.sh` | Smoke-test early readiness, deadline failures, premature guest exits, settling, QEMU cancellation, and named-container status/cleanup using process mocks |
 | `build_cache_test.sh` | Real stage-driver filesystem operations with mocked build commands: clean state, package-only cache restore, successful snapshot refresh, and preservation of the prior snapshot after failure |
 | `package_check_test.sh` | Native Testing-only APT configuration, host-state isolation, missing packages, archive refresh failures, and incomplete package collection |
