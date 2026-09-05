@@ -16,9 +16,17 @@ than asked, and third-party software leaves the install path entirely.
 | Phase 7.6 post-install app tool | planned |
 | Release gate | blocked on automated config input, real installed-disk tests, and physical-hardware evidence |
 | Phase 6 extras | re-scoped below: baked into the ISO, or moved to the post-install tool |
+| Desktop profiles | agreed scope, not implemented; see [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md) |
+| Offline first-login manual | implemented from PR #2 on the current installer; real desktop first-login validation remains pending |
 
 **Next step:** exercise both release variants across Btrfs/Ext4 and LUKS on/off
 by installing to real QEMU disks, then boot those disks without the ISO attached.
+
+**Desktop roadmap:** build on the offline manual and deliver
+applications/dependencies, the GNOME profile, the KDE profile,
+and selected themes/backup workflow as focused changes. The agreed scope is
+recorded in [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md); it does not waive the
+release gate or claim these additions are already shipped.
 
 ---
 
@@ -105,6 +113,13 @@ below, not an optional follow-up.
 - [x] Debian-packaged Chromium and the native GNOME/KDE media utilities are
       baked into their images; Brave and alternative apps remain post-install
 - [x] Do not preinstall Slack/Zoom/etc.
+- [ ] Implement the agreed [desktop profiles](DESKTOP_PROFILES.md): Shotwell /
+      digiKam, LocalSend, GNOME extensions, native KDE equivalents and reviewed
+      defaults. Keep optional theme and backup choices distinct from shipped scope.
+- [x] Offline HTML manual, permanent menu launcher, and per-user first-login
+      autostart, shared by both build paths; unit and mocked installer tests.
+- [ ] Validate first-login opening and subsequent-login suppression on real
+      installed GNOME and KDE desktops, offline.
 
 ---
 
@@ -166,6 +181,11 @@ choices mid-run. Offline changes what each one *is*: anything from Debian is
 and the package gate proves it resolves), anything third-party or optional
 moves to the **post-install tool**, and the checkbox questions disappear
 because the answer is decided when the image is built.
+
+The newer [desktop profile plan](DESKTOP_PROFILES.md) proposes an explicit
+exception for approved default applications/extensions sourced upstream: they
+may be pinned, verified and baked at build time. This does not add downloads
+to installation or first login; unselected optional software stays post-install.
 
 The "bake into the ISO" items below live in `live/` (package lists,
 `scripts/fetch-pins.sh` + `live/pins.env`, and the ufw hook), staged into the

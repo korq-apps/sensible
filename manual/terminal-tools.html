@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terminal Tools &amp; Recipes — Sensible Manual</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to main content</a>
+  <div class="app-container">
+    <aside class="sidebar" aria-label="Documentation Navigation">
+      <div class="brand"><div class="brand-title">Sensible</div><div class="brand-subtitle">Offline Manual · Terminal</div></div>
+      <nav aria-label="Chapters and contents"><ul class="nav-list">
+        <li><a class="nav-link" href="index.html">Installation &amp; desktop guide</a></li>
+        <li><a class="nav-link" href="applications.html">Everyday applications</a></li>
+        <li><a class="nav-link" href="terminal-tools.html" aria-current="page">Terminal tools &amp; recipes</a></li>
+        <li><a class="nav-link" href="#start">Before you start</a></li>
+        <li><a class="nav-link" href="#fd-find">fd-find: find filenames</a></li>
+        <li><a class="nav-link" href="#ripgrep">ripgrep: find text</a></li>
+        <li><a class="nav-link" href="#fzf">fzf: choose interactively</a></li>
+        <li><a class="nav-link" href="#bat">bat: read files</a></li>
+        <li><a class="nav-link" href="#navigation">eza &amp; zoxide</a></li>
+        <li><a class="nav-link" href="#inspection">btop, fastfetch &amp; jq</a></li>
+        <li><a class="nav-link" href="#git">Git</a></li>
+        <li><a class="nav-link" href="#network">curl &amp; certificates</a></li>
+        <li><a class="nav-link" href="#sudo">sudo &amp; getting help</a></li>
+      </ul></nav>
+    </aside>
+    <div class="content-wrapper"><main id="main" class="content-main" tabindex="-1">
+      <header><h1>Terminal tools &amp; recipes</h1><p>You do not have to learn every tool. Start with a task: find a file, search its contents, inspect a directory or understand what the machine is doing.</p></header>
+      <section id="start"><h2>Before you start</h2>
+        <p>Open your desktop's terminal application. <code>pwd</code> prints the current directory; <code>cd</code> changes it. Examples with <code>.</code> search the current directory. Replace sample paths such as <code>notes.txt</code> with files you actually have. Your Documents folder may have a translated name.</p>
+        <p><code>~/</code> means your home directory: for example, <code>~/Documents</code> is the Documents folder inside it. Leave the leading <code>~</code> outside quotation marks so the shell expands it; for a folder with spaces, write <code>~/"My Documents"</code>.</p>
+        <p>Shell variables are named values. A dollar sign reads one: <code>$HOME</code> contains your home-directory path, so <code>echo "$HOME"</code> prints it. Double quotes keep a value containing spaces together as one argument. This guide uses the shorter <code>~/</code> notation for home-directory paths.</p>
+        <p>A line beginning with <code>#</code> is a comment. A pipe (<code>|</code>) sends one command's output to another. Examples below do not need administrator privileges except the explicitly marked <code>sudo</code> example. Searching a directory you cannot read is a reason to check the path, not automatically add <code>sudo</code>.</p>
+        <p>Debian calls the executables <code>fdfind</code> and <code>batcat</code>. Sensible's default interactive Bash configuration also provides <code>fd</code> and <code>bat</code> aliases, plus <code>ls</code>/<code>ll</code>/<code>tree</code> aliases for eza. We use the actual executable names here so examples also work without those aliases.</p>
+        <div class="table-container"><table><thead><tr><th scope="col">Your question</th><th scope="col">Use</th></tr></thead><tbody>
+          <tr><td>“Where is the file with invoice in its name?”</td><td><a href="#fd-find">fdfind</a></td></tr>
+          <tr><td>“Which files contain this sentence?”</td><td><a href="#ripgrep">rg</a></td></tr>
+          <tr><td>“Can I narrow this list by typing?”</td><td><a href="#fzf">fzf</a></td></tr>
+        </tbody></table></div>
+      </section>
+      <section id="fd-find" data-packages="fd-find"><h2>fd-find → fdfind · find filenames</h2>
+        <p><strong>Why included:</strong> a concise recursive filename search, without needing to learn the longer expressions of <code>find</code>.</p>
+        <pre><code># Names containing invoice, below the current directory
+fdfind invoice
+
+# PDF files below the current directory
+fdfind -t f -e pdf
+
+# A shell-style wildcard; quotes keep the shell from expanding it
+fdfind -g '*.jpg'
+
+# Search another directory; an empty pattern matches every name
+fdfind -t f -e pdf '' ~/Documents
+
+# Include hidden names when looking for Bash configuration
+fdfind -H bashrc ~/</code></pre>
+        <p>It searches <strong>names, not file contents</strong>. Patterns are regular expressions unless you use <code>-g</code> for wildcards. Hidden files and Git-ignored files are normally skipped; <code>-H</code> includes hidden entries, and <code>-I</code> stops respecting ignore files. These examples only list matches. <a href="https://github.com/sharkdp/fd#how-to-use">Upstream guide</a>.</p>
+      </section>
+      <section id="ripgrep" data-packages="ripgrep"><h2>ripgrep → rg · search inside files</h2>
+        <p><strong>Why included:</strong> fast recursive text search for notes, source code and logs.</p>
+        <pre><code># Literal text, with line numbers
+rg -n -F 'meeting notes' .
+
+# Case-insensitive search in Markdown files only
+rg -n -i 'invoice' -g '*.md' .
+
+# Print only the names of matching files
+rg -l -F 'TODO' .</code></pre>
+        <p>It normally skips hidden, ignored and binary files. <code>-F</code> treats the query as literal text rather than a regular expression; <code>-i</code> ignores case. This is not a PDF/Word content extractor. No matches returns status 1, which scripts should distinguish from an error. <a href="https://github.com/BurntSushi/ripgrep">Upstream reference</a>.</p>
+      </section>
+      <section id="fzf" data-packages="fzf"><h2>fzf · choose from a list</h2>
+        <p><strong>Why included:</strong> an interactive filter when remembering part of a filename is easier than reading a long list.</p>
+        <pre><code># List regular files, then narrow the list interactively
+fdfind -t f | fzf</code></pre>
+        <p>Type fragments, use the arrow keys and press Enter to print a selection; Esc cancels. This recipe <strong>does not open or modify</strong> the selected file. It is a line-based recipe, so filenames containing newline characters need a different, NUL-delimited workflow.</p>
+        <p>When the packaged Bash integration is loaded, <kbd>Ctrl</kbd> + <kbd>R</kbd> searches command history and <kbd>Ctrl</kbd> + <kbd>T</kbd> inserts a chosen path. Inspect recalled commands before executing them; history may contain private data. <a href="https://github.com/junegunn/fzf#usage">Upstream guide</a>.</p>
+      </section>
+      <section id="bat" data-packages="bat"><h2>bat → batcat · read text comfortably</h2>
+        <p><strong>Why included:</strong> syntax highlighting and line numbers when inspecting text files.</p>
+        <pre><code>batcat notes.txt
+batcat --paging=never --line-range 1:40 notes.txt</code></pre>
+        <p>The second command prints just the first 40 lines without a pager. If the first command opens a pager, use its arrow keys to move and <kbd>q</kbd> to quit. It is a viewer, not an editor; use <a href="applications.html#neovim">Neovim</a> or <a href="applications.html#kate">Kate (KDE)</a> to change text. <a href="https://github.com/sharkdp/bat">Upstream reference</a>.</p>
+      </section>
+      <section id="navigation"><h2>Inspect and revisit directories</h2>
+        <article id="eza" data-packages="eza"><h3>eza · clearer directory listings</h3>
+          <p><strong>Why included:</strong> readable file metadata and a tree view in one tool.</p>
+          <pre><code># Detailed listing, including hidden entries
+eza -la
+
+# A tree limited to two levels
+eza --tree --level=2
+
+# Git status alongside files, inside a repository
+eza -la --git</code></pre>
+          <p>Sensible's Bash aliases make <code>ll</code> a shortcut for the last command. Use <code>command ls</code> when you specifically need standard <code>ls</code>, particularly when following scripts or troubleshooting instructions. <a href="https://eza.rocks/">Upstream reference</a>.</p>
+        </article>
+        <article id="zoxide" data-packages="zoxide"><h3>zoxide · jump to familiar folders</h3>
+          <p><strong>Why included:</strong> less repeated typing when you move between the same directories.</p>
+          <pre><code># First visit an existing folder normally
+cd ~/Documents
+cd
+
+# In Sensible's configured Bash, jump back using part of its name
+z Documents
+
+# Show recorded directory scores and paths without changing directory
+zoxide query -l -s</code></pre>
+          <p>It learns visited directories; <code>z</code> is not a search of every folder on disk. Sensible initializes it in interactive Bash. A different shell needs its own upstream setup, and recorded paths may be private. <a href="https://github.com/ajeetdsouza/zoxide#usage">Upstream guide</a>.</p>
+        </article>
+      </section>
+      <section id="inspection"><h2>Understand the system and structured data</h2>
+        <article id="btop" data-packages="btop"><h3>btop · live resource monitor</h3><p><strong>Why included:</strong> a quick way to investigate a busy fan, memory pressure or a slow application. <strong>Try:</strong> run <code>btop</code>, look at CPU/memory usage and the process list, then press <kbd>q</kbd> to leave. Viewing is enough for a first investigation; do not terminate unfamiliar processes.</p></article>
+        <article id="fastfetch" data-packages="fastfetch"><h3>fastfetch · a system summary</h3><p><strong>Why included:</strong> a compact overview of the OS, desktop and hardware when orienting yourself or reporting an issue. <strong>Try:</strong> run <code>fastfetch</code>. It reports information, not a hardware health test. Review usernames, hostnames and other identifying details before sharing its output.</p></article>
+        <article id="jq" data-packages="jq"><h3>jq · read and filter JSON</h3>
+          <p><strong>Why included:</strong> structured inspection of JSON settings and API responses without manually scanning a single long line.</p>
+          <pre><code># A self-contained example: output just the name
+printf '%s\n' '{"name":"Sensible","offline":true}' | jq -r '.name'
+
+# Pretty-print an existing JSON file
+jq '.' settings.json</code></pre>
+          <p><code>-r</code> prints strings without JSON quotation marks. These examples write to the terminal and do not change the input file. JSON containing passwords or tokens still needs to be kept private. <a href="https://jqlang.org/manual/">Upstream manual</a>.</p>
+        </article>
+      </section>
+      <section id="git" data-packages="git"><h2>Git · keep a history of your work</h2>
+        <p><strong>Why included:</strong> version control for code, notes and configuration, with local history available offline.</p>
+        <pre><code># Run inside a repository you already have
+git status
+git diff
+git log -5 --oneline</code></pre>
+        <p>These show changed files, unstaged edits and recent commits without changing anything. A commit is a local snapshot; pushing publishes commits to a remote and needs a connection. Review changes before adding/committing them, never include credentials, and do not confuse local Git history with an independent backup.</p>
+      </section>
+      <section id="network"><h2>Downloads and HTTPS support</h2>
+        <article id="curl" data-packages="curl"><h3>curl · inspect or fetch a URL</h3>
+          <p><strong>Why included:</strong> a scriptable transfer tool for diagnostics and deliberate downloads.</p>
+          <pre><code># Online: show response headers without saving a file
+curl --head https://www.debian.org/</code></pre>
+          <p>For an intentional download, <code>curl --fail --location --output filename URL</code> saves the response and follows redirects. Replace both placeholders; the output file can be overwritten. Check the publisher and any provided checksum/signature. Do not pipe an unfamiliar download into a shell.</p>
+        </article>
+        <article id="ca-certificates" data-packages="ca-certificates"><h3>ca-certificates · the trust store</h3><p><strong>Why included:</strong> trusted certificate authorities used by tools such as curl to validate HTTPS servers. <strong>Tip:</strong> there is no app to open. If HTTPS validation fails, check the clock, network and issuer information; do not make <code>curl -k</code> a routine workaround. Custom organizational certificates require deliberate administrator setup.</p></article>
+      </section>
+      <section id="sudo" data-packages="sudo"><h2>sudo · deliberate administrator access</h2>
+        <p><strong>Why included:</strong> run a specific administrative command without remaining in a root shell.</p>
+        <pre><code># View the installation log; may prompt for your account password
+sudo less /var/log/sensible-install.log</code></pre>
+        <p>Press <kbd>q</kbd> to quit the log viewer. A password prompt normally shows no characters as you type. Use administrator access only when the task needs it; most tools in this chapter should run as your ordinary user.</p>
+        <h3>Where to go next</h3>
+        <p>Try <code>fdfind --help</code>, <code>rg --help</code> or the corresponding tool's help option for the version installed on your machine. Online reference links are optional: the explanations and examples on these pages remain readable offline.</p>
+        <p>See <a href="applications.html#archives">archive recipes</a> for zip/unzip/7-Zip and <a href="applications.html#flatpak">Flatpak basics</a> for managing desktop apps.</p>
+      </section>
+      <footer><p><a href="applications.html">Back: Everyday applications</a> · <a href="index.html">Main guide</a></p></footer>
+    </main></div>
+  </div>
+</body>
+</html>

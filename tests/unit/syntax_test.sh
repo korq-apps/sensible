@@ -22,6 +22,10 @@ sh_files=(
     installer/lib/hardware.sh
     installer/lib/desktop.sh
     installer/lib/apps.sh
+    installer/lib/manual.sh
+    scripts/stage-manual.sh
+    packaging/manual/sensible-manual
+    tests/unit/manual_test.sh
     installer/lib/verify.sh
     live/build.sh
     live/build-stages.sh

@@ -27,6 +27,8 @@ source "${LIB_DIR}/hardware.sh"
 source "${LIB_DIR}/desktop.sh"
 # shellcheck source=lib/apps.sh
 source "${LIB_DIR}/apps.sh"
+# shellcheck source=lib/manual.sh
+source "${LIB_DIR}/manual.sh"
 # shellcheck source=lib/verify.sh
 source "${LIB_DIR}/verify.sh"
 
@@ -111,6 +113,10 @@ boot_package_closure() {
 
 require_live_target_closure() {
     local live_root="${LIVE_ROOT_SENTINEL:-/}"
+    if ! require_manual_payload "$live_root"; then
+        log_err "Rebuild the ISO with its offline manual assets; no disk was changed."
+        return 1
+    fi
     local missing=()
     local pkg artifact counterpart version
 
@@ -825,6 +831,9 @@ EOF
         cp -r "${MNT}/etc/skel/.config/nvim" "${MNT}/home/${USERNAME}/.config/"
         chroot ${MNT} chown -R "${USERNAME}:${USERNAME}" "/home/${USERNAME}/.config"
     fi
+
+    CURRENT_STAGE="configuring first-login documentation"
+    configure_user_manual_autostart "$USERNAME"
 
     install_progress_update 9 "Removing live-environment components"
     CURRENT_STAGE="removing live-environment packages"

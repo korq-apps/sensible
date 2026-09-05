@@ -89,7 +89,10 @@ The rule, as implemented:
 | Off | Swapfile inside the plain root (`@swap` on Btrfs), `resume=UUID=<rootfs> resume_offset=<n>` | Enabled* |
 | On | Swapfile **inside the LUKS root** (`@swap` subvol on Btrfs / `/swapfile` on Ext4), `resume=UUID=<rootfs> resume_offset=<n>` | Enabled* |
 
-`*` Hibernation writes an unverified resume image, so the kernel blocks it under Secure Boot lockdown. With SB off, hibernation works in both modes.
+`*` The installer writes resume configuration in both modes without a Secure
+Boot condition. Hibernation writes an unverified resume image, so the kernel
+blocks it under Secure Boot lockdown. With SB off, resume is configured, but
+successful hibernation still needs hardware/driver validation.
 
 Why the swapfile design wins:
 
@@ -228,6 +231,31 @@ JetBrainsMono Nerd Font from a pinned nerd-fonts release (Debian packages no Ner
 | GNOME utilities | The `gnome-core` PDF/image viewers, text editor, calculator, disks and calendar; plus Amberol |
 | KDE utilities | Okular, Gwenview, Kate, KCalc, Spectacle, and Elisa |
 | CLI | `ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`, `jq` |
+
+### Offline manual
+
+Both build entry points use `scripts/stage-manual.sh` to install local HTML/CSS,
+`sensible-manual`, a permanent application-menu launcher, and an inactive
+autostart template. The installer checks this payload before partitioning and
+copies the template into only the installed user's autostart directory. A
+successful desktop URI dispatch records a per-user marker and removes that
+autostart entry; a failed dispatch retries next login. No global live-session
+autostart or first-login downloads are added. The permanent launcher ignores
+the marker. Actual GNOME/KDE session launch remains a real-desktop test gate.
+
+The local manual has a main setup/recovery guide and linked application and
+terminal-tool chapters. Every chapter is staged and required by the pre-wipe
+payload check; tests validate local links and documented default-package coverage.
+
+### Planned desktop profiles
+
+The next desktop milestone is specified in
+[DESKTOP_PROFILES.md](DESKTOP_PROFILES.md). It is **planned, not shipped**:
+additional photo/sharing applications, curated GNOME extensions and native
+Plasma equivalents, with user-overridable defaults. Approved upstream default
+artifacts may be pinned and verified at image-build time; installation and
+first-login setup must remain offline. The current software table above stays
+the record of implemented behavior until those changes land.
 
 ### Shell (all users)
 

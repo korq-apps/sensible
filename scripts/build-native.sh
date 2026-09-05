@@ -70,6 +70,7 @@ rsync -a --delete "${REPO_ROOT}/installer/" "${OPT_SENSIBLE}/installer/"
 rsync -a --delete "${REPO_ROOT}/configs/" "${OPT_SENSIBLE}/configs/"
 rsync -a --delete "${REPO_ROOT}/docs/" "${OPT_SENSIBLE}/docs/"
 chmod 0755 "${OPT_SENSIBLE}/installer/sensible-install.sh"
+bash "${REPO_ROOT}/scripts/stage-manual.sh"
 
 # desktop.list.chroot is generated and intentionally ignored. Recreate it on
 # the native path exactly as live/build.sh does, or a clean checkout silently

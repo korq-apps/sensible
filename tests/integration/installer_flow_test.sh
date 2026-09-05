@@ -17,6 +17,7 @@ sleep()       { :; }
 wait_for_device() { mlog "wait_for_device $*"; [ "$1" != "${MOCK_MISSING_PARTITION:-}" ]; }
 
 WORK="$(mktemp -d /tmp/sensible-flow-test.XXXXXX)"
+bash "${REPO_ROOT}/scripts/stage-manual.sh" "$WORK"
 mkdir -p "${WORK}/boot"
 printf 'mock kernel\n' > "${WORK}/boot/vmlinuz-7.1.0-amd64"
 printf 'mock initramfs\n' > "${WORK}/boot/initrd.img-7.1.0-amd64"
@@ -56,6 +57,7 @@ lsblk() {
 sgdisk()      { mlog "sgdisk $*"; }
 rsync()       {
     mlog "rsync $*"
+    bash "${REPO_ROOT}/scripts/stage-manual.sh" "$MNT"
     mkdir -p "${MNT}/etc/profile.d" "${MNT}/usr/local/bin" "${MNT}/opt/sensible/configs" "${MNT}/boot" "${MNT}/etc/initramfs-tools" "${MNT}/run/live" "${MNT}/etc/live" "${MNT}/etc/sudoers.d" "${MNT}/etc/keyd" "${MNT}/etc/skel/.config/nvim" "${MNT}/var/lib/dpkg/info" "${MNT}/usr/sbin" "${MNT}/usr/bin"
     cp "${REPO_ROOT}/configs/keyd-default.conf" "${MNT}/etc/keyd/default.conf"
     printf '%s\n' 'require("config.lazy")' > "${MNT}/etc/skel/.config/nvim/init.lua"
@@ -304,6 +306,11 @@ output_text() { cat "${OUT}" "${ERR}"; }
 
 assert_common_success() {
     assert_rc "main returns 0" 0 "${RC}"
+    assert_file_exists "offline manual survives de-living" "${MNT}/usr/share/sensible/manual/index.html"
+    assert_file_exists "manual menu launcher survives de-living" "${MNT}/usr/share/applications/sensible-manual.desktop"
+    assert_file_exists "manual opener survives de-living" "${MNT}/usr/local/bin/sensible-manual"
+    assert_file_contains "installed user gets first-login manual" "${MNT}/home/alice/.config/autostart/sensible-manual.desktop" '--first-login'
+    assert_file_not_exists "no global manual autostart" "${MNT}/etc/xdg/autostart/sensible-manual.desktop"
     assert_contains "success logged" "$(output_text)" "Installation finished successfully!"
     assert_contains "completion action menu shown" "$(output_text)" "Installation Complete"
     assert_contains "completion reports elapsed installation time" "$(output_text)" "Installed in:"
@@ -432,6 +439,14 @@ for partition in /dev/sda1 /dev/sda2 /dev/sda3; do
 done
 MOCK_MISSING_PARTITION=""
 
+t_section "Missing offline manual asset aborts before partitioning"
+mv "${WORK}/usr/share/sensible/manual/index.html" "${WORK}/manual-saved.html"
+run_flow
+assert_rc "missing manual aborts" 1 "${RC}"
+assert_contains "missing manual explains no disk change" "$(output_text)" 'no disk was changed'
+assert_not_contains "missing manual never wipes" "$(log_text)" 'sgdisk'
+mv "${WORK}/manual-saved.html" "${WORK}/usr/share/sensible/manual/index.html"
+
 t_section "Failed kernel partition-table reread aborts before formatting"
 MOCK_PARTPROBE_RC=1
 run_flow
@@ -525,6 +540,7 @@ SENSIBLE_VARIANT=kde
 build_answers yes
 run_flow
 assert_rc "encrypted KDE installation succeeds" 0 "${RC}"
+assert_file_contains "KDE also gets first-login manual" "${MNT}/home/alice/.config/autostart/sensible-manual.desktop" '--first-login'
 assert_file_not_exists "live SDDM main config cannot override installed-user autologin" "${MNT}/etc/sddm.conf"
 assert_file_contains "KDE autologin targets the installed account" "${MNT}/etc/sddm.conf.d/autologin.conf" "User=alice"
 assert_file_contains "KDE autologin has an explicit session on first boot" "${MNT}/etc/sddm.conf.d/autologin.conf" "Session=plasma"
