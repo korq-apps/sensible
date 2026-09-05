@@ -89,7 +89,10 @@ The rule, as implemented:
 | Off | Swapfile inside the plain root (`@swap` on Btrfs), `resume=UUID=<rootfs> resume_offset=<n>` | Enabled* |
 | On | Swapfile **inside the LUKS root** (`@swap` subvol on Btrfs / `/swapfile` on Ext4), `resume=UUID=<rootfs> resume_offset=<n>` | Enabled* |
 
-`*` Hibernation writes an unverified resume image, so the kernel blocks it under Secure Boot lockdown. With SB off, hibernation works in both modes.
+`*` The installer writes resume configuration in both modes without a Secure
+Boot condition. Hibernation writes an unverified resume image, so the kernel
+blocks it under Secure Boot lockdown. With SB off, resume is configured, but
+successful hibernation still needs hardware/driver validation.
 
 Why the swapfile design wins:
 

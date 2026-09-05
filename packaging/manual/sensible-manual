@@ -35,14 +35,14 @@ if [ ! -f "${MANUAL_PATH}" ]; then
 fi
 
 open_manual() {
-    if command -v gio >/dev/null 2>&1; then
-        gio open "${MANUAL_URI}"
-    elif command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "${MANUAL_URI}"
-    else
-        echo "Error: No desktop URI handler (gio or xdg-open) available." >&2
-        return 1
+    if command -v gio >/dev/null 2>&1 && gio open "${MANUAL_URI}"; then
+        return 0
     fi
+    if command -v xdg-open >/dev/null 2>&1 && xdg-open "${MANUAL_URI}"; then
+        return 0
+    fi
+    echo "Error: No available desktop URI handler (gio or xdg-open) could open the manual." >&2
+    return 1
 }
 
 if [ "${FIRST_LOGIN}" = "true" ]; then

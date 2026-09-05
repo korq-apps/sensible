@@ -243,7 +243,7 @@ flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.f
           <p>Swap is configured as a dedicated swapfile inside root (matching RAM capacity). When LUKS is enabled, the swapfile is located inside the encrypted container and is protected at rest.</p>
           <div class="callout warn">
             <div class="callout-title">Secure Boot &amp; Hibernation</div>
-            The installer disables hibernation resume configuration when Secure Boot is detected. With Secure Boot disabled, resume is configured, but successful hibernation still depends on hardware and drivers and must be tested on your machine.
+            The installer configures hibernation resume parameters regardless of Secure Boot state. Kernel lockdown under Secure Boot blocks the unverified hibernation image; the restriction is in the kernel, not an installer configuration switch. With Secure Boot disabled, successful hibernation still depends on hardware and drivers and must be tested on your machine.
           </div>
 
           <h3>Unencrypted <code>/boot</code> &amp; Secure Boot Chain</h3>

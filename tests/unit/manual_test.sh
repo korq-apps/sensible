@@ -119,6 +119,17 @@ fi
 EOF
 chmod +x "${MOCK_BIN}/gio"
 
+# Always mock both handlers: a failed gio must never launch a host application.
+cat > "${MOCK_BIN}/xdg-open" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "${MOCK_XDG_LOG}"
+exit "${MOCK_XDG_RC:-0}"
+EOF
+chmod +x "${MOCK_BIN}/xdg-open"
+MOCK_XDG_LOG="${TMP_DIR}/xdg.log"
+: > "${MOCK_XDG_LOG}"
+export MOCK_XDG_LOG
+
 MOCK_OPEN_LOG="${TMP_DIR}/gio.log"
 : > "${MOCK_OPEN_LOG}"
 export PATH="${MOCK_BIN}:${PATH}"
@@ -130,15 +141,22 @@ cp "${REPO_ROOT}/packaging/manual/sensible-manual-autostart.desktop" "${TEST_ENV
 
 # A failed launch must not create the marker or remove autostart.
 export MOCK_GIO_RC=1
+export MOCK_XDG_RC=1
 rc=0
 "${PATCHED_OPENER}" --first-login >/dev/null 2>&1 || rc=$?
 assert_rc "failed first-login launch returns non-zero" 1 "${rc}"
 assert_file_not_exists "failed first-login does not create marker" "${TEST_ENV_DIR}/state/sensible/manual-opened-v1"
 assert_file_exists "failed first-login keeps autostart" "${TEST_ENV_DIR}/config/autostart/sensible-manual.desktop"
+assert_eq "failed gio tries xdg-open" "file://${TEST_MANUAL}" "$(<"${MOCK_XDG_LOG}")"
+rc=0
+"${PATCHED_OPENER}" >/dev/null 2>&1 || rc=$?
+assert_rc "permanent launcher fails when both handlers fail" 1 "$rc"
 
 # A successful launch must create the marker and remove the per-user entry.
 MOCK_GIO_RC=0
+xdg_count="$(line_count "${MOCK_XDG_LOG}")"
 "${PATCHED_OPENER}" --first-login >/dev/null 2>&1
+assert_eq "gio success does not call xdg-open" "$xdg_count" "$(line_count "${MOCK_XDG_LOG}")"
 assert_file_exists "real first-login creates state marker" "${TEST_ENV_DIR}/state/sensible/manual-opened-v1"
 assert_file_not_exists "real first-login removes autostart" "${TEST_ENV_DIR}/config/autostart/sensible-manual.desktop"
 assert_contains "real opener passes local manual URI" "$(<"${MOCK_OPEN_LOG}")" "open file://${TEST_MANUAL}"
@@ -182,6 +200,28 @@ rc=0
 PATH="$FALLBACK_BIN" "$BASH_BIN" "$PATCHED_OPENER" >/dev/null 2>&1 || rc=$?
 assert_rc "xdg-open works when gio is absent" 0 "$rc"
 assert_eq "fallback receives local file URI" "file://${TEST_MANUAL}" "$(tail -n 1 "$MOCK_OPEN_LOG")"
+
+t_section "Installed gio fails but xdg-open succeeds"
+MOCK_GIO_RC=1
+MOCK_XDG_RC=0
+xdg_count="$(line_count "${MOCK_XDG_LOG}")"
+rc=0
+"${PATCHED_OPENER}" >/dev/null 2>&1 || rc=$?
+assert_rc "permanent launcher succeeds through fallback" 0 "$rc"
+assert_eq "fallback was attempted after gio failure" "$((xdg_count + 1))" "$(line_count "${MOCK_XDG_LOG}")"
+
+export XDG_STATE_HOME="${TEST_ENV_DIR}/fallback-state"
+cp "${REPO_ROOT}/packaging/manual/sensible-manual-autostart.desktop" "${XDG_CONFIG_HOME}/autostart/sensible-manual.desktop"
+rc=0
+"${PATCHED_OPENER}" --first-login >/dev/null 2>&1 || rc=$?
+assert_rc "first-login launcher succeeds through fallback" 0 "$rc"
+assert_file_exists "fallback success creates marker" "${XDG_STATE_HOME}/sensible/manual-opened-v1"
+assert_file_not_exists "fallback success removes autostart" "${XDG_CONFIG_HOME}/autostart/sensible-manual.desktop"
+open_count="$(line_count "${MOCK_OPEN_LOG}")"
+xdg_count="$(line_count "${MOCK_XDG_LOG}")"
+"${PATCHED_OPENER}" --first-login >/dev/null 2>&1
+assert_eq "fallback completion suppresses later gio launches" "$open_count" "$(line_count "${MOCK_OPEN_LOG}")"
+assert_eq "fallback completion suppresses later xdg launches" "$xdg_count" "$(line_count "${MOCK_XDG_LOG}")"
 
 
 t_section "Installer configure_user_manual_autostart helper"
