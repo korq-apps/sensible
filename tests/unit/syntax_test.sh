@@ -37,6 +37,8 @@ sh_files=(
     live/config/hooks/live/0100-grub-serial-timeout.hook.binary
     live/config/hooks/live/0200-sb-efi-prefix.hook.binary
     live/config/hooks/live/0300-ufw.hook.chroot
+    live/config/hooks/live/0250-desktop-apps.hook.chroot
+    tests/unit/desktop_apps_test.sh
     scripts/fetch-pins.sh
     live/config/includes.chroot/usr/local/bin/sensible-install
     live/config/includes.chroot/etc/profile.d/98-sensible-serial-ready.sh

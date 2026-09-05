@@ -258,7 +258,7 @@ flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.f
             <li><strong>Power Management:</strong> <code>power-profiles-daemon</code> provides integrated power modes in desktop settings. Available profiles depend on the hardware.</li>
             <li><strong>Printing &amp; Scanning:</strong> CUPS, <code>ipp-usb</code>, and <code>sane-airscan</code> provide driverless IPP/eSCL printing and scanning support.</li>
             <li><strong>Fingerprint Support:</strong> <code>fprintd</code> and its PAM integration are included; enrollment requires a supported reader. Face recognition is not included.</li>
-            <li><strong>Firewall:</strong> UFW is configured to deny incoming and allow outgoing traffic, with KDE Connect port rules on the KDE edition. Check its state with <code>sudo ufw status verbose</code>.</li>
+            <li><strong>Firewall:</strong> UFW denies incoming and allows outgoing traffic, with LocalSend and GSConnect/KDE Connect port exceptions on both editions. These exceptions are not limited to trusted networks. Read the <a href="applications.html#sharing-firewall">sharing notes</a> and check the active state with <code>sudo ufw status verbose</code>.</li>
           </ul>
 
           <div class="callout info">

@@ -25,6 +25,10 @@ kate
 kcalc
 kde-spectacle
 elisa
+digikam
+kdeconnect
+plasma-systemmonitor
+xdg-desktop-portal-kde
 
 # Boot stack the installer needs on the target and cannot download
 grub-efi-amd64

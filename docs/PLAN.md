@@ -116,6 +116,11 @@ below, not an optional follow-up.
 - [ ] Implement the agreed [desktop profiles](DESKTOP_PROFILES.md): Shotwell /
       digiKam, LocalSend, GNOME extensions, native KDE equivalents and reviewed
       defaults. Keep optional theme and backup choices distinct from shipped scope.
+  - [x] Application/dependency configuration: photo tools, pinned LocalSend,
+        phone integration, management tools, explicit runtime deps and sharing rules.
+  - [ ] Build both images; test offline app startup and actual discovery/transfer
+        with UFW enabled. Record image size/build-time impact before release.
+  - [ ] Curated extension activation, remaining extensions and desktop defaults.
 - [x] Offline HTML manual, permanent menu launcher, and per-user first-login
       autostart, shared by both build paths; unit and mocked installer tests.
 - [ ] Validate first-login opening and subsequent-login suppression on real
@@ -182,7 +187,7 @@ and the package gate proves it resolves), anything third-party or optional
 moves to the **post-install tool**, and the checkbox questions disappear
 because the answer is decided when the image is built.
 
-The newer [desktop profile plan](DESKTOP_PROFILES.md) proposes an explicit
+The newer [desktop profile plan](DESKTOP_PROFILES.md) establishes an explicit
 exception for approved default applications/extensions sourced upstream: they
 may be pinned, verified and baked at build time. This does not add downloads
 to installation or first login; unselected optional software stays post-install.
@@ -282,7 +287,20 @@ Worth taking, not yet taken:
 
 ## Later (not v1)
 
-- Snapper on Btrfs (`@swap` already keeps the swapfile out of snapshot sets) + `grub-btrfs` boot-menu rollback
+- **Separate follow-up after desktop apps: Btrfs snapshots and recovery.**
+  Configure Snapper only when Btrfs is selected; leave Ext4 unchanged. Reuse the
+  existing mounted `@snapshots` layout safely rather than blindly running
+  `snapper create-config /` over `/.snapshots`. Include snapshot creation policy
+  (timeline and/or APT hooks), cleanup/retention limits and a tested first baseline.
+  Evaluate pinned, build-time `grub-btrfs` integration separately from permanent
+  restoration: booting a snapshot is not itself a rollback. Resolve the explicit
+  `subvol=@` mount, separate ext4 `/boot` and kernel/module consistency, encrypted
+  root discovery (LUKS2 Argon2id), read-only boot writability and Secure Boot before
+  documenting a recovery command. Do not advertise `snapper rollback` plus
+  `update-grub` as sufficient for this layout. Require installed-disk reboot and
+  restore evidence with LUKS on/off. Home, logs and swap are separate subvolumes;
+  root snapshots do not replace personal-file backups. No target-time source
+  cloning/builds or snapshot tooling added by the current desktop-app slice.
 - TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis + `clevis-initramfs`); with biometrics this completes the Windows Hello flow — PCR policy must account for the unencrypted `/boot`, and Secure Boot in v1 strengthens the measurements
 - FIDO2 hardware keys for sudo/polkit (`libpam-u2f`, enrollment via `pamu2fcfg`)
 - GUI NVIDIA/MOK enrollment (unsigned NVIDIA module is rejected under Secure Boot lockdown)

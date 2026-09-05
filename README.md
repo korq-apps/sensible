@@ -54,9 +54,16 @@ The live ISO does **not** ship both desktops. Choose the GNOME or KDE release as
 
 **Default apps:** Firefox ESR and Chromium; LibreOffice Writer, Calc, and Impress; Thunderbird; KeePassXC; VLC; Neovim (LazyVim starter in `/etc/skel`); archive support; and modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`). GNOME adds File Roller and Amberol; KDE adds Okular, Ark, Gwenview, Kate, KCalc, Spectacle, and Elisa. Flatpak and the desktop store integration are ready for use after installation.
 
-**Planned desktop additions:** photo management, LocalSend, curated GNOME
-extensions and native KDE equivalents are recorded in the
-[desktop profile plan](docs/DESKTOP_PROFILES.md). These are not yet shipped.
+**Desktop app additions (image configuration):** Shotwell, Extension Manager,
+Tweaks and packaged GSConnect/AppIndicator support on GNOME; digiKam, KDE Connect
+and Plasma System Monitor on KDE; pinned LocalSend on both. LocalSend is staged
+at build time with its runtime dependencies, not downloaded by the installer.
+Its updates require a separately reviewed upstream package, not ordinary Debian
+updates. Sharing-port exceptions are configured on both editions; see the
+[manual](manual/applications.html#sharing-firewall) for their network exposure.
+Curated GNOME extension activation, further extensions, widgets and themes remain
+in the [desktop profile plan](docs/DESKTOP_PROFILES.md). Full-image and real-session
+acceptance for the app additions is still pending.
 
 **Offline help:** open **Sensible Manual** from the application menu or run
 `sensible-manual`. The [local HTML manual](manual/index.html) opens on the

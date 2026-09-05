@@ -5,7 +5,8 @@ tests/run-tests.sh    # no root, no container, no network
 ```
 
 Requires Bash, the usual command-line utilities, and Python 3.9+ (standard
-library only) for multi-page manual validation. No Python packages are needed.
+library only) for multi-page manual and desktop-app validation, plus `tar` and
+`unzip` for pinned-artifact fixtures. No Python packages are needed.
 
 ## What is covered
 
@@ -17,6 +18,7 @@ library only) for multi-page manual validation. No Python packages are needed.
 | `disk_test.sh` | Partition naming, swap/minimum math, GPT layouts, LUKS2, Btrfs subvolumes and swapfile resume offset, Ext4, candidate filtering, stable disk-identity revalidation, mounted-disk rejection, and installer-owned cleanup |
 | `fstab_test.sh` | All four engine combinations (Btrfs/Ext4 x LUKS on/off): crypttab root by LUKS header UUID, swapfile lines inside root, `@swap` subvolume mounts, tmpfs, and blkid-empty abort guards |
 | `desktop_test.sh` | GNOME/KDE package sets, Plymouth spinner/breeze, gdm3/sddm enablement, keyd conf deployed from `configs/` (never generated — spec §11), hard-fail on missing conf |
+| `desktop_apps_test.sh` | Real pin-staging script with tiny cached artifacts: checksum/identity failures, cache reuse, fixed local-deb path, license/pin staging; installed-version/asset hook failures; both editions' firewall rules and failure propagation; edition ownership |
 | `apps_test.sh` | Canonical default app set (Architecture §7), Flathub, LazyVim skel + user copy + ownership, Brave official apt origin + signed keyring, quoted whiptail checklist matching, amberol/elisa per tag, no Slack/Zoom/Steam/Snapd |
 | `manual_test.sh` | Offline chapter assets/links, current app-list coverage, both build paths, missing payload rejection, launcher fallback/retry/idempotency, and scoped per-user autostart ownership |
 | `syntax_test.sh` | `bash -n` over every shell script in the repo, executable bits, and live-build hook naming (`*.hook.{chroot,binary}` — anything else is silently skipped) |
@@ -66,6 +68,9 @@ codes.
   boot smoke (`build-iso.yml`) asserts UEFI boot reaches a stable marker from
   the live serial autologin shell.
 - Plymouth graphical unlock and `systemctl` behavior of the installed system.
+- Desktop app startup on real GNOME/KDE sessions, file-chooser/tray integration,
+  phone pairing and LocalSend transfers with UFW enabled on IPv4/IPv6 networks.
+  Mocked rule tests do not prove discovery or firewall behavior on hardware.
 - The local suite tests package-gate failure handling; CI performs the live
   Debian Testing archive query before each variant build.
 - Native builds query a disposable Testing-only APT index; host repositories,

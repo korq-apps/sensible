@@ -8,10 +8,18 @@ set -e
 
 VARIANT="$(cat /etc/sensible/variant 2>/dev/null || printf gnome)"
 
-if [ "${VARIANT}" = "kde" ]; then
-    ufw allow 1714:1764/tcp >/dev/null  # KDE Connect discovery + transfer
-    ufw allow 1714:1764/udp >/dev/null
-fi
+case "${VARIANT}" in
+    gnome|kde)
+        # GSConnect on GNOME and KDE Connect on Plasma use the same protocol.
+        # UFW writes IPv4 and IPv6 rules when IPV6=yes (the Debian default).
+        # These are port-scoped, not restricted to a particular network profile.
+        ufw allow 1714:1764/tcp >/dev/null
+        ufw allow 1714:1764/udp >/dev/null
+        ufw allow 53317/tcp >/dev/null  # LocalSend HTTPS transfer
+        ufw allow 53317/udp >/dev/null  # LocalSend discovery
+        ;;
+    *) echo "Error: unknown desktop variant: ${VARIANT}" >&2; exit 1 ;;
+esac
 
 sed -i 's/^ENABLED=no/ENABLED=yes/' /etc/ufw/ufw.conf
 systemctl enable ufw.service >/dev/null

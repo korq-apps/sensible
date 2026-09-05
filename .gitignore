@@ -50,6 +50,8 @@ live/config/includes.chroot/usr/share/oh-my-bash/
 live/config/includes.chroot/usr/local/share/fonts/
 # Pinned-artifact download cache (scripts/fetch-pins.sh)
 live/local/pins/
+live/config/packages.chroot/localsend_amd64.deb
+live/config/includes.chroot/usr/share/doc/localsend/
 
 # Temporary files
 *~

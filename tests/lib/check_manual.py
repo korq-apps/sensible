@@ -55,6 +55,8 @@ def check(manual, repo):
     }
     # xdg-utils is launcher plumbing, documented through the manual itself.
     required.discard("xdg-utils")
+    # Queued by live-build's local .deb repository, not Debian's plain lists.
+    required.add("localsend")
     covered = set().union(*(page.packages for page in pages.values()))
     assert not required - covered, f"default apps lack guidance: {sorted(required - covered)}"
     print(f"Manual: {len(pages)} pages; links and {len(required)} default packages checked")

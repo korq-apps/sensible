@@ -1,0 +1,16 @@
+#!/bin/sh
+# Fail the build if local package staging was skipped or an unexpected version
+# won APT resolution. Do not launch applications or change user preferences.
+set -eu
+. /etc/sensible/pins.env
+if [ "$(dpkg-query -W -f='${Status}' localsend)" != 'install ok installed' ] \
+    || [ "$(dpkg-query -W -f='${Version}' localsend)" != "$LOCALSEND_DEB_VERSION" ]; then
+    echo "Error: LocalSend is missing or differs from the pinned package version." >&2
+    exit 1
+fi
+if [ ! -x /usr/bin/localsend_app ] \
+    || [ ! -s /usr/share/applications/localsend_app.desktop ] \
+    || [ ! -s /usr/share/doc/localsend/copyright ]; then
+    echo "Error: LocalSend launcher or license payload is incomplete." >&2
+    exit 1
+fi
