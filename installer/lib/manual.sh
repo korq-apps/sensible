@@ -17,6 +17,7 @@ require_manual_payload() {
         log_err "Offline manual opener is not executable."
         return 1
     fi
+    return 0
 }
 
 configure_user_manual_autostart() {

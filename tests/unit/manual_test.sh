@@ -13,6 +13,9 @@ MNT="${TMP_MNT}"
 
 chroot() { mlog "chroot $*"; }
 
+# Some wc implementations pad counts; assertions compare strings exactly.
+line_count() { wc -l < "$1" | tr -d '[:space:]'; }
+
 t_section "Manual source and offline integrity"
 assert_file_exists "manual/index.html exists" "${REPO_ROOT}/manual/index.html"
 assert_file_exists "manual/manual.css exists" "${REPO_ROOT}/manual/manual.css"
@@ -135,13 +138,20 @@ assert_contains "real opener passes local manual URI" "$(<"${MOCK_OPEN_LOG}")" "
 assert_not_contains "opener has no direct browser fallback" "$(<"${OPENER}")" "firefox"
 assert_not_contains "opener has no sensible-browser fallback" "$(<"${OPENER}")" "sensible-browser"
 
-open_count="$(wc -l < "${MOCK_OPEN_LOG}")"
+open_count="$(line_count "${MOCK_OPEN_LOG}")"
 "${PATCHED_OPENER}" --first-login >/dev/null 2>&1
-assert_eq "real first-login is idempotent" "${open_count}" "$(wc -l < "${MOCK_OPEN_LOG}")"
+assert_eq "real first-login is idempotent" "${open_count}" "$(line_count "${MOCK_OPEN_LOG}")"
+
+# Keep a regression check independent of the host's wc formatting.
+padded_count="$(
+    wc() { printf '       %s\n' "$open_count"; }
+    line_count "${MOCK_OPEN_LOG}"
+)"
+assert_eq "line counts normalize padded wc output" "$open_count" "$padded_count"
 
 # The permanent launcher remains independent of the first-login marker.
 "${PATCHED_OPENER}" >/dev/null 2>&1
-assert_eq "permanent launcher opens despite marker" "$((open_count + 1))" "$(wc -l < "${MOCK_OPEN_LOG}")"
+assert_eq "permanent launcher opens despite marker" "$((open_count + 1))" "$(line_count "${MOCK_OPEN_LOG}")"
 
 t_section "Opener missing payload and handler fallback"
 mv "$TEST_MANUAL" "${TEST_MANUAL}.saved"
@@ -202,7 +212,7 @@ mock_teardown
 mock_setup
 configure_user_manual_autostart "alice"
 calls="$(<"${MOCK_LOG}")"
-assert_eq "existing parents are not chowned again" 1 "$(wc -l < "${MOCK_LOG}")"
+assert_eq "existing parents are not chowned again" 1 "$(line_count "${MOCK_LOG}")"
 assert_contains "only generated file chowned on repeat" "$calls" 'chown alice:alice /home/alice/.config/autostart/sensible-manual.desktop'
 mock_teardown
 
