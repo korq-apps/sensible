@@ -198,7 +198,62 @@ assert_contains "release job supports direct-file artifacts" "$workflow_source" 
 assert_contains "release job collects ISO and checksum artifacts" "$workflow_source" 'pattern: sensible-*-debian-testing-amd64.iso*'
 assert_contains "tag release publication remains readiness-gated" \
     "$workflow_source" "startsWith(github.ref, 'refs/tags/v') && vars.SENSIBLE_RELEASE_READY == 'true'"
-assert_contains "release job attaches the downloaded files" "$workflow_source" 'uses: softprops/action-gh-release@v2'
+release_guard_assets="$(cat <<'EOF'
+          expected_assets=(
+            "sensible-gnome-debian-testing-amd64.iso"
+            "sensible-gnome-debian-testing-amd64.iso.sha256"
+            "sensible-kde-debian-testing-amd64.iso"
+            "sensible-kde-debian-testing-amd64.iso.sha256"
+          )
+EOF
+)"
+release_files_block="$(cat <<'EOF'
+          files: |
+            sensible-gnome-debian-testing-amd64.iso
+            sensible-gnome-debian-testing-amd64.iso.sha256
+            sensible-kde-debian-testing-amd64.iso
+            sensible-kde-debian-testing-amd64.iso.sha256
+          fail_on_unmatched_files: true
+EOF
+)"
+assert_contains "release guard enumerates all four promised assets" "$workflow_source" "$release_guard_assets"
+assert_contains "release guard rejects missing or empty assets" "$workflow_source" 'if [ ! -s "$asset" ]; then'
+assert_contains "release guard validates paired checksums" "$workflow_source" 'actual_checksum="$(sha256sum "$iso")"'
+assert_contains "release action has a complete fail-closed attachment block" "$workflow_source" "$release_files_block"
+
+release_guard_script="$(awk '
+    /^      - name: Verify complete release asset set$/ { in_step=1; next }
+    in_step && /^        run: \|$/ { in_run=1; next }
+    in_run && /^      - name:/ { exit }
+    in_run { sub(/^          /, ""); print }
+' "${REPO_ROOT}/.github/workflows/build-iso.yml")"
+release_fixture="$(mktemp -d /tmp/sensible-release-assets.XXXXXX)"
+for variant in gnome kde; do
+    iso="sensible-${variant}-debian-testing-amd64.iso"
+    printf 'fixture %s ISO\n' "$variant" > "${release_fixture}/${iso}"
+    (cd "$release_fixture" && sha256sum "$iso" > "${iso}.sha256")
+done
+release_guard_output="$(cd "$release_fixture" && bash -c "$release_guard_script" 2>&1)"
+release_guard_rc=$?
+assert_rc "release guard accepts the complete verified asset set" 0 "$release_guard_rc"
+
+rm -f "${release_fixture}/sensible-kde-debian-testing-amd64.iso.sha256"
+release_guard_output="$(cd "$release_fixture" && bash -c "$release_guard_script" 2>&1)"
+release_guard_rc=$?
+assert_rc "release guard rejects a partial asset set" 1 "$release_guard_rc"
+assert_contains "partial release failure identifies the missing asset" \
+    "$release_guard_output" "Expected release asset is missing or empty"
+
+(cd "$release_fixture" && sha256sum sensible-kde-debian-testing-amd64.iso \
+    > sensible-kde-debian-testing-amd64.iso.sha256)
+printf 'invalid checksum\n' > "${release_fixture}/sensible-gnome-debian-testing-amd64.iso.sha256"
+release_guard_output="$(cd "$release_fixture" && bash -c "$release_guard_script" 2>&1)"
+release_guard_rc=$?
+assert_rc "release guard rejects a mismatched checksum" 1 "$release_guard_rc"
+assert_contains "checksum failure identifies the invalid checksum asset" \
+    "$release_guard_output" "Checksum does not match"
+rm -rf "$release_fixture"
+
 assert_not_contains "CI avoids a duplicate package check" "$workflow_source" 'scripts/check-packages.sh'
 assert_file_contains "offline closure carries the NVIDIA driver" "${REPO_ROOT}/live/config/package-lists/sensible-target.list.chroot" "nvidia-driver"
 assert_contains "Debian browser package uses ESR name" "$apps_source" "firefox-esr"
