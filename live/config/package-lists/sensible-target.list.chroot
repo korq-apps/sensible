@@ -75,6 +75,8 @@ curl
 git
 ca-certificates
 flatpak
+# Offline manual uses the desktop URI handler on either edition.
+xdg-utils
 fonts-noto-core
 fonts-noto-color-emoji
 fonts-liberation

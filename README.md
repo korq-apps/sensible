@@ -54,6 +54,15 @@ The live ISO does **not** ship both desktops. Choose the GNOME or KDE release as
 
 **Default apps:** Firefox ESR and Chromium; LibreOffice Writer, Calc, and Impress; Thunderbird; KeePassXC; VLC; Neovim (LazyVim starter in `/etc/skel`); archive support; and modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`). GNOME adds File Roller and Amberol; KDE adds Okular, Ark, Gwenview, Kate, KCalc, Spectacle, and Elisa. Flatpak and the desktop store integration are ready for use after installation.
 
+**Planned desktop additions:** photo management, LocalSend, curated GNOME
+extensions and native KDE equivalents are recorded in the
+[desktop profile plan](docs/DESKTOP_PROFILES.md). These are not yet shipped.
+
+**Offline help:** open **Sensible Manual** from the application menu or run
+`sensible-manual`. The [local HTML manual](manual/index.html) opens on the
+installed user's first desktop login; failed launches retry next login. It
+needs no internet connection and remains available from the menu afterward.
+
 **Not currently offered by the offline installer:** Brave, Audacious, and Flathub remote setup. Install additional applications after first boot; commercial applications belong on Flathub rather than in the base image.
 
 **Not currently offered:** AI CLIs. If added later, they will be optional and use pinned artifacts rather than `curl | sh` from the ISO.

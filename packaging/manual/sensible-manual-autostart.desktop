@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Sensible Manual
+Comment=Open the offline Sensible user manual on first login
+Exec=/usr/local/bin/sensible-manual --first-login
+Icon=help-browser
+Terminal=false
+Categories=Documentation;Utility;
+StartupNotify=true
+X-GNOME-Autostart-enabled=true

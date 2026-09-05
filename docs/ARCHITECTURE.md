@@ -229,6 +229,27 @@ JetBrainsMono Nerd Font from a pinned nerd-fonts release (Debian packages no Ner
 | KDE utilities | Okular, Gwenview, Kate, KCalc, Spectacle, and Elisa |
 | CLI | `ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`, `jq` |
 
+### Offline manual
+
+Both build entry points use `scripts/stage-manual.sh` to install local HTML/CSS,
+`sensible-manual`, a permanent application-menu launcher, and an inactive
+autostart template. The installer checks this payload before partitioning and
+copies the template into only the installed user's autostart directory. A
+successful desktop URI dispatch records a per-user marker and removes that
+autostart entry; a failed dispatch retries next login. No global live-session
+autostart or first-login downloads are added. The permanent launcher ignores
+the marker. Actual GNOME/KDE session launch remains a real-desktop test gate.
+
+### Planned desktop profiles
+
+The next desktop milestone is specified in
+[DESKTOP_PROFILES.md](DESKTOP_PROFILES.md). It is **planned, not shipped**:
+additional photo/sharing applications, curated GNOME extensions and native
+Plasma equivalents, with user-overridable defaults. Approved upstream default
+artifacts may be pinned and verified at image-build time; installation and
+first-login setup must remain offline. The current software table above stays
+the record of implemented behavior until those changes land.
+
 ### Shell (all users)
 
 oh-my-bash from a **shared, read-only install** — not per-user clones:
