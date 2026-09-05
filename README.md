@@ -50,17 +50,19 @@ The live ISO does **not** ship both desktops. Choose the GNOME or KDE release as
 
 ### Software (defaults vs optional)
 
-**Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak + Flathub, fonts, `fwupd`, Secure Boot chain on the installed system (shim + Debian-signed GRUB).
+**Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak, fonts, `fwupd`, Secure Boot chain on the installed system (shim + Debian-signed GRUB). The Flathub remote is added later by the planned `sensible-apps` tool or manually after first boot.
 
-**Default apps:** Firefox ESR, VLC, Neovim (LazyVim starter in `/etc/skel`), modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`).
+**Default apps:** Firefox ESR and Chromium; LibreOffice Writer, Calc, and Impress; Thunderbird; KeePassXC; VLC; Neovim (LazyVim starter in `/etc/skel`); archive support; and modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`). GNOME adds File Roller and Amberol; KDE adds Okular, Ark, Gwenview, Kate, KCalc, Spectacle, and Elisa. Flatpak and the desktop store integration are ready for use after installation.
 
-**Not currently offered by the offline installer:** Chromium, Brave, Audacious, Amberol, and Elisa. Install additional applications after first boot; commercial applications belong on Flathub rather than in the base image.
+**Not currently offered by the offline installer:** Brave, Audacious, and Flathub remote setup. Install additional applications after first boot; commercial applications belong on Flathub rather than in the base image.
 
 **Not currently offered:** AI CLIs. If added later, they will be optional and use pinned artifacts rather than `curl | sh` from the ISO.
 
-**Planned ([Phase 6](docs/PLAN.md#phase-6--sensible-extras-planned-not-implemented)):** fingerprint login (`fprintd`) always on, BioPass face login checkbox, oh-my-bash for all users with a sensible `.bashrc`, system git defaults + optional name/email prompts, JetBrainsMono Nerd Font, `ufw` firewall (KDE Connect-aware), printing/scanning, developer-tools checkbox (Docker + Compose, `lazygit`, `gh`), unattended `--config` installs.
+**Included, no question asked:** fingerprint login (`fprintd`, dormant without a reader), oh-my-bash for all users with a sensible `.bashrc`, system-wide git defaults, JetBrainsMono Nerd Font, `ufw` firewall (deny incoming / allow outgoing, KDE Connect-aware), and printing/scanning (CUPS driverless + `sane-airscan`) — all baked into the image at build time.
 
-Slack, WhatsApp, Zoom, Discord, and the rest are **Flathub**, not preinstalled.
+**Planned ([Phase 6](docs/PLAN.md#phase-6--sensible-extras-re-scoped-for-offline), post-install tool):** BioPass face login (pinned `.deb`), developer-tools checkbox (Docker + Compose, `lazygit`, `gh`), and unattended `--config` installs.
+
+Slack, WhatsApp, Zoom, Discord, and the rest belong on **Flathub**, not in the base image.
 
 ---
 
@@ -75,7 +77,7 @@ Make as much hardware work as Debian Testing allows, on first boot:
 - Power: `power-profiles-daemon`
 - Device firmware updates: `fwupd` + LVFS
 - Secure Boot: shim + Debian-signed GRUB chain on the **installed system** (NVIDIA module and hibernation are blocked under lockdown — documented in Architecture). Secure Boot on the live installer ISO is enabled via live-build (`--uefi-secure-boot enable`) and verified under OVMF with Microsoft keys (`SMOKE_FIRMWARE=sb scripts/smoke-boot.sh`): the kernel reports `secureboot: Secure boot enabled` and loads the Debian Secure Boot CA.
-- Planned (Phase 6): fingerprint via `fprintd` + `libpam-fprintd`, BioPass face login opt-in, printing/scanning (CUPS driverless + `sane-airscan`)
+- Biometrics: fingerprint via `fprintd` + `libpam-fprintd` (baked; dormant without a reader). Printing/scanning (CUPS driverless + `sane-airscan`) is baked too. BioPass face login is a planned post-install opt-in.
 
 First target is **amd64 + UEFI**. Legacy BIOS and other arches are out of scope for v1.
 
@@ -116,7 +118,7 @@ The installed system hostname defaults to `debian`. The UEFI boot entry stays **
 │   └── INSTALLER_SPEC.md   # installer prompts and exact commands
 ├── live/                   # live-build config (Dockerfile, hooks, package lists)
 ├── installer/              # sensible-install.sh + lib/ modules
-├── configs/                # keyd, omb-bashrc + gitconfig (Phase 6)
+├── configs/                # keyd, omb-bashrc + gitconfig (baked into the image)
 ├── scripts/                # run-qemu.sh — boot the built ISO in UEFI QEMU
 └── tests/                  # unit + integration suites (tests/run-tests.sh)
 ```
@@ -131,6 +133,21 @@ The installed system hostname defaults to `debian`. The UEFI boot entry stays **
 - [Plan](docs/PLAN.md) — implementation order
 
 Build: `./live/build.sh` (podman/docker) or `sudo ./scripts/build-native.sh` (containerless, on Debian) produces `sensible-$SENSIBLE_VARIANT-debian-testing-amd64.iso` (`SENSIBLE_VARIANT=gnome`, the default, or `kde`). Verify it the way CI does with `./scripts/smoke-boot.sh` (headless UEFI boot assertion), or launch it interactively with `./scripts/run-qemu.sh`. Tests: `tests/run-tests.sh` — no root, no network.
+
+CI builds both desktop editions and tests each under UEFI and Secure Boot.
+Smoke tests stop after both serial boot markers appear and QEMU remains alive
+for `SMOKE_SETTLE` seconds (default 5); `SMOKE_TIMEOUT` (default 600) is the
+failure deadline, not a mandatory wait. This checks live serial readiness, not
+graphical-desktop health or installed-disk boot.
+
+New pushes supersede older builds of the same PR. Named build containers and
+QEMU guests are cleaned up on cancellation. Container builds reuse only `.deb`
+downloads under `live/.cache/live-build` and checksum-verified pins under
+`live/local/pins`; chroots, bootstrap snapshots, APT indexes and stage state are
+rebuilt. CI restores those downloads after checkout and saves a new per-edition
+snapshot after successful runs, including weekly rebuilds. Package-name
+validation runs once inside the build entry point, and ISO uploads disable
+additional artifact compression.
 
 ---
 

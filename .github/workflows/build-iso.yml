@@ -11,6 +11,12 @@ on:
     - cron: '0 3 * * 0'
   workflow_dispatch:
 
+# Only supersede builds of the same PR. Releases and manual/scheduled runs
+# retain distinct groups and are never cancelled by a PR update.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   tests:
     name: Unit & Integration Tests
@@ -35,11 +41,12 @@ jobs:
     name: Build Live ISO & UEFI Smoke Test (${{ matrix.variant }})
     needs: tests
     runs-on: [self-hosted, debian-13]
+    env:
+      SENSIBLE_BUILD_CONTAINER: sensible-ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.variant }}
     strategy:
       fail-fast: false
       matrix:
-        # KDE joins once its variant lands (offline rework, phase 5).
-        variant: [gnome]
+        variant: [gnome, kde]
     # Read-only: this job runs for pull_request and executes PR-controlled
     # build scripts, so it must never hold a token that can write the repo.
     # Publishing happens in the tag-only `release` job below.
@@ -133,18 +140,17 @@ jobs:
           # Do not leave the job token on disk for the PR-controlled build.
           persist-credentials: false
 
-      - name: Cache APT packages
+      - name: Cache package downloads and verified pins
         uses: actions/cache@v4
         with:
-          path: live/.cache/apt
-          key: ${{ runner.os }}-apt-cache-${{ github.sha }}
+          path: |
+            live/.cache/live-build
+            live/local/pins
+          # New snapshots also refresh weekly Testing builds of the same SHA.
+          key: ${{ runner.os }}-${{ runner.arch }}-downloads-v2-${{ matrix.variant }}-${{ hashFiles('live/config/package-lists/**', 'live/variants/**', 'live/pins.env', 'live/Dockerfile') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            ${{ runner.os }}-apt-cache-
-
-      - name: Check package names resolve against Debian Testing
-        run: |
-          chmod +x scripts/check-packages.sh
-          scripts/check-packages.sh ${{ matrix.variant }}
+            ${{ runner.os }}-${{ runner.arch }}-downloads-v2-${{ matrix.variant }}-${{ hashFiles('live/config/package-lists/**', 'live/variants/**', 'live/pins.env', 'live/Dockerfile') }}-
+            ${{ runner.os }}-${{ runner.arch }}-downloads-v2-${{ matrix.variant }}-
 
       - name: Build Live ISO in Container
         env:
@@ -152,6 +158,18 @@ jobs:
         run: |
           chmod +x live/build.sh
           ./live/build.sh
+
+      # Backstop if cancellation kills the build shell before its EXIT trap.
+      - name: Stop build containers
+        if: always()
+        run: |
+          if command -v podman >/dev/null 2>&1; then ENGINE=podman; else ENGINE=docker; fi
+          for name in "${SENSIBLE_BUILD_CONTAINER}" "${SENSIBLE_BUILD_CONTAINER}-packages"; do
+            names="$("${ENGINE}" ps -a --format '{{.Names}}' --filter "name=${name}")"
+            if grep -Fxq -- "${name}" <<< "${names}"; then
+              "${ENGINE}" rm -f "${name}"
+            fi
+          done
 
       - name: Install QEMU and OVMF for Smoke Test
         run: |
@@ -174,6 +192,12 @@ jobs:
           chmod +x scripts/smoke-boot.sh
           scripts/smoke-boot.sh sensible-${{ matrix.variant }}-debian-testing-amd64.iso
 
+      - name: Headless QEMU Secure Boot Smoke Test
+        env:
+          SMOKE_FIRMWARE: sb
+        run: |
+          scripts/smoke-boot.sh sensible-${{ matrix.variant }}-debian-testing-amd64.iso
+
       - name: Upload ISO and Checksum Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -182,6 +206,7 @@ jobs:
             sensible-${{ matrix.variant }}-debian-testing-amd64.iso
             sensible-${{ matrix.variant }}-debian-testing-amd64.iso.sha256
           if-no-files-found: error
+          compression-level: 0
           retention-days: 14
 
   # Publication is isolated in its own job so that `contents: write` exists only

@@ -27,10 +27,16 @@ fi
 
 echo "==> Using container engine: ${CONTAINER_ENGINE}"
 
-# Ensure executable permissions on auto scripts & hooks
-chmod +x "${REPO_ROOT}/live/auto/"* 2>/dev/null || true
-chmod -R +x "${REPO_ROOT}/live/config/hooks/" 2>/dev/null || true
-chmod -R +x "${REPO_ROOT}/live/config/includes.chroot/usr/local/bin/" 2>/dev/null || true
+# These files are executed by live-build or from the live image. Missing paths
+# are a broken source tree, and chmod failures must stop the build.
+for executable_dir in \
+    "${REPO_ROOT}/live/auto" \
+    "${REPO_ROOT}/live/config/hooks" \
+    "${REPO_ROOT}/live/config/includes.chroot/usr/local/bin"; do
+    [ -d "${executable_dir}" ] \
+        || { echo "Error: required executable directory is missing: ${executable_dir}" >&2; exit 1; }
+    find "${executable_dir}" -type f -exec chmod 0755 {} +
+done
 
 # Stage installer and configs into includes.chroot/opt/sensible
 OPT_SENSIBLE="${REPO_ROOT}/live/config/includes.chroot/opt/sensible"
@@ -42,7 +48,7 @@ mkdir -p "${OPT_SENSIBLE}/installer" "${OPT_SENSIBLE}/configs" "${OPT_SENSIBLE}/
 rsync -a --delete "${REPO_ROOT}/installer/" "${OPT_SENSIBLE}/installer/"
 rsync -a --delete "${REPO_ROOT}/configs/" "${OPT_SENSIBLE}/configs/"
 rsync -a --delete "${REPO_ROOT}/docs/" "${OPT_SENSIBLE}/docs/"
-chmod -R +x "${OPT_SENSIBLE}/installer/" 2>/dev/null || true
+chmod 0755 "${OPT_SENSIBLE}/installer/sensible-install.sh"
 
 # Desktop variant. The ISO carries the finished system, so the desktop is
 # chosen at build time; the installer never asks.
@@ -57,15 +63,17 @@ VARIANT_LIST="${REPO_ROOT}/live/variants/${SENSIBLE_VARIANT}.list"
 [ -f "${VARIANT_LIST}" ] || { echo "Error: no package list at ${VARIANT_LIST}." >&2; exit 1; }
 cp "${VARIANT_LIST}" "${REPO_ROOT}/live/config/package-lists/desktop.list.chroot"
 
+# Record the variant in the image; chroot hooks (e.g. ufw KDE Connect rules)
+# and installed-system scripts read it from /etc/sensible/variant.
+VARIANT_MARKER="${REPO_ROOT}/live/config/includes.chroot/etc/sensible/variant"
+mkdir -p "$(dirname "${VARIANT_MARKER}")"
+printf '%s\n' "${SENSIBLE_VARIANT}" > "${VARIANT_MARKER}"
+
 # Resolve every package name before building. A name that has been dropped from
 # Testing is otherwise only discovered mid-install, on the user's machine, after
 # the disk is wiped -- which is exactly how vdpau-driver-all failed.
 echo "==> Checking package names resolve against Debian Testing..."
 "${REPO_ROOT}/scripts/check-packages.sh" "${SENSIBLE_VARIANT}"
-
-# Prepare cache directory
-CACHE_DIR="${REPO_ROOT}/live/.cache/apt"
-mkdir -p "${CACHE_DIR}"
 
 # Build the builder container image
 IMAGE_TAG="sensible-live-builder:latest"
@@ -76,10 +84,10 @@ ${CONTAINER_ENGINE} build -t "${IMAGE_TAG}" -f "${REPO_ROOT}/live/Dockerfile" "$
 # live/build-stages.sh rather than `lb build`, so the chroot's device nodes can
 # be repaired between bootstrap and package installation -- see that script.
 echo "==> Running live-build inside container..."
-${CONTAINER_ENGINE} run --rm --privileged \
+bash "${REPO_ROOT}/scripts/run-build-container.sh" "${CONTAINER_ENGINE}" \
+    "${SENSIBLE_BUILD_CONTAINER:-sensible-build-${BUILD_LOCK_ID}-$$}" --privileged \
     -e SENSIBLE_VARIANT="${SENSIBLE_VARIANT}" \
     -v "${REPO_ROOT}:/workspace:rw" \
-    -v "${CACHE_DIR}:/var/cache/apt/archives:rw" \
     -w /workspace/live \
     "${IMAGE_TAG}" \
     bash /workspace/live/build-stages.sh

@@ -72,7 +72,14 @@ print('\n'.join(sorted(names)))
 PY
 }
 
-NAMES="$(collect_names | sort -u | grep -v '^$')"
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "Error: python3 is required to collect package names." >&2
+    exit 1
+fi
+if ! NAMES="$(collect_names | sort -u | grep -v '^$')"; then
+    echo "Error: could not collect the complete package-name set." >&2
+    exit 1
+fi
 COUNT="$(printf '%s\n' "${NAMES}" | grep -c .)"
 echo "==> Checking ${COUNT} package names for variant '${VARIANT}' against Debian Testing"
 
@@ -86,7 +93,50 @@ for name in ${NAMES}; do
     TO_CHECK+="${name}"$'\n'
 done
 
-if command -v podman >/dev/null 2>&1; then
+# Native builds must query Testing too, not the host's stable/third-party
+# sources or installed-package database. APT_CONFIG is read before the normal
+# host configuration: redirect its config, source, state and cache directories
+# into a disposable workspace (including host update hooks and preferences).
+if [ "${SENSIBLE_PACKAGE_CHECK_NATIVE:-0}" = "1" ]; then
+    APT_WORK="$(mktemp -d /tmp/sensible-package-index.XXXXXX)" || exit 1
+    trap 'rm -rf "${APT_WORK}"' EXIT
+    mkdir -p "${APT_WORK}/etc/apt.conf.d" "${APT_WORK}/etc/sources.list.d" \
+        "${APT_WORK}/etc/preferences.d" "${APT_WORK}/state/lists/partial" \
+        "${APT_WORK}/cache/archives/partial" || exit 1
+    chmod 0755 "${APT_WORK}" || exit 1
+    printf '%s\n' \
+        'deb [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian testing main contrib non-free non-free-firmware' \
+        > "${APT_WORK}/etc/sources.list" || exit 1
+    printf '%s\n' \
+        "Dir::Etc \"${APT_WORK}/etc\";" \
+        "Dir::State \"${APT_WORK}/state\";" \
+        'Dir::State::status "/dev/null";' \
+        "Dir::Cache \"${APT_WORK}/cache\";" \
+        "Dir::Log \"${APT_WORK}\";" \
+        'APT::Architecture "amd64";' \
+        'APT::Architectures { "amd64"; };' \
+        'APT::Update::Error-Mode "any";' \
+        'Acquire::Languages "none";' \
+        > "${APT_WORK}/apt.conf" || exit 1
+    if ! APT_CONFIG="${APT_WORK}/apt.conf" apt-get update -qq; then
+        echo "Error: package validation could not refresh the isolated Debian Testing index." >&2
+        exit 1
+    fi
+    MISSING=""
+    while read -r package; do
+        [ -n "${package}" ] || continue
+        APT_CONFIG="${APT_WORK}/apt.conf" apt-cache show "${package}" >/dev/null 2>&1 \
+            || MISSING+="${package}"$'\n'
+    done <<< "${TO_CHECK}"
+    if [ -n "${MISSING}" ]; then
+        echo >&2
+        echo "The following packages do not exist in Debian Testing:" >&2
+        printf '  %s\n' ${MISSING} >&2
+        exit 1
+    fi
+    echo "==> All package names resolve."
+    exit 0
+elif command -v podman >/dev/null 2>&1; then
     ENGINE="podman"
 elif command -v docker >/dev/null 2>&1; then
     ENGINE="docker"
@@ -102,7 +152,9 @@ printf '%s' "${TO_CHECK}" > "${LIST_FILE}"
 
 # apt-cache show is enough: it answers "does this name exist in the archive",
 # which is exactly the failure being prevented, without solving dependencies.
-MISSING="$(${ENGINE} run --rm -v "${LIST_FILE}:/names.txt:ro" debian:testing-slim bash -ceu '
+MISSING="$(bash "${REPO_ROOT}/scripts/run-build-container.sh" "${ENGINE}" \
+    "${SENSIBLE_BUILD_CONTAINER:-sensible-package-check-$$}-packages" \
+    -v "${LIST_FILE}:/names.txt:ro" debian:testing-slim bash -ceu '
     sed -i "s/^Components:.*/Components: main contrib non-free non-free-firmware/" \
         /etc/apt/sources.list.d/debian.sources
     apt-get update -qq >/dev/null

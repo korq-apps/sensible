@@ -14,12 +14,19 @@ SENSIBLE_TEST_MODE=1
 check_root() { :; }
 check_uefi()  { :; }
 sleep()       { :; }
+wait_for_device() { mlog "wait_for_device $*"; [ "$1" != "${MOCK_MISSING_PARTITION:-}" ]; }
 
 WORK="$(mktemp -d /tmp/sensible-flow-test.XXXXXX)"
+mkdir -p "${WORK}/boot"
+printf 'mock kernel\n' > "${WORK}/boot/vmlinuz-7.1.0-amd64"
+printf 'mock initramfs\n' > "${WORK}/boot/initrd.img-7.1.0-amd64"
 ANSWERS="${WORK}/answers.txt"
 OUT="${WORK}/stdout.log"
 ERR="${WORK}/stderr.log"
 MOCK_NVIDIA=0
+MOCK_LIVE_USER=1
+MOCK_MISSING_LIVE_PACKAGE=""
+MOCK_MISSING_PACKAGE=""
 MOCK_LEAVE_LIVE_INITRAMFS=0
 MOCK_SYSTEMCTL_REBOOT_RC=0
 MOCK_REBOOT_RC=0
@@ -49,7 +56,25 @@ lsblk() {
 sgdisk()      { mlog "sgdisk $*"; }
 rsync()       {
     mlog "rsync $*"
-    mkdir -p "${MNT}/etc/profile.d" "${MNT}/usr/local/bin" "${MNT}/opt/sensible" "${MNT}/boot" "${MNT}/etc/initramfs-tools" "${MNT}/run/live" "${MNT}/etc/live" "${MNT}/var/lib/dpkg/info" "${MNT}/usr/sbin" "${MNT}/usr/bin"
+    mkdir -p "${MNT}/etc/profile.d" "${MNT}/usr/local/bin" "${MNT}/opt/sensible/configs" "${MNT}/boot" "${MNT}/etc/initramfs-tools" "${MNT}/run/live" "${MNT}/etc/live" "${MNT}/etc/sudoers.d" "${MNT}/etc/keyd" "${MNT}/etc/skel/.config/nvim" "${MNT}/var/lib/dpkg/info" "${MNT}/usr/sbin" "${MNT}/usr/bin"
+    cp "${REPO_ROOT}/configs/keyd-default.conf" "${MNT}/etc/keyd/default.conf"
+    printf '%s\n' 'require("config.lazy")' > "${MNT}/etc/skel/.config/nvim/init.lua"
+    if [ "${MOCK_LIVE_USER}" = "1" ]; then
+        printf 'user:x:999:999:Live User:/home/user:/bin/bash\n' > "${MNT}/etc/passwd"
+        printf 'user:!:20000:0:99999:7:::\n' > "${MNT}/etc/shadow"
+        printf 'sudo:x:27:user\n' > "${MNT}/etc/group"
+        printf 'user ALL=(ALL) NOPASSWD: ALL\n' > "${MNT}/etc/sudoers.d/live"
+        mkdir -p "${MNT}/home/user"
+        touch "${MNT}/home/user/.bashrc"
+        mkdir -p "${MNT}/etc/gdm3" "${MNT}/etc/sddm.conf.d"
+        printf '[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=user\n' > "${MNT}/etc/gdm3/daemon.conf"
+        printf '[Autologin]\nUser=user\n' > "${MNT}/etc/sddm.conf.d/autologin.conf"
+        # Debian live-config's 0085-sddm writes this higher-priority file.
+        # Leaving it behind overrides the installed user's autologin drop-in.
+        printf '[Autologin]\nUser=user\nSession=plasma.desktop\n' > "${MNT}/etc/sddm.conf"
+    fi
+    printf 'backup ALL=(root) NOPASSWD: /usr/bin/rsync\n' > "${MNT}/etc/sudoers.d/backup"
+    printf '# NOPASSWD is intentionally not enabled here\nadmin ALL=(ALL) ALL\n' > "${MNT}/etc/sudoers.d/admin"
     touch "${MNT}/etc/profile.d/99-sensible-autostart.sh" \
           "${MNT}/etc/profile.d/99-sensible-firmware-check.sh" \
           "${MNT}/usr/local/bin/sensible-install" "${MNT}/usr/local/bin/lazydeb"
@@ -78,7 +103,7 @@ rsync()       {
           "${MNT}/var/lib/dpkg/info/cryptsetup-initramfs.md5sums"
 }
 wipefs()      { mlog "wipefs $*"; }
-partprobe()   { mlog "partprobe $*"; }
+partprobe()   { mlog "partprobe $*"; return "${MOCK_PARTPROBE_RC:-0}"; }
 mkfs.vfat()   { mlog "mkfs.vfat $*"; }
 mkfs.ext4()   { mlog "mkfs.ext4 $*"; }
 mkfs.btrfs()  { mlog "mkfs.btrfs $*"; }
@@ -96,7 +121,7 @@ mount()       {
         # Simulate a real tmpfs mount: the target now shows an empty filesystem
         # even if the rsync mock previously copied live markers into it. This is
         # what the chroot would see and what update-initramfs cares about.
-        rm -rf "${target:?}"/* 2>/dev/null || true
+        find "${target:?}" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
     fi
 }
 declare -A MOCK_TMPFS_MOUNTS=()
@@ -121,6 +146,12 @@ chattr()      { mlog "chattr $*"; }
 fallocate()   { mlog "fallocate $*"; touch "$3"; }
 filefrag()    { mlog "filefrag $*"; echo " 0:        0..       0:    38400..    38400:       1:"; }
 debootstrap() { mlog "debootstrap $*"; }
+dpkg-query()  {
+    local queried_package="${*: -1}"
+    mlog "dpkg-query $*"
+    [ "${MOCK_MISSING_LIVE_PACKAGE:-}" != "${queried_package}" ] || return 1
+    printf 'ii  %s  1.0  amd64  test\n' "${queried_package}"
+}
 timedatectl() { mlog "timedatectl $*"; echo "Europe/Berlin"; }
 setupcon()     { mlog "setupcon $*"; }
 sync()         { mlog "sync $*"; }
@@ -149,11 +180,22 @@ blkid() {
 chroot() {
     mlog "chroot $*"
     shift
-    if [ "${1:-}" = "getent" ] && [ "${2:-}" = "passwd" ]; then return 1; fi
+    if [ "${1:-}" = "getent" ] && [ "${2:-}" = "passwd" ]; then
+        if [ "${2:-}" = "passwd" ] && [ "${3:-}" = "user" ] && [ "${MOCK_LIVE_USER}" = "1" ]; then return 0; fi
+        return 1
+    fi
     if [ "${1:-}" = "id" ] && [ "${2:-}" = "-nG" ]; then echo "sudo audio video plugdev netdev bluetooth"; fi
     if [ "${1:-}" = "dpkg-query" ]; then
+        local queried_package="${4:-}"
+        if [ "${MOCK_MISSING_PACKAGE:-}" = "${queried_package}" ]; then return 1; fi
         # Every package the closure check asks about is installed (baked ISO)
-        echo "ii  ${2}  1.0  amd64  test"
+        echo "ii  ${queried_package}  1.0  amd64  test"
+        return 0
+    fi
+    if [ "${1:-}" = "userdel" ]; then
+        sed -i '/^user:/d' "${MNT}/etc/passwd" "${MNT}/etc/shadow" 2>/dev/null
+        sed -i 's/:user\([,:]*\)/:\1/g' "${MNT}/etc/group" 2>/dev/null
+        rm -rf "${MNT}/home/user"
         return 0
     fi
     case "${1:-}" in
@@ -169,15 +211,30 @@ chroot() {
             fi
             ;;
         update-initramfs)
-            # Simulate a real regeneration: stamp the initrd newer than the kernel.
-            # update-initramfs also stamps it after itself, so a missing/old stamp
-            # in the target means it never ran -- exactly the screenshot bug.
-            touch "${MNT}/boot/initrd.img-7.1.0-amd64" ;;
+            # Simulate a real regeneration: write a non-empty image newer than
+            # the kernel. The matching unmkinitramfs mock below exposes the
+            # embedded crypttab produced by that regeneration.
+            printf 'mock generated initramfs\n' > "${MNT}/boot/initrd.img-7.1.0-amd64" ;;
         plymouth-set-default-theme) : ;;
         grub-install) mkdir -p "${MNT}/boot/efi/EFI/debian"; touch "${MNT}/boot/efi/EFI/debian/grubx64.efi" "${MNT}/boot/efi/EFI/debian/shimx64.efi" ;;
         update-grub) mkdir -p "${MNT}/boot/grub"; printf "menuentry 'Debian GNU/Linux' {\n    linux /boot/vmlinuz-7.1.0-amd64 root=UUID=ROOT ro\n    initrd /boot/initrd.img-7.1.0-amd64\n}\n" > "${MNT}/boot/grub/grub.cfg" ;;
     esac
     return 0
+}
+
+# validate_installed_boot now inspects the generated initramfs rather than
+# trusting its timestamp. The integration suite mocks update-initramfs, so its
+# matching extractor must expose the cryptroot entry that regeneration would
+# have embedded in a real image.
+unmkinitramfs() {
+    local _image="$1" destination="$2"
+    mlog "unmkinitramfs $*"
+    mkdir -p "${destination}/cryptroot"
+    if [ -s "${MNT}/etc/crypttab" ]; then
+        cp "${MNT}/etc/crypttab" "${destination}/cryptroot/crypttab"
+    else
+        : > "${destination}/cryptroot/crypttab"
+    fi
 }
 
 # Guided flow: keyboard → user → disk → filesystem → encryption → autologin
@@ -186,6 +243,7 @@ build_answers() {
     local luks="$1"  # yes/no
     local final_confirm="${2:-yes}" username="${3:-alice}" completion_action="${4:-live}"
     local filesystem_choice="${5:-btrfs}" filesystem_answer="1"
+    local autologin_answer="${6:-yes}"
     local enc_answer="y" # y=encrypted, n=unencrypted
     [ "$luks" = "yes" ] && enc_answer="y" || enc_answer="n"
     [ "$filesystem_choice" = "ext4" ] && filesystem_answer="2"
@@ -202,7 +260,9 @@ build_answers() {
         printf '1\n'                      # disk menu -> /dev/sda (first entry)
         printf '%s\n' "${filesystem_answer}" # filesystem: 1=btrfs, 2=ext4
         printf '%s\n' "${enc_answer}"     # encryption yes/no (text mode ui_yesno)
-        if [ "$luks" = "yes" ]; then printf 'y\n'; fi  # autologin prompt (LUKS only)
+        if [ "$luks" = "yes" ]; then
+            if [ "$autologin_answer" = yes ]; then printf 'y\n'; else printf 'n\n'; fi
+        fi
         if [ "$final_confirm" = "no" ]; then printf 'n\n'; else printf 'y\n'; fi
         if [ "${completion_action}" = "reboot" ]; then
             printf '1\n'                   # reboot/eject in completion menu
@@ -221,6 +281,9 @@ prep_target() {
 
 run_flow() {
     prep_target
+    local previous_live_root="${LIVE_ROOT_SENTINEL+x}"
+    local previous_live_value="${LIVE_ROOT_SENTINEL:-}"
+    LIVE_ROOT_SENTINEL="${WORK}"
     mock_setup
     : > "${OUT}"; : > "${ERR}"
     set +e
@@ -229,6 +292,11 @@ run_flow() {
     set -e
     cp "${MOCK_LOG}" "${WORK}/calls.log"
     mock_teardown
+    if [ -n "${previous_live_root}" ]; then
+        LIVE_ROOT_SENTINEL="${previous_live_value}"
+    else
+        unset LIVE_ROOT_SENTINEL
+    fi
 }
 
 log_text() { cat "${WORK}/calls.log"; }
@@ -240,7 +308,6 @@ assert_common_success() {
     assert_contains "completion action menu shown" "$(output_text)" "Installation Complete"
     assert_contains "completion reports elapsed installation time" "$(output_text)" "Installed in:"
     assert_contains "completion offers reboot and eject" "$(output_text)" "Reboot now and eject optical installation media"
-    assert_file_contains "sources.list: testing + full archive areas" "${MNT}/etc/apt/sources.list" "deb https://deb.debian.org/debian testing main contrib non-free non-free-firmware"
     assert_file_contains "hostname written" "${MNT}/etc/hostname" "sensible-box"
     assert_file_contains "hosts entry" "${MNT}/etc/hosts" "127.0.1.1 sensible-box"
     assert_file_contains "locale.gen" "${MNT}/etc/locale.gen" "en_US.UTF-8 UTF-8"
@@ -256,26 +323,127 @@ assert_common_success() {
     assert_contains "user added to sudo group" "$(log_text)" "chroot ${MNT} useradd -m -s /bin/bash -G sudo,audio,video,plugdev,netdev,bluetooth alice"
     assert_contains "user password set" "$(log_text)" "chroot ${MNT} chpasswd"
     assert_contains "grub-install efi debian id" "$(log_text)" "chroot ${MNT} grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=debian --recheck"
-    assert_contains "Secure Boot chain installed" "$(log_text)" "grub-efi-amd64 grub-efi-amd64-signed shim-signed cryptsetup-initramfs"
+    assert_contains "signed GRUB package is present in the offline closure" "$(log_text)" "dpkg-query -W -f=\${db:Status-Abbrev} grub-efi-amd64-signed"
+    assert_contains "shim package is present in the offline closure" "$(log_text)" "dpkg-query -W -f=\${db:Status-Abbrev} shim-signed"
     assert_contains "initramfs updated" "$(log_text)" "chroot ${MNT} update-initramfs -u -k all"
     assert_contains "grub config regenerated" "$(log_text)" "chroot ${MNT} update-grub"
     assert_contains "teardown unmounts target without recursion" "$(log_text)" "umount ${MNT}"
     assert_not_contains "teardown never recursively unmounts" "$(log_text)" "umount -R ${MNT}"
     assert_contains "EFI partition formatted" "$(log_text)" "mkfs.vfat -F32 -n EFI /dev/sda1"
     assert_contains "BOOT partition formatted" "$(log_text)" "mkfs.ext4 -F -L BOOT /dev/sda2"
-    assert_contains "hardware: firmware-brcm80211" "$(log_text)" "firmware-brcm80211"
-    assert_contains "hardware: PipeWire bluetooth codec" "$(log_text)" "libspa-0.2-bluetooth"
-    assert_contains "hardware: power-profiles-daemon" "$(log_text)" "power-profiles-daemon"
-    assert_contains "hardware: fwupd" "$(log_text)" "fwupd"
-    assert_contains "apps: Firefox ESR" "$(log_text)" "firefox-esr"
-    assert_contains "apps: neovim" "$(log_text)" "neovim"
-    assert_contains "apps: flathub" "$(log_text)" "flatpak remote-add --if-not-exists flathub"
-    assert_contains "apps: LazyVim starter" "$(log_text)" "git clone --depth 1 https://github.com/LazyVim/starter"
-    assert_file_exists "LazyVim in user home" "${MNT}/home/alice/.config/nvim/init.lua"
+    assert_not_contains "offline install does not resolve hardware packages" "$(log_text)" "apt-get install"
+    assert_not_contains "offline install does not resolve applications" "$(log_text)" "git clone"
+    assert_not_contains "no Flathub setup during offline install" "$(log_text)" "flatpak remote-add"
+    assert_contains "hardware uses copied live closure" "$(output_text)" "hardware support is already in the copied live image"
+    assert_contains "applications use copied live closure" "$(output_text)" "applications are already in the copied live image"
+    assert_file_exists "baked LazyVim starter copied to the user" "${MNT}/home/alice/.config/nvim/init.lua"
+    assert_file_exists "GNOME keyd mapping survives de-living" "${MNT}/etc/keyd/default.conf"
+    assert_contains "GNOME keyd service enabled" "$(log_text)" "systemctl enable keyd.service"
+    assert_file_not_exists "no passwordless live sudo policy remains" "${MNT}/etc/sudoers.d/live"
+    assert_file_contains "unrelated package sudo policy survives" "${MNT}/etc/sudoers.d/backup" 'backup ALL=(root) NOPASSWD: /usr/bin/rsync'
+    assert_file_contains "comment mentioning NOPASSWD cannot delete admin policy" "${MNT}/etc/sudoers.d/admin" 'admin ALL=(ALL) ALL'
+    assert_file_not_exists "live user home removed" "${MNT}/home/user"
+    if grep -q '^user:' "${MNT}/etc/passwd" 2>/dev/null; then
+        t_fail "live user removed from passwd" "user entry remains"
+    else
+        t_ok
+    fi
+    if [ -f "${MNT}/etc/gdm3/daemon.conf" ]; then
+        assert_file_not_contains "live user is absent from display-manager autologin" "${MNT}/etc/gdm3/daemon.conf" "AutomaticLogin=user"
+    else
+        t_ok
+    fi
 }
 
+t_section "Offline source is mandatory and checked before partitioning"
+build_answers no
+prep_target
+mock_setup
+unset LIVE_ROOT_SENTINEL
+: > "${OUT}"; : > "${ERR}"
+set +e
+( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" )
+rc=$?
+set -e
+cp "${MOCK_LOG}" "${WORK}/calls.log"
+mock_teardown
+assert_rc "missing live source aborts" 1 "${rc}"
+assert_contains "missing source explains no disk change" "$(cat "${OUT}" "${ERR}")" "no disk was changed"
+assert_not_contains "missing source does not partition" "$(cat "${WORK}/calls.log")" "sgdisk"
+
+t_section "Incomplete live closure is rejected before partitioning"
+build_answers no
+MOCK_MISSING_LIVE_PACKAGE="shim-signed"
+run_flow
+MOCK_MISSING_LIVE_PACKAGE=""
+assert_rc "missing live closure package aborts" 1 "${RC}"
+assert_contains "pre-wipe closure error names missing package" "$(output_text)" "shim-signed"
+assert_contains "pre-wipe closure error confirms disk unchanged" "$(output_text)" "no disk was changed"
+assert_not_contains "incomplete live closure does not partition" "$(log_text)" "sgdisk"
+
+t_section "Missing live boot artifact is rejected before partitioning"
+rm -f "${WORK}/boot/initrd.img-7.1.0-amd64"
+run_flow
+printf 'mock initramfs\n' > "${WORK}/boot/initrd.img-7.1.0-amd64"
+assert_rc "missing live initramfs aborts" 1 "${RC}"
+assert_contains "pre-wipe closure error names missing initramfs" "$(output_text)" "boot/initrd.img-*"
+assert_not_contains "missing live boot artifact does not partition" "$(log_text)" "sgdisk"
+
+t_section "Invalid live boot artifacts are rejected before any wipe"
+for invalid_artifact in empty-kernel empty-initramfs mismatched-version directory broken-symlink newer-unpaired; do
+    case "$invalid_artifact" in
+        empty-kernel) : > "${WORK}/boot/vmlinuz-7.1.0-amd64" ;;
+        empty-initramfs) : > "${WORK}/boot/initrd.img-7.1.0-amd64" ;;
+        mismatched-version)
+            mv "${WORK}/boot/initrd.img-7.1.0-amd64" "${WORK}/boot/initrd.img-7.2.0-amd64" ;;
+        directory)
+            rm "${WORK}/boot/initrd.img-7.1.0-amd64"
+            mkdir "${WORK}/boot/initrd.img-7.1.0-amd64" ;;
+        broken-symlink)
+            rm "${WORK}/boot/initrd.img-7.1.0-amd64"
+            ln -s missing-image "${WORK}/boot/initrd.img-7.1.0-amd64" ;;
+        newer-unpaired)
+            printf 'newer kernel\n' > "${WORK}/boot/vmlinuz-7.2.0-amd64" ;;
+    esac
+    run_flow
+    assert_rc "$invalid_artifact aborts" 1 "${RC}"
+    assert_contains "$invalid_artifact explains no disk changed" "$(output_text)" "no disk was changed"
+    assert_not_contains "$invalid_artifact does not partition" "$(log_text)" "sgdisk"
+    assert_not_contains "$invalid_artifact does not wipe signatures" "$(log_text)" "wipefs"
+    if [ "$invalid_artifact" = directory ]; then
+        rmdir "${WORK}/boot/initrd.img-7.1.0-amd64"
+    else
+        rm -f "${WORK}/boot/initrd.img-7.1.0-amd64"
+    fi
+    rm -f "${WORK}/boot/initrd.img-7.2.0-amd64" "${WORK}/boot/vmlinuz-7.2.0-amd64"
+    printf 'mock kernel\n' > "${WORK}/boot/vmlinuz-7.1.0-amd64"
+    printf 'mock initramfs\n' > "${WORK}/boot/initrd.img-7.1.0-amd64"
+done
+
+t_section "Missing partition devices abort before any formatting"
+for partition in /dev/sda1 /dev/sda2 /dev/sda3; do
+    build_answers no
+    MOCK_MISSING_PARTITION="$partition"
+    run_flow
+    assert_rc "missing $partition aborts" 1 "${RC}"
+    assert_contains "failure names $partition" "$(output_text)" "Partition device $partition did not appear"
+    assert_not_contains "no filesystem formatted with missing $partition" "$(log_text)" "mkfs."
+    assert_not_contains "no encryption started with missing $partition" "$(log_text)" "cryptsetup luksFormat"
+done
+MOCK_MISSING_PARTITION=""
+
+t_section "Failed kernel partition-table reread aborts before formatting"
+MOCK_PARTPROBE_RC=1
+run_flow
+MOCK_PARTPROBE_RC=0
+assert_rc "failed partition-table reread aborts" 1 "${RC}"
+assert_contains "stale device risk explained" "$(output_text)" 'potentially stale partition devices'
+assert_not_contains "no filesystem formatting after reread failure" "$(log_text)" 'mkfs.'
+
+# Normal scenarios use the baked live-root fixture.
 t_section "Combo 1: Btrfs + LUKS, single password, Intel GPU"
 build_answers yes yes alice reboot
+LIVE_ROOT_SENTINEL="${WORK}"
 MOCK_NVIDIA=0
 run_flow
 assert_common_success
@@ -321,13 +489,13 @@ assert_file_contains "crypttab placeholder" "${MNT}/etc/crypttab" "No encrypted 
 assert_file_contains "fstab: swapfile, not a partition" "${MNT}/etc/fstab" "/swap/swapfile none swap sw 0 0"
 assert_file_contains "resume points at the root fs" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTPART-FS-UUID-4444"
 
-t_section "Combo 3: Btrfs + LUKS, NVIDIA GPU adds nvidia-driver + modeset"
+t_section "Combo 3: Btrfs + LUKS, NVIDIA GPU enables modeset for the baked driver"
 build_answers yes
 MOCK_NVIDIA=1
 run_flow
 assert_common_success
 assert_file_contains "nvidia-drm.modeset=1 on NVIDIA" "${MNT}/etc/default/grub.d/installer.cfg" "nvidia-drm.modeset=1"
-assert_contains "NVIDIA driver added" "$(log_text)" "nvidia-driver"
+assert_not_contains "NVIDIA detection does not install packages online" "$(log_text)" "apt-get install"
 
 t_section "Combo 4: Ext4 + LUKS uses a root swapfile and filefrag resume offset"
 build_answers yes yes alice live ext4
@@ -352,6 +520,35 @@ assert_contains "plain ext4 swapfile created at root" "$(log_text)" "fallocate -
 assert_file_contains "plain ext4 root in fstab" "${MNT}/etc/fstab" "UUID=ROOTPART-FS-UUID-4444  /            ext4"
 assert_file_contains "plain ext4 resume offset" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTPART-FS-UUID-4444 resume_offset=38400"
 
+t_section "KDE: disk unlock leads to autologin, while screen locking stays enabled"
+SENSIBLE_VARIANT=kde
+build_answers yes
+run_flow
+assert_rc "encrypted KDE installation succeeds" 0 "${RC}"
+assert_file_not_exists "live SDDM main config cannot override installed-user autologin" "${MNT}/etc/sddm.conf"
+assert_file_contains "KDE autologin targets the installed account" "${MNT}/etc/sddm.conf.d/autologin.conf" "User=alice"
+assert_file_contains "KDE autologin has an explicit session on first boot" "${MNT}/etc/sddm.conf.d/autologin.conf" "Session=plasma"
+assert_file_contains "KDE idle screen lock remains enabled" "${MNT}/etc/xdg/kscreenlockerrc" "Autolock=true"
+assert_file_contains "KDE still locks on resume" "${MNT}/etc/xdg/kscreenlockerrc" "LockOnResume=true"
+assert_contains "KDE user keeps a password for screen unlock" "$(log_text)" "chpasswd"
+assert_contains "KDE enables SDDM" "$(log_text)" "systemctl enable sddm.service"
+
+t_section "KDE: declining autologin still removes the live-account override"
+build_answers yes yes alice live btrfs no
+run_flow
+assert_rc "KDE installation with password login succeeds" 0 "${RC}"
+assert_file_not_exists "declined autologin has no live SDDM override" "${MNT}/etc/sddm.conf"
+assert_file_not_exists "declined autologin creates no SDDM autologin drop-in" "${MNT}/etc/sddm.conf.d/autologin.conf"
+
+t_section "KDE: unencrypted installs retain password login"
+build_answers no
+run_flow
+assert_rc "unencrypted KDE installation succeeds" 0 "${RC}"
+assert_file_not_exists "unencrypted KDE has no live SDDM override" "${MNT}/etc/sddm.conf"
+assert_file_not_exists "unencrypted KDE has no autologin drop-in" "${MNT}/etc/sddm.conf.d/autologin.conf"
+assert_file_contains "unencrypted KDE still locks on idle" "${MNT}/etc/xdg/kscreenlockerrc" "Autolock=true"
+unset SENSIBLE_VARIANT
+
 t_section "Live-copy deploy path: excludes keep API dirs, mountpoints exist (offline skips apt)"
 build_answers no
 MOCK_NVIDIA=0
@@ -366,9 +563,9 @@ assert_not_contains "no apt-get update on the live path" "$(log_text)" "apt-get 
 assert_not_contains "no apt-get install on the live path" "$(log_text)" "apt-get install"
 assert_not_contains "no apt-get purge on the live path" "$(log_text)" "apt-get purge"
 assert_contains "excludes /dev CONTENTS, keeps the directory" "$(log_text)" "--exclude=/dev/*"
-assert_contains "offline skip for hardware" "$(output_text)" "Offline install — skipping hardware"
-assert_contains "offline skip for desktop" "$(output_text)" "Offline install — skipping desktop"
-assert_contains "offline skip for grub" "$(output_text)" "Offline install — skipping grub"
+assert_contains "hardware comes from copied closure" "$(output_text)" "hardware support is already in the copied live image"
+assert_contains "desktop comes from copied closure" "$(output_text)" "desktop is already in the copied live image"
+assert_contains "boot closure is checked without package installation" "$(log_text)" "dpkg-query -W"
 # Regression: live-build ships update_initramfs=no in the image; without
 # re-enabling it the target keeps the LIVE initramfs (no cryptsetup) and LUKS
 # boots to an unlock prompt that cannot succeed.
@@ -428,6 +625,7 @@ assert_contains "completed install is still reported before reboot failure" "$(o
 t_section "Abort: undersized disk refused before partitioning"
 prep_target
 mock_setup
+LIVE_ROOT_SENTINEL="${WORK}"
 lsblk() {
     mlog "lsblk $*"
     case "$*" in
@@ -443,6 +641,7 @@ set +e
 rc=$?
 set -e
 cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
+unset LIVE_ROOT_SENTINEL
 assert_rc "installer exits 1 when no disk is large enough" 1 "${rc}"
 assert_contains "no-candidates error surfaced" "$(output_text)" "No disk qualified as an installation target"
 assert_contains "error names the rejected disk" "$(output_text)" "/dev/sda"
@@ -466,17 +665,20 @@ t_section "Abort: declining the final destructive confirmation changes nothing"
 build_answers yes no
 prep_target
 mock_setup
+LIVE_ROOT_SENTINEL="${WORK}"
 set +e
 ( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" )
 rc=$?
 set -e
 cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
+unset LIVE_ROOT_SENTINEL
 assert_rc "installer aborts when final confirmation is declined" 1 "${rc}"
 assert_not_contains "no partitioning after decline" "$(log_text)" "sgdisk"
 
 t_section "Password confirm mismatch re-prompts, then succeeds"
 prep_target
 mock_setup
+LIVE_ROOT_SENTINEL="${WORK}"
 {
     printf 'us\n'                       # keyboard
     printf 'alice\n'                    # username
@@ -502,12 +704,14 @@ set +e
 rc=$?
 set -e
 cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
+unset LIVE_ROOT_SENTINEL
 assert_rc "install succeeds after password re-prompt" 0 "${rc}"
 assert_contains "user 'alice' created" "$(log_text)" "useradd -m -s /bin/bash -G sudo,audio,video,plugdev,netdev,bluetooth alice"
 
 t_section "Username re-prompt: invalid input rejected, valid accepted"
 prep_target
 mock_setup
+LIVE_ROOT_SENTINEL="${WORK}"
 {
     printf 'us\n'
     printf 'Bad Name\n'                 # username #1: invalid (space)
@@ -531,23 +735,26 @@ set +e
 rc=$?
 set -e
 cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
+unset LIVE_ROOT_SENTINEL
 assert_rc "install succeeds after username re-prompt" 0 "${rc}"
 assert_contains "user 'alice' created (not 'Bad Name')" "$(log_text)" "useradd -m -s /bin/bash -G sudo,audio,video,plugdev,netdev,bluetooth alice"
 
 t_section "Post-wipe mandatory failure: no false success, log preserved"
 build_answers no
-install_hardware_packages() { log_err "simulated hardware package failure"; return 1; }
+MOCK_MISSING_PACKAGE="shim-signed"
 run_flow
+MOCK_MISSING_PACKAGE=""
 assert_ne "mandatory post-wipe failure returns nonzero" 0 "${RC}"
 assert_not_contains "failure never prints success" "$(output_text)" "Installation finished successfully!"
 assert_file_exists "failure log copied into partial target" "${MNT}/var/log/sensible-install.log"
-assert_file_contains "failure log identifies the active stage" "${MNT}/var/log/sensible-install.log" "installing hardware support"
+assert_file_contains "failure log identifies the missing boot package" "${MNT}/var/log/sensible-install.log" "shim-signed"
 assert_contains "failure cleanup unmounts owned target" "$(log_text)" "umount ${MNT}"
 
 t_section "Abort: LUKS with closure missing cryptsetup-initramfs fails loudly"
 build_answers yes
 prep_target
 mock_setup
+MOCK_LIVE_USER=0
 # Simulate an ISO built WITHOUT cryptsetup-initramfs in the closure: rsync
 # copies everything except its dpkg info files.
 rsync() {
@@ -565,6 +772,7 @@ rc=$?
 set -e
 cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
 unset LIVE_ROOT_SENTINEL
+MOCK_LIVE_USER=1
 assert_rc "install aborts when cryptsetup-initramfs is missing from closure" 1 "${rc}"
 assert_contains "error names the missing package and the fix" "$(output_text)" "cryptsetup-initramfs is not installed in the target closure"
 # Restore the full-closure rsync mock for any later sections

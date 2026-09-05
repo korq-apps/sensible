@@ -13,8 +13,12 @@ dconf-cli
 
 # Applications
 firefox-esr
+chromium
 vlc
 neovim
+simple-scan
+file-roller
+amberol
 
 # Boot stack the installer needs on the target and cannot download
 grub-efi-amd64

@@ -37,6 +37,19 @@ live/binary.modified_timestamps
 
 # Staged files in includes.chroot
 live/config/includes.chroot/opt/sensible/
+live/config/includes.chroot/usr/share/sensible/manual/
+live/config/includes.chroot/usr/share/applications/sensible-manual.desktop
+live/config/includes.chroot/usr/local/bin/sensible-manual
+live/config/includes.chroot/etc/keyd/
+# Staged by scripts/fetch-pins.sh from live/pins.env + configs/
+live/config/includes.chroot/etc/skel/.bashrc
+live/config/includes.chroot/etc/skel/.config/nvim/
+live/config/includes.chroot/etc/gitconfig
+live/config/includes.chroot/etc/sensible/
+live/config/includes.chroot/usr/share/oh-my-bash/
+live/config/includes.chroot/usr/local/share/fonts/
+# Pinned-artifact download cache (scripts/fetch-pins.sh)
+live/local/pins/
 
 # Temporary files
 *~

@@ -20,6 +20,16 @@ assert_eq "min disk = 2048 + swap + 20480" "30720" "$(calc_min_disk_mb)"
 
 t_section "partition_disk: GPT layout per spec"
 mock_setup
+# Exercise the real device wait independently before substituting it for the
+# synthetic /dev/sda paths used by partitioning tests.
+udevadm() { mlog "udevadm $*"; }
+sleep() { mlog "sleep $*"; }
+if wait_for_device /dev/sensible-nonexistent-test-device; then
+    t_fail "missing block device must time out"
+else t_ok; fi
+assert_eq "device wait retries a bounded ten times" 10 "$(mock_count_calls 'udevadm settle --timeout=1')"
+mock_reset
+wait_for_device() { mlog "wait_for_device $*"; }
 sgdisk()   { mlog "sgdisk $*"; }
 wipefs()   { mlog "wipefs $*"; }
 partprobe() { mlog "partprobe $*"; }
@@ -39,6 +49,44 @@ partition_disk /dev/sda 8192 false
 assert_contains "p3 plain root type 8300" "$(cat "${MOCK_LOG}")" "sgdisk -n 3:0:0 -t 3:8300"
 assert_not_contains "no swap partition without LUKS either" "$(cat "${MOCK_LOG}")" "8200"
 assert_not_contains "no p4 without LUKS" "$(cat "${MOCK_LOG}")" "-n 4:0:0"
+for number in 1 2 3; do
+    assert_contains "waits for partition ${number}" "$(cat "${MOCK_LOG}")" "wait_for_device /dev/sda${number}"
+done
+
+t_section "partition_disk: table reread failure rejects even existing nodes"
+mock_reset
+partprobe() { mlog "partprobe $*"; return 1; }
+if partition_disk /dev/sda 8192 false; then t_fail "reread failure accepted"; else t_ok; fi
+assert_not_contains "does not trust old device nodes after failed reread" "$(cat "${MOCK_LOG}")" "wait_for_device"
+
+t_section "partition_disk: every expected node is mandatory"
+partprobe() { mlog "partprobe $*"; }
+for missing in 1 2 3; do
+    mock_reset
+    wait_for_device() { mlog "wait_for_device $*"; [ "$1" != "/dev/nvme0n1p${missing}" ]; }
+    if partition_disk /dev/nvme0n1 8192 false; then t_fail "missing partition ${missing} accepted"; else t_ok; fi
+    assert_contains "waits for digit-suffixed disk partition ${missing}" "$(cat "${MOCK_LOG}")" "wait_for_device /dev/nvme0n1p${missing}"
+done
+wait_for_device() { mlog "wait_for_device $*"; }
+mock_teardown
+
+t_section "partition_disk: wipe failure aborts before repartitioning"
+mock_setup
+sgdisk() {
+    mlog "sgdisk $*"
+    [ "${1:-}" != "--zap-all" ]
+}
+wipefs()    { mlog "wipefs $*"; }
+partprobe() { mlog "partprobe $*"; }
+if partition_disk /dev/sda 8192 false; then
+    t_fail "partition_disk rejects a failed GPT wipe" "unexpected success"
+else
+    t_ok
+fi
+assert_not_contains "no signatures are wiped after GPT wipe failure" \
+    "$(cat "${MOCK_LOG}")" "wipefs"
+assert_not_contains "no new partition is created after wipe failure" \
+    "$(cat "${MOCK_LOG}")" "sgdisk -n"
 mock_teardown
 
 t_section "format_and_mount: LUKS on, btrfs (swapfile on @swap subvol)"
@@ -56,7 +104,7 @@ btrfs()       { mlog "btrfs $*"; if [ "$1" = "inspect-internal" ]; then echo "38
 chattr()      { mlog "chattr $*"; }
 fallocate()   { mlog "fallocate $*"; touch "$3"; }
 
-format_and_mount /dev/sda btrfs true "test-pass-123" 9011
+format_and_mount /dev/sda btrfs true "test-pass-123" 8192
 assert_contains "LUKS2 argon2id format"     "$(cat "${MOCK_LOG}")" "cryptsetup luksFormat --type luks2 --pbkdf argon2id"
 assert_contains "opens cryptroot"           "$(cat "${MOCK_LOG}")" "cryptsetup open /dev/sda3 cryptroot"
 assert_eq "TARGET_ROOT is mapper device" "/dev/mapper/cryptroot" "${TARGET_ROOT}"
@@ -71,7 +119,7 @@ assert_contains "@swap mounted"     "$(cat "${MOCK_LOG}")" "mount -o noatime,sub
 assert_contains "root mounted with subvol=@" "$(cat "${MOCK_LOG}")" "mount -o noatime,compress=zstd:1,space_cache=v2,discard=async,subvol=@ /dev/mapper/cryptroot ${MNT}"
 assert_contains "EFI mounted umask=0077" "$(cat "${MOCK_LOG}")" "mount -o umask=0077 /dev/sda1 ${MNT}/boot/efi"
 assert_contains "NOCOW flag on swapfile" "$(cat "${MOCK_LOG}")" "chattr +C ${MNT}/swap/swapfile"
-assert_contains "swapfile sized RAM+10%" "$(cat "${MOCK_LOG}")" "fallocate -l 9011M ${MNT}/swap/swapfile"
+assert_contains "swapfile mirrors RAM" "$(cat "${MOCK_LOG}")" "fallocate -l 8192M ${MNT}/swap/swapfile"
 assert_contains "swapfile formatted" "$(cat "${MOCK_LOG}")" "mkswap ${MNT}/swap/swapfile"
 assert_eq "resume_offset via map-swapfile" "38400" "${RESUME_OFFSET}"
 assert_not_contains "no swap partition formatting with LUKS" "$(cat "${MOCK_LOG}")" "mkswap -L SWAP"
@@ -89,9 +137,9 @@ mount()       { mlog "mount $*"; }
 fallocate()   { mlog "fallocate $*"; touch "$3"; }
 filefrag()    { printf 'Filesystem type is: ef53\nFile size of %s is 9011 blocks (256-bit extents)\n 0:        0..   32767:    123456..  1267334:   32768:\n' "$1"; }
 
-format_and_mount /dev/sda ext4 true "test-pass-123" 9011
+format_and_mount /dev/sda ext4 true "test-pass-123" 8192
 assert_eq "SWAP_PART empty with LUKS" "" "${SWAP_PART}"
-assert_contains "swapfile at ext4 root" "$(cat "${MOCK_LOG}")" "fallocate -l 9011M ${MNT}/swapfile"
+assert_contains "swapfile at ext4 root" "$(cat "${MOCK_LOG}")" "fallocate -l 8192M ${MNT}/swapfile"
 assert_contains "swapfile formatted" "$(cat "${MOCK_LOG}")" "mkswap ${MNT}/swapfile"
 assert_eq "resume_offset via filefrag" "123456" "${RESUME_OFFSET}"
 assert_contains "ext4 fast_commit" "$(cat "${MOCK_LOG}")" "mkfs.ext4 -F -L ROOT -O fast_commit /dev/mapper/cryptroot"
@@ -147,6 +195,8 @@ lsblk() {
         *"-dno SIZE"*) case "$dev" in /dev/vda) echo "50G" ;; /dev/vda1) echo "1G" ;; /dev/vda2) echo "49G" ;; esac ;;
         *"-dno VENDOR"*) [ "$dev" = /dev/vda ] && echo "QEMU" ;;
         *"-dno MODEL"*) [ "$dev" = /dev/vda ] && echo "QEMU HARDDISK" ;;
+        *"-dno SERIAL"*) [ "$dev" = /dev/vda ] && echo "QM00001" ;;
+        *"-dno WWN"*) [ "$dev" = /dev/vda ] && echo "0x5000c500abcd1234" ;;
         *"-dno FSTYPE"*) case "$dev" in /dev/vda1) echo "vfat" ;; /dev/vda2) echo "btrfs" ;; esac ;;
         *"-dno LABEL"*) case "$dev" in /dev/vda1) echo "EFI" ;; /dev/vda2) echo "Sensible Root" ;; esac ;;
         *"-dno PARTLABEL"*) : ;;
@@ -157,6 +207,8 @@ lsblk() {
 DISK_ENTRY="$(get_disk_inventory_entry /dev/vda)"
 assert_contains "disk identity includes capacity" "$DISK_ENTRY" "/dev/vda (50G)"
 assert_contains "disk identity includes model without duplicate vendor" "$DISK_ENTRY" "QEMU HARDDISK"
+assert_contains "disk identity shows the serial used for revalidation" "$DISK_ENTRY" "serial: QM00001"
+assert_contains "disk identity shows the WWN used for revalidation" "$DISK_ENTRY" "WWN: 0x5000c500abcd1234"
 assert_contains "EFI volume includes name size filesystem and label" "$DISK_ENTRY" "vda1  1G  vfat  label: EFI"
 assert_contains "mounted volume includes mount point" "$DISK_ENTRY" "mounted: /boot/efi"
 assert_contains "root volume includes filesystem and spaced label" "$DISK_ENTRY" "vda2  49G  btrfs  label: Sensible Root"

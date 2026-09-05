@@ -9,7 +9,7 @@ Blueprint for `installer/sensible-install.sh`. On the live ISO the command is `s
 - **UEFI only.** Exit if `/sys/firmware/efi` is missing.
 - **One disk, full wipe.** No dual-boot, no custom partition editor in v1.
 - **Minimum disk:** `2048 + SWAP_MIB + 20480` MiB (1 GiB EFI + 1 GiB BOOT + swap + 20 GiB root). Refuse smaller disks.
-- Live image already has `cryptsetup`, `btrfs-progs`, `e2fsprogs`, `dosfstools`, `gdisk`, NetworkManager, firmware, and either a squashfs or `debootstrap`.
+- The live image contains the complete target system plus `cryptsetup`, `btrfs-progs`, `e2fsprogs`, `dosfstools`, `gdisk`, NetworkManager, and firmware. There is no thin/debootstrap fallback.
 - **Offline installation.** The release image contains the complete target closure. NetworkManager remains available for diagnostics, but no mirror check or download is required before the wipe.
 - Exclude disks with mounted descendants, active swap, or holders. Capture major:minor, byte size, serial and WWN where available, then re-read all identity/state immediately before partitioning.
 - Unlock is **`/etc/crypttab` + `cryptsetup-initramfs`**. Do not set `cryptdevice=` or `GRUB_ENABLE_CRYPTODISK`.
@@ -26,9 +26,9 @@ Pre-flight (UEFI, unused target mountpoint)
     → Explicit destructive confirmation (no device-path retyping)
     → Recheck selected disk identity/state
     → Partition, format, mount
-    → Deploy base (squashfs rsync, or debootstrap)
-    → Chroot: fstab/crypttab, identity + user, packages, locale-gen,
-      keyboard, desktop + Plymouth + login, apps, GRUB + initramfs
+    → Deploy the live root with rsync and remove live-only state
+    → Chroot: fstab/crypttab, identity + user, locale-gen,
+      keyboard, desktop/login configuration, GRUB + initramfs
     → Unmount, close mappings, “remove USB and reboot”
 ```
 
@@ -57,7 +57,9 @@ suite (`tests/`) can run the full flow unprivileged against a temp directory.
 | Full name | empty | Optional GECOS + git `user.name` |
 | Email | empty | Optional git `user.email`, written only to the user's `~/.gitconfig` |
 
-Firefox ESR, VLC, Neovim, Flatpak, firmware, and the CLI set are always installed — not checkboxes.
+Firefox ESR, Chromium, LibreOffice Writer/Calc/Impress, Thunderbird, KeePassXC,
+VLC, Neovim, Flatpak, firmware, archive support, the CLI set, and the
+variant-native utilities are always installed — not checkboxes.
 
 **Planned prompts (Phase 6, not implemented):**
 
@@ -95,7 +97,7 @@ keyboard        = "us"
 
 ```bash
 RAM_MIB=$(free -m | awk '/^Mem:/{print $2}')
-SWAP_MIB=$((RAM_MIB + RAM_MIB / 10))
+SWAP_MIB=$RAM_MIB
 
 sgdisk --zap-all "$DISK"
 wipefs --all --force "$DISK"
@@ -135,19 +137,16 @@ if [ "$ENABLE_LUKS" = true ]; then
   TARGET_ROOT=/dev/mapper/cryptroot
 else
   TARGET_ROOT=$ROOT_PART
-  mkswap -L SWAP "$SWAP_PART"
 fi
 
-# Swap is a swapfile on the encrypted root: encrypted at rest and resumable.
+# Swap is a swapfile inside root in both modes; LUKS encrypts it with root.
 # It must be created only AFTER format_and_mount has made the root filesystem
 # and mounted it (Btrfs: the @swap subvolume at /swap), otherwise the file is
 # allocated on the installer's own /mnt instead of inside the target.
-if [ "$ENABLE_LUKS" = true ]; then
-  create_swapfile "$FS_TYPE" "$SWAP_MIB"   # see §5.1
-fi
+create_swapfile "$FS_TYPE" "$SWAP_MIB"   # after mounting root; see §5.1
 ```
 
-### 5.1 Swapfile (LUKS only) and `resume_offset`
+### 5.1 Swapfile (both encryption modes) and `resume_offset`
 
 Btrfs: dedicated `@swap` subvolume mounted at `/swap` (no compression, never
 snapshotted). Ext4: `/swapfile` at the root.
@@ -203,9 +202,9 @@ mount "$EFI_PART" /mnt/boot/efi
 
 ## 6. Deploy base
 
-Prefer copying the live root for the base deployment. This is faster, but the
-overall installation is not offline because current packages and the selected
-desktop are installed from Debian. Exclude the **contents** of the API
+Copy the live root unconditionally. The selected desktop and complete package
+closure are already present, and the install path performs no archive or
+third-party downloads. Exclude the **contents** of the API
 filesystems (`/dev/*`), never the directories themselves (`/dev`): a
 whole-directory exclude leaves the target without the mountpoints the bind
 mounts below require, and the install aborts.
@@ -216,8 +215,6 @@ rsync -aAX --info=progress2 \
   --exclude='/run/*' --exclude='/mnt/*' --exclude='/media/*' --exclude=/lost+found \
   / /mnt/
 ```
-
-If the live image is a thin installer (no desktop squash), `debootstrap --arch=amd64 testing /mnt https://deb.debian.org/debian` instead, then `sources.list` with `main contrib non-free non-free-firmware`.
 
 Whatever the deploy path produced, ensure the skeleton exists:
 
@@ -232,14 +229,14 @@ autologin units, and live-only package/state trees. Reset `machine-id`. Purge
 `live-boot`, `live-config`, and `live-config-systemd` before rebuilding the
 target initramfs.
 
-Bind-mount before any chroot:
+Bind the API filesystems before any chroot, but mount a fresh tmpfs at target
+`/run` so live runtime state cannot leak into initramfs generation:
 
 ```bash
-for d in /dev /dev/pts /proc /sys /run; do
+for d in /dev /dev/pts /proc /sys; do
   mount --bind "$d" "/mnt$d"
 done
-rm -f /mnt/etc/resolv.conf
-cp -L /etc/resolv.conf /mnt/etc/resolv.conf
+mount -t tmpfs tmpfs /mnt/run
 ```
 
 ---
@@ -252,7 +249,7 @@ Always use **filesystem UUIDs** in fstab, not `/dev/mapper/...`. `ROOT_FS_UUID` 
 
 ```bash
 # LUKS on: persistent root only — swap is a swapfile inside the container
-# cryptroot UUID=<ROOT_PART_UUID> none luks,discard
+# cryptroot UUID=<ROOT_PART_UUID> none luks,discard,initramfs
 
 # LUKS off: empty crypttab
 ```
@@ -327,7 +324,8 @@ DEBIAN_FRONTEND=noninteractive chroot /mnt dpkg-reconfigure -f noninteractive ke
 
 ## 9. Packages in chroot
 
-Order: apt sources → `apt-get update` → firmware/kernel → DE → defaults → optionals.
+These packages are resolved and installed while building the variant ISO, not
+after the target disk is wiped:
 
 ```text
 Always:
@@ -342,96 +340,97 @@ Always:
   libspa-0.2-bluetooth bluez
   power-profiles-daemon fwupd
   flatpak
-  firefox-esr vlc neovim
+  firefox-esr chromium vlc neovim
+  libreoffice-writer libreoffice-calc libreoffice-impress
+  thunderbird keepassxc
+  7zip unzip zip
   ripgrep fd-find fzf bat eza zoxide btop fastfetch jq
   fonts-noto-core fonts-noto-color-emoji fonts-liberation
 
 If GNOME:
   gnome-core gdm3 gnome-software gnome-software-plugin-flatpak dconf-cli
+  file-roller amberol simple-scan
   plymouth theme: spinner
 
 If KDE:
   kde-plasma-desktop sddm plasma-discover plasma-discover-backend-flatpak
+  okular ark gwenview kate kcalc kde-spectacle elisa skanlite
   plymouth theme: breeze (package plymouth-theme-breeze if needed)
 
-If NVIDIA GPU:
-  nvidia-driver
+Always in the closure:
+  nvidia-driver  (hardware detection only enables nvidia-drm.modeset=1)
 
-If keyd:
-  keyd  (package, or a pinned .deb — no live git build in the installer)
-
-If Brave:
-  official apt origin + brave-browser
-
-If Chromium / Audacious / Amberol / Elisa:
-  distro packages
-```
-
-```bash
-chroot /mnt flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-
-mkdir -p /mnt/etc/skel/.config/nvim
-git clone --depth 1 https://github.com/LazyVim/starter /mnt/etc/skel/.config/nvim
-rm -rf /mnt/etc/skel/.config/nvim/.git
-# also copy onto the created user if /etc/skel was applied before this step
+GNOME variant:
+  keyd + configs/keyd-default.conf
 ```
 
 Enable: `NetworkManager`, `bluetooth`, `power-profiles-daemon`, `fwupd`, `gdm3` or `sddm`, and `keyd` when selected.
 
-### Planned — Phase 6 additions (not implemented)
+### Phase 6 additions — baked at build time (implemented)
 
-Package additions to the sets above:
+Under the offline model the Phase 6 "bake into the ISO" items no longer run in
+the installer at all: they are part of the image the installer copies. The
+package names live in the live-build lists, which `scripts/check-packages.sh`
+validates against Testing before every build:
 
 ```text
-Always (add):
-  fprintd libpam-fprintd
+Always (baked into the target closure):
+  fprintd libpam-fprintd          # dormant without a reader
   cups ipp-usb sane-airscan
   ufw
+  printer-driver-all (already in the variant lists)
 
-If GNOME (add):  simple-scan
-If KDE (add):    skanlite
-
-If BioPass:
-  pinned biopass_<ver>_amd64.deb from GitHub releases, SHA256 verified, then
-  apt-get install ./biopass_<ver>_amd64.deb   # resolves its PAM/polkit deps
-  PAM wiring via the package's pam-auth-update profile; enrollment is done
-  post-install in the BioPass app, never by the installer
-
-If Developer tools:
-  docker.io docker-compose lazygit gh
-  systemctl enable docker
-  # The user is NOT added to the docker group — membership is root-equivalent.
+GNOME adds:  simple-scan
+KDE adds:    skanlite
 ```
 
-Shared skel/shell/git content — all refs **pinned** (tag or commit + SHA256 recorded in this repo), populated **before** `useradd -m` (requires moving user creation after this step; today LazyVim is copied into the user home as a workaround):
+Shell/font/git content is staged into `includes.chroot` when the ISO is built
+by `scripts/fetch-pins.sh`; pins and SHA256s live in `live/pins.env`, and a
+checksum mismatch fails the build. Because `/etc/skel` is populated in the
+image, the installer's `useradd -m` inherits everything — the "populate skel
+before user creation" ordering problem the network design had does not exist:
 
 ```bash
-# oh-my-bash: shared read-only install + skel bashrc from this repo
-git clone --depth 1 --branch <pinned-tag> https://github.com/ohmybash/oh-my-bash /mnt/usr/share/oh-my-bash
-rm -rf /mnt/usr/share/oh-my-bash/.git
-install -m 0644 configs/omb-bashrc /mnt/etc/skel/.bashrc
-# root keeps the stock Debian bashrc — do not touch /root
-
-# JetBrainsMono Nerd Font: pinned nerd-fonts release artifact, SHA256 verified
-mkdir -p /mnt/usr/local/share/fonts/jetbrains-mono-nerd
-unzip -o JetBrainsMono.zip -d /mnt/usr/local/share/fonts/jetbrains-mono-nerd
-chroot /mnt fc-cache -f
-
-# git: system-wide sensible defaults; identity is per-user
-install -m 0644 configs/gitconfig /mnt/etc/gitconfig
-# after useradd, only when the optional name/email prompts were answered:
-#   [user] name/email → /mnt/home/$USERNAME/.gitconfig, chowned to the user
+# scripts/fetch-pins.sh, at build time:
+#   oh-my-bash tarball (pinned commit, SHA256-verified) → /usr/share/oh-my-bash
+#   configs/omb-bashrc                                 → /etc/skel/.bashrc
+#   LazyVim starter tarball (pinned commit + SHA256)    → /etc/skel/.config/nvim
+#   JetBrainsMono Nerd Font (pinned release, SHA256)   → /usr/local/share/fonts/jetbrains-mono-nerd
+#   configs/gitconfig                                  → /etc/gitconfig
+#   configs/keyd-default.conf (GNOME only)              → /etc/keyd/default.conf
+# Root keeps the stock Debian bashrc. Identity stays per-user (~/.gitconfig).
 ```
 
-Firewall (ufw): defaults in `/etc/default/ufw` are already deny incoming / allow outgoing. Never run `ufw enable` in the chroot — it would touch the live kernel's netfilter. Add allow rules first, while ufw is still marked disabled (they are only written to `/etc/ufw/user.rules`):
+Firewall (ufw) is configured by `live/config/hooks/live/0300-ufw.hook.chroot`
+at build time. Defaults in `/etc/default/ufw` are already deny incoming /
+allow outgoing. Never run `ufw enable` in the chroot — it would touch the live
+kernel's netfilter. The hook adds allow rules while ufw is still marked
+disabled (they are only written to `/etc/ufw/user.rules`), then flips
+`ENABLED=yes` in `/etc/ufw/ufw.conf` and enables `ufw.service`:
 
 ```bash
-if [ "$DESKTOP_ENV" = kde ]; then
-  chroot /mnt ufw allow 1714:1764/udp   # KDE Connect
-  chroot /mnt ufw allow 1714:1764/tcp
+# 0300-ufw.hook.chroot (reads /etc/sensible/variant, staged by build.sh)
+if [ "$(cat /etc/sensible/variant)" = kde ]; then
+  ufw allow 1714:1764/tcp   # KDE Connect
+  ufw allow 1714:1764/udp
 fi
-sed -i 's/^ENABLED=no/ENABLED=yes/' /mnt/etc/ufw/ufw.conf
-chroot /mnt systemctl enable ufw
+sed -i 's/^ENABLED=no/ENABLED=yes/' /etc/ufw/ufw.conf
+systemctl enable ufw
+```
+
+### Planned — post-install tool (`sensible-apps`)
+
+These stay optional or third-party/online and move out of the installer entirely:
+
+```text
+Brave:            official apt origin + brave-browser (never from Debian)
+Audacious:        optional alternative media player from Debian
+Flathub:          configure the third-party remote after first boot
+Developer tools:  docker.io docker-compose lazygit gh; systemctl enable docker;
+                  the user is NOT added to the docker group (root-equivalent)
+BioPass:          pinned biopass_<ver>_amd64.deb from GitHub releases, SHA256
+                  verified; PAM wiring via the package's pam-auth-update
+                  profile; enrollment happens post-install in the BioPass app
 ```
 
 ---
@@ -465,8 +464,7 @@ sed -i 's/^KEYMAP=.*/KEYMAP=y/' /mnt/etc/initramfs-tools/initramfs.conf   # appe
 Append the hibernation parameters to `GRUB_CMDLINE_LINUX_DEFAULT` and write `RESUME=` for the initramfs:
 
 ```bash
-# LUKS on:  resume=UUID=<ROOT_FS_UUID> resume_offset=<RESUME_OFFSET>
-# LUKS off: resume=UUID=<SWAP_UUID>
+# Both modes: resume=UUID=<ROOT_FS_UUID> resume_offset=<RESUME_OFFSET>
 echo "RESUME=UUID=<...>" > /mnt/etc/initramfs-tools/conf.d/resume
 ```
 

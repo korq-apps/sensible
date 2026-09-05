@@ -1,9 +1,12 @@
 # Offline install rework (v2)
 
-Design record for the pivot away from a network installer. Supersedes the
-install-time package resolution described in [ARCHITECTURE.md](ARCHITECTURE.md)
-§6 and the prompt flow in [INSTALLER_SPEC.md](INSTALLER_SPEC.md); both are
-updated as phases land.
+Design record for the pivot away from a network installer. The implemented
+flow is described below and in [PLAN.md](PLAN.md) and
+[INSTALLER_SPEC.md](INSTALLER_SPEC.md).
+
+The original graphical live-session and GNOME first-boot account proposals
+are superseded: both images boot into the console installer, and both create
+the account, hostname, timezone, and locale during installation.
 
 ## Why
 
@@ -29,24 +32,24 @@ wiped disk on the user's.
 
 | Decision | Choice | Consequence |
 | :--- | :--- | :--- |
-| Offline model | Copy the live root | The ISO *is* the finished system; install is an `rsync`, not a `dpkg` run |
+| Offline model | Copy the live root | Deploy with `rsync`, then purge live-only packages locally with `dpkg`; no package downloads |
 | Variants | Two ISOs: GNOME (base), KDE (alternative) | Parameterised build, two artifacts, two CI builds; the installer never asks which desktop |
-| Live session | Graphical, with an "Install Sensible" launcher | Users see what they are getting and have a browser and Wi-Fi GUI if they want them |
-| Identity setup | Delegate to `gnome-initial-setup` on GNOME | Installer drops user/name/timezone/locale prompts on the GNOME variant |
-| Third-party apps | Out of the installer, into a post-install tool | Brave/Chromium/Flatpak need network and third-party origins; they cannot run offline |
+| Live session | Branded console installer | The selected desktop is carried in the image and starts on the installed system |
+| Identity setup | Shared installer forms for GNOME and KDE | Account, hostname, timezone, and locale are configured before first boot |
+| Third-party setup | Out of the installer, into a post-install tool | Brave and the Flathub remote need network and third-party origins; Debian's Chromium and Flatpak packages are baked into the ISO |
 | TUI toolkit | `gum` | In Testing `main`, depends only on `libc6` (~21 MB) |
 | Swap | Swapfile inside root, mirroring RAM; no swap partition | Encryption no longer changes the partition layout; minimum disk still scales with RAM |
 
-### Measured sizes (Debian Testing, amd64)
+### Historical size estimates (before the expanded desktop app set)
 
 | Full target closure | Packages | Installed | ~squashfs |
 | :--- | ---: | ---: | ---: |
 | GNOME + firmware + kernel + boot stack | 1194 | 3.50 GiB | ~1.3 GiB |
 | KDE Plasma + same | 1307 | 4.31 GiB | ~1.6 GiB |
 
-The current desktop-less ISO is already 1.29 GB, most of it the non-free
-firmware set. Expect roughly **2.0 GB (GNOME)** and **2.3 GB (KDE)** — smaller
-than Ubuntu's desktop ISO.
+The original desktop-less ISO measured 1.29 GB, mostly firmware. Estimates of
+2.0 GB (GNOME) and 2.3 GB (KDE) predate the expanded default applications and
+are not measurements of current release candidates.
 
 ## Target architecture
 
@@ -54,10 +57,11 @@ The ISO carries a complete, ready-to-run system. Installation copies it.
 
 ```
 build:    live-build (variant=gnome|kde) -> full desktop squashfs + firmware
-boot:     live session = the real desktop, with an Install launcher
-install:  partition -> format -> rsync live root -> de-live -> identity
+boot:     branded console installer
+setup:    keyboard -> account -> disk -> filesystem -> encryption -> confirm
+install:  partition -> format -> rsync live root -> de-live -> configure target
           -> GRUB -> update-initramfs -> verify -> reboot
-first run: gnome-initial-setup collects account, locale, timezone (GNOME)
+first run: log into the account created by the installer (both editions)
 ```
 
 No `apt` runs during installation, and nothing is fetched.
@@ -83,19 +87,16 @@ Because nothing can be downloaded, `cryptsetup-initramfs`, `shim-signed` and
 
 ### Installer flow
 
-GNOME variant — four screens:
+Both desktop editions use the same flow:
 
 1. Keyboard layout (needed before any passphrase is typed)
-2. Target disk
-3. Encryption (default on) + passphrase
-4. Review and confirm the destructive action
+2. Account, password, hostname, timezone, locale, and optional name/email
+3. Target disk and filesystem (Btrfs or Ext4)
+4. Encryption (default on; uses the account password), optional encrypted autologin,
+   and destructive confirmation
 
-KDE variant adds account creation (username, password) and timezone, because
-Plasma has no equivalent first-boot wizard. This divergence is deliberate and
-accepted; each variant uses its desktop's best flow.
-
-Everything else becomes an opinionated default: automatic hostname, no
-application checklist, no keyd question. The initial rework proposed fixing
+Desktop and app defaults are selected at build time: no application checklist
+or keyd question. The initial rework proposed fixing
 Btrfs too, but the existing Btrfs/Ext4 choice was retained because both paths
 are fully offline and use packages already carried by the image.
 
@@ -109,9 +110,11 @@ so CI and local builds share one path:
 - artifacts named `sensible-<variant>-debian-testing-amd64.iso`
 - the boot splash and `/etc/issue` name the variant
 
-A build-time check resolves the full package closure and **fails the build** if
-any name is missing — the check that would have caught `vdpau-driver-all`
-before it ever reached a user.
+A build-time package-name check fails if an archive query fails or a requested
+name is absent. It does not solve dependencies; live-build installs the package
+set during image creation. Runtime pre-flight checks boot package status and
+non-empty, version-matched kernel/initramfs pairs. These checks do not yet
+validate every desktop package or staged asset.
 
 ## Testing
 
@@ -119,13 +122,15 @@ before it ever reached a user.
   copy path mocked.
 - `scripts/smoke-boot.sh` gains a variant argument and boots both ISOs
   (`uefi` and `sb` firmware modes already exist).
-- A new acceptance check installs to a scratch disk in QEMU and boots the
+- Planned release-blocking acceptance checks install to scratch disks in QEMU and boot the
   *installed* system, not just the live medium. `validate_installed_boot`
   already asserts the artifacts; this proves them against real firmware.
 
 ## Phasing
 
-Each phase leaves the tree releasable.
+Original sequencing, retained as history. Items 3 and 4 were superseded by
+the console/shared-account flow above. Release readiness is governed by the
+unchecked acceptance gates in PLAN.md, not by completion of these steps.
 
 1. **Variant build** — parameterise `live-build`, produce the GNOME ISO with a
    full desktop, keep the existing TTY installer. Adds the build-time package
@@ -136,7 +141,8 @@ Each phase leaves the tree releasable.
 4. **Prompt rework** — `gum`, the reduced screen set, and first-boot
    delegation on GNOME.
 5. **KDE variant** — second ISO and its account-creation path.
-6. **Post-install app tool** — `sensible-apps` for Brave, Chromium, Flatpak.
+6. **Post-install app tool** — `sensible-apps` for Brave, optional alternatives,
+   and Flathub remote setup.
 
 ## Open questions
 
@@ -145,8 +151,5 @@ Each phase leaves the tree releasable.
   root when LUKS is on and the partition layout is identical either way. The
   minimum disk stays RAM-dependent (~30 GiB at 8 GiB RAM), so **test VMs need
   ~40 GiB**.
-- Whether the KDE variant should also delegate identity setup to
-  `plasma-welcome` (it does not create accounts today) or keep the installer
-  path permanently.
-- Whether the live session offers "try without installing" as an explicit,
-  documented mode or simply happens to allow it.
+- First-boot identity delegation and a graphical "try without installing"
+  session are outside the current console-installer design.

@@ -4,11 +4,20 @@
 install_default_apps() {
     local username="$1"
 
-    log_info "Installing default apps (Firefox ESR, VLC, Neovim, Flatpak, modern CLI tools, fonts)..."
+    log_info "Installing the default browser, office, mail, media, password, Flatpak, and CLI suite..."
     local pkgs=(
         firefox-esr
+        chromium
         vlc
         neovim
+        libreoffice-writer
+        libreoffice-calc
+        libreoffice-impress
+        thunderbird
+        keepassxc
+        7zip
+        unzip
+        zip
         ripgrep
         fd-find
         fzf
@@ -30,19 +39,17 @@ install_default_apps() {
 
     DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y --no-install-recommends "${pkgs[@]}"
 
-    log_info "Adding Flathub remote repository..."
-    chroot ${MNT} flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo \
-        || record_warning "Flathub could not be added; it can be added later from the desktop app store."
+    log_info "Keeping Flathub setup outside the offline installer."
 
-    log_info "Setting up LazyVim starter in /etc/skel and user home..."
-    mkdir -p ${MNT}/etc/skel/.config/nvim
-    if git clone --depth 1 https://github.com/LazyVim/starter ${MNT}/etc/skel/.config/nvim 2>/dev/null; then
-        rm -rf ${MNT}/etc/skel/.config/nvim/.git
-    else
-        record_warning "LazyVim starter could not be downloaded; Neovim itself is installed."
+    # The pinned starter is staged into /etc/skel while the ISO is built.
+    # Never replace it here with a moving network clone.
+    log_info "Copying the baked LazyVim starter into the user home..."
+    if [ ! -f "${MNT}/etc/skel/.config/nvim/init.lua" ]; then
+        record_warning "The baked LazyVim starter is missing from /etc/skel; Neovim itself is installed."
     fi
 
-    if [ -n "$username" ] && [ -d "${MNT}/home/$username" ]; then
+    if [ -n "$username" ] && [ -d "${MNT}/home/$username" ] \
+        && [ -d "${MNT}/etc/skel/.config/nvim" ]; then
         mkdir -p "${MNT}/home/$username/.config"
         cp -r ${MNT}/etc/skel/.config/nvim "${MNT}/home/$username/.config/"
         chroot ${MNT} chown -R "${username}:${username}" "/home/${username}/.config"

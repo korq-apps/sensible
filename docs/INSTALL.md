@@ -13,9 +13,9 @@ amd64 Debian Testing installer that uses the whole selected disk.
 You need:
 
 - An amd64 (Intel or AMD 64-bit) computer using UEFI, not Legacy/CSM boot.
-- A target disk large enough for 1 GiB EFI, 1 GiB `/boot`, swap equal to RAM
-  plus 10%, and at least 20 GiB for the system. In other words, the supported
-  minimum is about **22 GiB plus 110% of installed RAM** and varies by machine.
+- A target disk large enough for 1 GiB EFI, 1 GiB `/boot`, a swapfile equal to
+  detected RAM, and at least 20 GiB for the system. For example, a machine with
+  8 GiB RAM needs a target disk of at least 30 GiB.
   More space is strongly recommended.
 - A USB drive large enough for the ISO (8 GB is a practical choice). Writing
   the image erases the USB.
@@ -164,9 +164,15 @@ sudo apt update
 sudo apt full-upgrade
 ```
 
-Restart if a kernel or core system component was updated. Use GNOME Software
-or KDE Discover to add and update Flatpak applications from Flathub. For
-supported device firmware, check LVFS through `fwupd`:
+Restart if a kernel or core system component was updated. Until the planned
+`sensible-apps` tool lands, add Flathub once before using GNOME Software or KDE
+Discover to install Flatpak applications:
+
+```bash
+flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+```
+
+For supported device firmware, check LVFS through `fwupd`:
 
 ```bash
 sudo fwupdmgr refresh

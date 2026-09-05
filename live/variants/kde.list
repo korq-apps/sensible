@@ -14,8 +14,17 @@ dconf-cli
 
 # Applications
 firefox-esr
+chromium
 vlc
 neovim
+skanlite
+okular
+ark
+gwenview
+kate
+kcalc
+kde-spectacle
+elisa
 
 # Boot stack the installer needs on the target and cannot download
 grub-efi-amd64

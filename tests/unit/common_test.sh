@@ -69,52 +69,6 @@ t_section "ui_checklist (text mode)"
 res="$(printf 'chromium brave\n' | ui_checklist T "pick" 2>/dev/null)"
 assert_contains "selection echoed" "${res}" "chromium"
 
-t_section "detect_keyboard_layout"
-kb="$(mktemp)"
-printf 'XKBMODEL="pc105"\nXKBLAYOUT="de"\n' > "${kb}"
-assert_eq "reads XKBLAYOUT" "de" "$(detect_keyboard_layout "${kb}")"
-printf 'XKBLAYOUT=us\nXKBLAYOUT="fr"\n' > "${kb}"
-assert_eq "last XKBLAYOUT wins" "fr" "$(detect_keyboard_layout "${kb}")"
-assert_eq "missing file falls back to us" "us" "$(detect_keyboard_layout "${kb}/does-not-exist")"
-assert_eq "file without XKBLAYOUT falls back to us" "us" "$(detect_keyboard_layout /dev/null)"
-rm -f "${kb}"
-
-t_section "hostname and username validation"
-valid_hostname "debian"; assert_rc "simple hostname accepted" 0 $?
-valid_hostname "living-room.pc"; assert_rc "dotted hostname accepted" 0 $?
-valid_hostname "-bad"; assert_rc "leading hyphen rejected" 1 $?
-valid_hostname "bad_name"; assert_rc "underscore rejected" 1 $?
-valid_hostname "$(printf 'a%.0s' {1..64})"; assert_rc "Linux-overlong hostname rejected" 1 $?
-valid_username "root"; assert_rc "existing system account rejected" 1 $?
-valid_username "sddm"; assert_rc "future desktop service account rejected" 1 $?
-valid_username "speech-dispatcher"; assert_rc "future accessibility service account rejected" 1 $?
-valid_username "pipewire"; assert_rc "future audio service account rejected" 1 $?
-valid_username "Bad Name"; assert_rc "invalid username characters rejected" 1 $?
-valid_username "sensible_test_user_9274"; assert_rc "available username accepted" 0 $?
-
-t_section "timezone validation"
-valid_timezone "UTC"; assert_rc "UTC accepted" 0 $?
-valid_timezone "Europe/Berlin"; assert_rc "IANA timezone accepted" 0 $?
-valid_timezone "../../../etc/passwd"; assert_rc "path traversal rejected" 1 $?
-valid_timezone "/etc/passwd"; assert_rc "absolute path rejected" 1 $?
-
-t_section "keyboard layout validation and live application"
-symbols="$(mktemp -d)"
-touch "${symbols}/us" "${symbols}/de"
-validate_keyboard_layout "us" "${symbols}"; assert_rc "installed layout accepted" 0 $?
-validate_keyboard_layout "us,de" "${symbols}"; assert_rc "installed layout list accepted" 0 $?
-validate_keyboard_layout "missing" "${symbols}"; assert_rc "missing layout rejected" 1 $?
-validate_keyboard_layout '../bad' "${symbols}"; assert_rc "path-like layout rejected" 1 $?
-keyboard_out="${symbols}/keyboard"
-SETUPCON_CALLS=0
-setupcon() { SETUPCON_CALLS=$((SETUPCON_CALLS + 1)); return 0; }
-apply_live_keyboard "de" "${keyboard_out}"
-assert_file_contains "applied keyboard file carries selected layout" "${keyboard_out}" 'XKBLAYOUT="de"'
-apply_live_keyboard "us" "${symbols}" >/dev/null 2>&1
-assert_rc "keyboard file write failure is returned" 1 $?
-assert_eq "setupcon not run after keyboard write failure" "1" "${SETUPCON_CALLS}"
-rm -rf "${symbols}"
-
 t_section "network pre-flight"
 curl() { return 0; }
 network_ready; assert_rc "reachable Debian metadata passes" 0 $?

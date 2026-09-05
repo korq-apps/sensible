@@ -7,6 +7,51 @@ source "${INSTALLER_DIR}/lib/setup-form.sh"
 fixture="$(mktemp -d)"
 trap 'rm -rf "$fixture"' EXIT
 
+t_section "validation and live keyboard helpers"
+valid_hostname "debian"; assert_rc "simple hostname accepted" 0 $?
+valid_hostname "living-room.pc"; assert_rc "dotted hostname accepted" 0 $?
+valid_hostname "-bad"; assert_rc "leading hyphen rejected" 1 $?
+valid_hostname "bad_name"; assert_rc "underscore rejected" 1 $?
+valid_hostname "$(printf 'a%.0s' {1..64})"; assert_rc "Linux-overlong hostname rejected" 1 $?
+valid_username "root"; assert_rc "existing system account rejected" 1 $?
+valid_username "sddm"; assert_rc "future desktop service account rejected" 1 $?
+valid_username "speech-dispatcher"; assert_rc "future accessibility service account rejected" 1 $?
+valid_username "pipewire"; assert_rc "future audio service account rejected" 1 $?
+valid_username "Bad Name"; assert_rc "invalid username characters rejected" 1 $?
+valid_username "sensible_test_user_9274"; assert_rc "available username accepted" 0 $?
+
+zoneinfo="${fixture}/zoneinfo"
+mkdir -p "${zoneinfo}/Europe"
+touch "${zoneinfo}/UTC" "${zoneinfo}/Europe/Berlin"
+valid_timezone "UTC" "${zoneinfo}"; assert_rc "UTC accepted" 0 $?
+valid_timezone "Europe/Berlin" "${zoneinfo}"; assert_rc "IANA timezone accepted" 0 $?
+valid_timezone "../../../etc/passwd" "${zoneinfo}"; assert_rc "path traversal rejected" 1 $?
+valid_timezone "/etc/passwd" "${zoneinfo}"; assert_rc "absolute path rejected" 1 $?
+
+symbols="${fixture}/symbols"
+mkdir -p "${symbols}"
+touch "${symbols}/us" "${symbols}/de"
+validate_keyboard_layout "us" "${symbols}"; assert_rc "installed layout accepted" 0 $?
+validate_keyboard_layout "us,de" "${symbols}"; assert_rc "installed layout list accepted" 0 $?
+validate_keyboard_layout "missing" "${symbols}"; assert_rc "missing layout rejected" 1 $?
+validate_keyboard_layout '../bad' "${symbols}"; assert_rc "path-like layout rejected" 1 $?
+
+keyboard_out="${fixture}/keyboard"
+SETUPCON_CALLS=0
+setupcon() { SETUPCON_CALLS=$((SETUPCON_CALLS + 1)); return 0; }
+apply_live_keyboard "de" "${keyboard_out}"
+assert_file_contains "applied keyboard file carries selected layout" "${keyboard_out}" 'XKBLAYOUT="de"'
+apply_live_keyboard "us" "${symbols}" >/dev/null 2>&1
+assert_rc "keyboard file write failure is returned" 1 $?
+assert_eq "setupcon not run after keyboard write failure" "1" "${SETUPCON_CALLS}"
+
+printf 'XKBMODEL="pc105"\nXKBLAYOUT="de"\n' > "${keyboard_out}"
+assert_eq "reads XKBLAYOUT" "de" "$(detect_keyboard_layout "${keyboard_out}")"
+printf 'XKBLAYOUT=us\nXKBLAYOUT="fr"\n' > "${keyboard_out}"
+assert_eq "last XKBLAYOUT wins" "fr" "$(detect_keyboard_layout "${keyboard_out}")"
+assert_eq "missing file falls back to us" "us" "$(detect_keyboard_layout "${fixture}/missing")"
+assert_eq "file without XKBLAYOUT falls back to us" "us" "$(detect_keyboard_layout /dev/null)"
+
 t_section "keyboard choices come from XKB metadata"
 cat > "${fixture}/base.lst" <<'EOF'
 ! model

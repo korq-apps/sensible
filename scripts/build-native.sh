@@ -40,7 +40,8 @@ DEPS=(
     syslinux-utils isolinux xorriso squashfs-tools mtools dosfstools
     grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed grub-efi-ia32-bin
     shim-signed sbsigntool
-    rsync curl ca-certificates git coreutils util-linux findutils cpio bc procps
+    rsync curl ca-certificates git coreutils util-linux findutils cpio bc procps unzip
+    python3 debian-archive-keyring
 )
 
 echo "==> Installing live-build toolchain (apt)..."
@@ -48,10 +49,16 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends "${DEPS[@]}"
 
-# Ensure executable bits on auto scripts, hooks, and staged binaries.
-chmod +x "${REPO_ROOT}/live/auto/"* 2>/dev/null || true
-chmod -R +x "${REPO_ROOT}/live/config/hooks/" 2>/dev/null || true
-chmod -R +x "${REPO_ROOT}/live/config/includes.chroot/usr/local/bin/" 2>/dev/null || true
+# These files are executed by live-build or from the live image. Missing paths
+# are a broken source tree, and chmod failures must stop the build.
+for executable_dir in \
+    "${REPO_ROOT}/live/auto" \
+    "${REPO_ROOT}/live/config/hooks" \
+    "${REPO_ROOT}/live/config/includes.chroot/usr/local/bin"; do
+    [ -d "${executable_dir}" ] \
+        || { echo "Error: required executable directory is missing: ${executable_dir}" >&2; exit 1; }
+    find "${executable_dir}" -type f -exec chmod 0755 {} +
+done
 
 # Stage installer + configs + docs into the live image (same as live/build.sh).
 OPT_SENSIBLE="${REPO_ROOT}/live/config/includes.chroot/opt/sensible"
@@ -62,7 +69,7 @@ mkdir -p "${OPT_SENSIBLE}/installer" "${OPT_SENSIBLE}/configs" "${OPT_SENSIBLE}/
 rsync -a --delete "${REPO_ROOT}/installer/" "${OPT_SENSIBLE}/installer/"
 rsync -a --delete "${REPO_ROOT}/configs/" "${OPT_SENSIBLE}/configs/"
 rsync -a --delete "${REPO_ROOT}/docs/" "${OPT_SENSIBLE}/docs/"
-chmod -R +x "${OPT_SENSIBLE}/installer/" 2>/dev/null || true
+chmod 0755 "${OPT_SENSIBLE}/installer/sensible-install.sh"
 
 # desktop.list.chroot is generated and intentionally ignored. Recreate it on
 # the native path exactly as live/build.sh does, or a clean checkout silently
@@ -71,6 +78,17 @@ VARIANT_LIST="${REPO_ROOT}/live/variants/${SENSIBLE_VARIANT}.list"
 [ -f "${VARIANT_LIST}" ] \
     || { echo "Error: no package list at ${VARIANT_LIST}." >&2; exit 1; }
 cp "${VARIANT_LIST}" "${REPO_ROOT}/live/config/package-lists/desktop.list.chroot"
+
+VARIANT_MARKER="${REPO_ROOT}/live/config/includes.chroot/etc/sensible/variant"
+mkdir -p "$(dirname "${VARIANT_MARKER}")"
+printf '%s\n' "${SENSIBLE_VARIANT}" > "${VARIANT_MARKER}"
+
+echo "==> Checking package names against an isolated Debian Testing archive index..."
+SENSIBLE_PACKAGE_CHECK_NATIVE=1 \
+    "${REPO_ROOT}/scripts/check-packages.sh" "${SENSIBLE_VARIANT}"
+
+# Keep build-time third-party/default assets identical to live/build.sh.
+bash "${REPO_ROOT}/scripts/fetch-pins.sh"
 
 echo "==> Running live-build (lb clean --purge && lb config && lb build)..."
 cd "${REPO_ROOT}/live"
@@ -99,8 +117,11 @@ TARGET_ISO="${REPO_ROOT}/sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.iso"
 
 # Hand the artifacts back to the user who invoked sudo.
 if [ -n "${SUDO_USER:-}" ]; then
-    chown "${SUDO_USER}:$(id -gn "${SUDO_USER}")" \
-        "${TARGET_ISO}" "${TARGET_ISO}.sha256" 2>/dev/null || true
+    SUDO_GROUP="$(id -gn "${SUDO_USER}")"
+    if ! chown "${SUDO_USER}:${SUDO_GROUP}" \
+        "${TARGET_ISO}" "${TARGET_ISO}.sha256"; then
+        echo "Warning: build succeeded, but the ISO artifacts remain owned by root." >&2
+    fi
 fi
 
 echo "============================================================"

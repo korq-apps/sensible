@@ -60,7 +60,9 @@ Full log: ${log_file}" \
                 ;;
             shell)
                 echo "Starting a shell. Type 'exit' to return to this screen." >&2
-                "${SHELL:-/bin/bash}" || true
+                if ! "${SHELL:-/bin/bash}"; then
+                    echo "Warning: troubleshooting shell exited unsuccessfully." >&2
+                fi
                 ;;
             reboot)   command -v systemctl >/dev/null 2>&1 && systemctl reboot   || reboot;   return 0 ;;
             poweroff) command -v systemctl >/dev/null 2>&1 && systemctl poweroff || poweroff; return 0 ;;
@@ -162,10 +164,15 @@ validate_installed_boot() {
         # straight to busybox with no prompt. Extract the initramfs and demand
         # a non-empty entry for the cryptroot mapping. A non-empty image that
         # cannot be extracted is corrupt and must fail verification.
-        if command -v unmkinitramfs >/dev/null 2>&1; then
-            local initrd inspect_dir entry_file
-            initrd=$(compgen -G "${root}/boot/initrd.img-*" | sort -V | tail -n 1 || true)
-            if [ -n "$initrd" ] && [ -s "$initrd" ]; then
+        local initrd inspect_dir entry_file
+        initrd=$(find "${root}/boot" -maxdepth 1 -type f -name 'initrd.img-*' -print \
+            | sort -V | tail -n 1)
+        if [ -n "$initrd" ]; then
+            if [ ! -s "$initrd" ]; then
+                problems+=("- generated initramfs is empty; the encrypted root cannot be unlocked at boot")
+            elif ! command -v unmkinitramfs >/dev/null 2>&1; then
+                problems+=("- unmkinitramfs is required to verify the encrypted initramfs but is not available")
+            else
                 mkdir -p "${root}/var/tmp"
                 inspect_dir=$(mktemp -d "${root}/var/tmp/initrd-check.XXXXXX" 2>/dev/null) || inspect_dir=""
                 if [ -z "$inspect_dir" ]; then
@@ -181,11 +188,18 @@ validate_installed_boot() {
                         entry_file=""
                     done
                     if [ -n "$entry_file" ]; then
-                        local mapping_name
-                        mapping_name=$(awk '$1 !~ /^#/ && NF >= 3 { print $1; exit }' "${crypttab}" 2>/dev/null)
-                        mapping_name=${mapping_name:-cryptroot}
-                        if ! grep -Eq "^[[:space:]]*${mapping_name}[[:space:]]" "$entry_file"; then
-                            problems+=("- initramfs /cryptroot/crypttab has no ${mapping_name} mapping; the boot would drop to a busybox prompt without asking for the passphrase (stale or mis-generated initramfs?)")
+                        local mapping_name="" mapping_source=""
+                        if [ -s "${crypttab}" ]; then
+                            mapping_name=$(awk '$1 !~ /^#/ && NF >= 3 { print $1; exit }' "${crypttab}")
+                            mapping_source=$(awk '$1 !~ /^#/ && NF >= 3 { print $2; exit }' "${crypttab}")
+                        fi
+                        # Compare literal fields, not a regex or just the
+                        # mapping name: a previous install's UUID is stale too.
+                        if [ -n "${mapping_name}" ] && ! awk \
+                            -v name="${mapping_name}" -v source="${mapping_source}" \
+                            '$1 == name && $2 == source && NF >= 3 { found = 1 } END { exit !found }' \
+                            "$entry_file"; then
+                            problems+=("- initramfs /cryptroot/crypttab has no ${mapping_name} mapping for ${mapping_source}; the boot would drop to a busybox prompt (stale or mis-generated initramfs?)")
                         fi
                     else
                         problems+=("- initramfs has no /cryptroot/crypttab at all; the encrypted root cannot be unlocked at boot")

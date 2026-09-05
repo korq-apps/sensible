@@ -35,10 +35,16 @@ release_dev_nodes() {
     # Must happen before the image is built, or the bind-mounted host nodes are
     # captured into the squashfs; and before `lb installer`, which moves the
     # chroot aside and would fail on a busy mount point.
-    local n
+    local n failed=0
     for n in ${DEV_NODES}; do
-        umount "chroot/dev/${n}" 2>/dev/null || true
+        if mountpoint -q "chroot/dev/${n}"; then
+            if ! umount "chroot/dev/${n}"; then
+                echo "Error: could not unmount chroot/dev/${n}." >&2
+                failed=1
+            fi
+        fi
     done
+    return "${failed}"
 }
 
 # live-build writes everything under live/ as root inside the container, which
@@ -63,20 +69,53 @@ restore_host_ownership() {
     # -R for directories live-build owns, -h so bind-mounts and symlinks
     # don't follow into the chroot rootfs. chown the cwd too so live-build's
     # top-level metadata files (chroot.files, *.iso, etc.) are also reachable.
-    chown -R -h "${host_uid}:${host_gid}" \
-        . \
-        2>/dev/null || true
-    # chroot/ can contain mountpoints (we bind-mounted /dev nodes above);
-    # chown is harmless on the dir itself, but a busy mount would block it.
-    # release_dev_nodes runs before this in the EXIT trap, so this is safe.
+    if ! chown -R -h "${host_uid}:${host_gid}" .; then
+        echo "Error: could not restore build-output ownership to ${host_uid}:${host_gid}." >&2
+        return 1
+    fi
+    # chroot/ can contain the /dev bind mounts created above, and recursive
+    # chown would cross them. The caller must invoke this only after
+    # release_dev_nodes has succeeded for every node.
 }
-trap 'release_dev_nodes; restore_host_ownership' EXIT
+
+cleanup_build() {
+    local status=$?
+    if release_dev_nodes; then
+        if ! restore_host_ownership; then
+            status=1
+        fi
+    else
+        status=1
+        echo "Warning: skipping ownership restoration while chroot /dev mounts remain active." >&2
+    fi
+    trap - EXIT
+    exit "${status}"
+}
+trap cleanup_build EXIT
 
 # Hard-remove the build state first; `lb clean --purge` alone leaves a
 # populated chroot/ and a .build/ stagefile set out of sync with cache/, and
 # the next run then dies in debootstrap or in `lb installer`.
 rm -rf chroot binary .build cache
-lb clean --purge >/dev/null 2>&1 || true
+lb clean --purge
+
+# Only download caches survive a clean build, never bootstrap/chroot snapshots
+# or stage markers. live-build restores these .deb files into the chroot's APT
+# archives itself (functions/cache.sh upstream). Hardlinks avoid copying GBs;
+# both paths are deliberately on the same workspace filesystem.
+for stage in bootstrap chroot binary; do
+    saved=".cache/live-build/packages.${stage}"
+    if [ -d "${saved}" ]; then
+        mkdir -p "cache/packages.${stage}"
+        find "${saved}" -maxdepth 1 -type f -name '*.deb' \
+            -exec cp -l -t "cache/packages.${stage}" -- {} +
+    fi
+done
+
+# Phase 6 extras: fetch pinned oh-my-bash / Nerd Font and stage the shell and
+# git defaults into includes.chroot, so every user of the installed system
+# inherits them. Fails the build on a rotted pin (see live/pins.env).
+bash /workspace/scripts/fetch-pins.sh
 
 lb config
 lb bootstrap
@@ -85,3 +124,14 @@ lb chroot
 release_dev_nodes
 lb installer
 lb binary
+
+# Publish only after all stages succeed. Pins are separately checksum-verified
+# by fetch-pins.sh even when restored by actions/cache after checkout.
+mkdir -p .cache/live-build
+for stage in bootstrap chroot binary; do
+    saved=".cache/live-build/packages.${stage}"
+    rm -rf "${saved}"
+    if [ -d "cache/packages.${stage}" ]; then
+        mv "cache/packages.${stage}" "${saved}"
+    fi
+done

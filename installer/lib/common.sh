@@ -12,8 +12,12 @@ INSTALL_OUTPUT_QUIET="false"
 start_install_log() {
     mkdir -p "$(dirname "$INSTALL_LOG")"
     : > "$INSTALL_LOG"
-    chgrp sudo "$INSTALL_LOG" 2>/dev/null || true
-    chmod 640 "$INSTALL_LOG"
+    if chgrp sudo "$INSTALL_LOG"; then
+        chmod 640 "$INSTALL_LOG"
+    else
+        chmod 600 "$INSTALL_LOG"
+        log_warn "Could not assign ${INSTALL_LOG} to the sudo group; keeping it root-only."
+    fi
     # The normal graphical installer keeps command/package chatter in the log
     # and reserves the console for the progress UI. --debug and non-Gum runs
     # still mirror everything to the terminal. Secrets are never echoed and
@@ -47,8 +51,12 @@ preserve_install_log() {
     [ -d "${MNT}" ] || return 0
     mkdir -p "${MNT}/var/log"
     cp "$INSTALL_LOG" "${MNT}/var/log/sensible-install.log"
-    chgrp sudo "${MNT}/var/log/sensible-install.log" 2>/dev/null || true
-    chmod 640 "${MNT}/var/log/sensible-install.log"
+    if chroot "${MNT}" chgrp sudo /var/log/sensible-install.log; then
+        chmod 640 "${MNT}/var/log/sensible-install.log"
+    else
+        chmod 600 "${MNT}/var/log/sensible-install.log"
+        log_warn "Could not assign the target install log to its sudo group; keeping it root-only."
+    fi
 }
 
 require_id() {
@@ -223,83 +231,18 @@ the connection again. Choose No to leave the installer safely." "yes"; then
         fi
 
         if command -v nmtui-connect >/dev/null 2>&1; then
-            nmtui-connect || true
+            if ! nmtui-connect; then
+                log_info "Network setup was closed without selecting a connection."
+            fi
         elif command -v nmtui >/dev/null 2>&1; then
-            nmtui || true
+            if ! nmtui; then
+                log_info "Network setup was closed without applying a connection."
+            fi
         else
             ui_msgbox "Network Setup Unavailable" "NetworkManager's setup screen is unavailable. Configure the network from the shell, then run sensible-install again."
             return 1
         fi
     done
-}
-
-valid_hostname() {
-    local hostname="$1"
-    # Linux's static hostname is limited to 64 bytes including the terminator.
-    [ ${#hostname} -ge 1 ] && [ ${#hostname} -le 63 ] || return 1
-    [[ "$hostname" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || return 1
-
-    local label
-    IFS='.' read -r -a labels <<< "$hostname"
-    for label in "${labels[@]}"; do
-        [ ${#label} -ge 1 ] && [ ${#label} -le 63 ] || return 1
-        [[ "$label" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$ ]] || return 1
-    done
-}
-
-valid_username() {
-    local username="$1"
-    [[ "$username" =~ ^[a-z_][a-z0-9_-]*$ ]] || return 1
-    [ ${#username} -le 32 ] || return 1
-    ! getent passwd "$username" >/dev/null 2>&1 || return 1
-    # These accounts are created by packages installed later, but do not all
-    # exist in the small live image used for preflight validation.
-    case "$username" in
-        sddm|gdm|avahi|colord|geoclue|rtkit|saned|fwupd-refresh|nm-openvpn|speech-dispatcher|usbmux|polkitd|pulse|pipewire|_flatpak)
-            return 1
-            ;;
-    esac
-    return 0
-}
-
-valid_timezone() {
-    local timezone="$1" zoneinfo="${2:-/usr/share/zoneinfo}" part resolved
-    [[ "$timezone" =~ ^[A-Za-z0-9._+-]+(/[A-Za-z0-9._+-]+)*$ ]] || return 1
-    IFS='/' read -r -a timezone_parts <<< "$timezone"
-    for part in "${timezone_parts[@]}"; do
-        [ "$part" != "." ] && [ "$part" != ".." ] || return 1
-    done
-    resolved=$(realpath -e "${zoneinfo}/${timezone}" 2>/dev/null) || return 1
-    [[ "$resolved" = "${zoneinfo}/"* ]] && [ -f "$resolved" ]
-}
-
-validate_keyboard_layout() {
-    local layout="$1"
-    local symbols_dir="${2:-/usr/share/X11/xkb/symbols}"
-    [[ "$layout" =~ ^[a-z0-9_-]+(,[a-z0-9_-]+)*$ ]] || return 1
-
-    local item
-    IFS=',' read -r -a layouts <<< "$layout"
-    for item in "${layouts[@]}"; do
-        [ -f "${symbols_dir}/${item}" ] || return 1
-    done
-}
-
-apply_live_keyboard() {
-    local layout="$1"
-    local keyboard_file="${2:-/etc/default/keyboard}"
-    if ! cat <<EOF > "$keyboard_file"
-# Written by sensible-install
-XKBMODEL="pc105"
-XKBLAYOUT="${layout}"
-XKBVARIANT=""
-XKBOPTIONS=""
-BACKSPACE="guess"
-EOF
-    then
-        return 1
-    fi
-    setupcon --force --keyboard-only >/dev/null 2>&1 || return 1
 }
 
 check_uefi() {
@@ -334,32 +277,4 @@ check_root() {
         log_err "Installer must be run as root. Please run with sudo or as root."
         exit 1
     fi
-}
-
-detect_keyboard_layout() {
-    # Live session console layout (spec §3: "live console layout")
-    local kb_file="${1:-/etc/default/keyboard}"
-    local layout=""
-    if [ -r "$kb_file" ]; then
-        layout=$(grep -E '^XKBLAYOUT=' "$kb_file" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d '"')
-    fi
-    echo "${layout:-us}"
-}
-
-configure_keyboard() {
-    # Write the keyboard layout through keyboard-configuration (spec §3)
-    local layout="$1"
-    log_info "Configuring keyboard layout '${layout}' via keyboard-configuration..."
-    printf 'keyboard-configuration keyboard-configuration/layoutcode select %s\n' "$layout" \
-        | chroot "${MNT}" debconf-set-selections
-    DEBIAN_FRONTEND=noninteractive chroot "${MNT}" dpkg-reconfigure -f noninteractive keyboard-configuration >/dev/null
-    cat <<EOF > "${MNT}/etc/default/keyboard"
-# Written by sensible-install
-XKBMODEL="pc105"
-XKBLAYOUT="${layout}"
-XKBVARIANT=""
-XKBOPTIONS=""
-BACKSPACE="guess"
-EOF
-    log_success "Keyboard layout '${layout}' configured."
 }

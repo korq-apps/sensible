@@ -14,7 +14,7 @@ than asked, and third-party software leaves the install path entirely.
 | Phase 7.2 copy install | **done** |
 | Phase 7.3-7.5 live session, guided prompts, KDE | **done** |
 | Phase 7.6 post-install app tool | planned |
-| Release gate | blocked on real installed-disk and physical-hardware evidence |
+| Release gate | blocked on automated config input, real installed-disk tests, and physical-hardware evidence |
 | Phase 6 extras | re-scoped below: baked into the ISO, or moved to the post-install tool |
 
 **Next step:** exercise both release variants across Btrfs/Ext4 and LUKS on/off
@@ -54,7 +54,7 @@ to a console with NetworkManager and the required live firmware available.
 - [x] `live/auto/config`: `testing` (Forky), `main contrib non-free non-free-firmware`, `linux-image-amd64`, `iso-hybrid`, GRUB EFI
 - [x] Live packages: systemd, sudo, `rsync`, `debootstrap`, `dialog` or `whiptail`, `gdisk`, `parted`, `cryptsetup`, `btrfs-progs`, `e2fsprogs`, `dosfstools`, NetworkManager, **the same firmware set as the target** (otherwise Wi-Fi laptops cannot install)
 - [x] `scripts/smoke-boot.sh` and CI boot the ISO in headless UEFI QEMU and assert a stable marker from the live serial autologin shell; this is an ISO-boot smoke, not an installed-disk test
-- [x] Artifact name: `sensible-debian-testing-amd64.iso`
+- [x] Artifact names: `sensible-gnome-debian-testing-amd64.iso` and `sensible-kde-debian-testing-amd64.iso`
 
 The live session boots to the console installer even though the selected GNOME
 or KDE target closure is baked into its squashfs for offline copying.
@@ -85,7 +85,7 @@ integration tests do not close that gap.
 Make the installed system useful on a real laptop **before** polishing the DE.
 
 - [x] Seed the package set from Architecture §6 (firmware names, PipeWire + `libspa-0.2-bluetooth`, PPD, `fwupd`)
-- [x] NVIDIA detect → `nvidia-driver`
+- [x] `nvidia-driver` in the offline closure; NVIDIA detection enables its KMS argument
 - [x] Enable NetworkManager, bluetooth, `power-profiles-daemon`, `fwupd`
 
 Physical Intel and AMD smoke coverage is intentionally part of the release gate
@@ -99,10 +99,11 @@ below, not an optional follow-up.
 - [x] Plymouth theme: spinner / breeze
 - [x] Optional autologin (LUKS only, default on) + enforced idle screen lock on both DEs
 - [x] `keyd` + `configs/keyd-default.conf` when Mac clipboard is on
-- [x] Defaults: Firefox ESR, VLC, Neovim + LazyVim skel, CLI set, Flatpak + Flathub
-- [x] Optional-app installation helpers exist for Chromium, Brave origin,
-      Audacious, and Amberol/Elisa, but the offline guided flow does not offer
-      those checkboxes; a post-install app tool is planned
+- [x] Complete desktop defaults: Firefox ESR + Chromium, LibreOffice Writer/Calc/Impress, Thunderbird, KeePassXC, VLC, Neovim + pinned LazyVim skel, archive support, CLI set, Flatpak, and native GNOME/KDE utilities
+- [ ] Flathub remote setup moves to `sensible-apps`; the offline installer does
+      not contact a third-party origin
+- [x] Debian-packaged Chromium and the native GNOME/KDE media utilities are
+      baked into their images; Brave and alternative apps remain post-install
 - [x] Do not preinstall Slack/Zoom/etc.
 
 ---
@@ -111,7 +112,7 @@ below, not an optional follow-up.
 
 - [x] `.github/workflows/build-iso.yml`: container `live-build`, APT cache, QEMU UEFI boot smoke, ISO + SHA256 artifacts
 - [x] Scheduled rebuilds so Testing does not rot
-- [x] Tag-only GitHub Release job for `sensible-debian-testing-amd64.iso` + SHA256, isolated from PR-controlled code and gated by repository variable `SENSIBLE_RELEASE_READY == 'true'`
+- [x] Tag-only GitHub Release job for both variant ISOs + SHA256 files, isolated from PR-controlled code and gated by repository variable `SENSIBLE_RELEASE_READY == 'true'`
 
 The job existing is not approval to publish. Keep
 `SENSIBLE_RELEASE_READY` unset or `false` until every release-gate item below
@@ -139,6 +140,17 @@ unsafe disk operation reliable.
 Partial implementation does not earn a check. The remaining unchecked items
 require release-candidate virtual or physical installation evidence.
 
+Release-blocking work is tracked in [#4: automated input](https://github.com/korq-apps/sensible/issues/4),
+[#5: installed-disk QEMU matrix](https://github.com/korq-apps/sensible/issues/5)
+(depends on #4), and [#6: physical hardware evidence](https://github.com/korq-apps/sensible/issues/6).
+The final release decision still requires candidate checksums and reviewed results.
+
+Additional follow-ups: [#7: back-navigation](https://github.com/korq-apps/sensible/issues/7),
+[#8: Secure Boot/hibernation messaging](https://github.com/korq-apps/sensible/issues/8),
+and [#9: complete offline package/asset validation](https://github.com/korq-apps/sensible/issues/9).
+Current pre-flight validates boot package status and non-empty, version-matched
+kernel/initramfs pairs; it does not validate the complete desktop/asset set.
+
 **Later UI work:** after the safety mechanics above are implemented and tested,
 add a guided/recommended path that explains defaults and keeps an advanced path
 for explicit choices. The broader UI redesign may follow; it must not be used
@@ -155,23 +167,25 @@ and the package gate proves it resolves), anything third-party or optional
 moves to the **post-install tool**, and the checkbox questions disappear
 because the answer is decided when the image is built.
 
-Nothing below exists in `installer/` yet. Architecture/spec sections are marked
-**(planned — Phase 6)**.
+The "bake into the ISO" items below live in `live/` (package lists,
+`scripts/fetch-pins.sh` + `live/pins.env`, and the ufw hook), staged into the
+image that the installer copies. The post-install items do not exist yet;
+Architecture/spec sections mark them **(planned — post-install tool)**.
 
 **Bake into the ISO** (Debian packages, no question asked):
 
-- [ ] Fingerprint login: `fprintd` + `libpam-fprintd` (Debian main; enrollment via GNOME/KDE settings, dormant without a reader). Already unconditional, so it simply joins the variant package list
-- [ ] oh-my-bash for all users: pinned clone → `/usr/share/oh-my-bash`, `configs/omb-bashrc` → `/etc/skel/.bashrc` (wires zoxide/fzf/`batcat`/`fdfind`/eza). **Offline:** fetched during the ISO build, not the install, so the pin is verified once on our machine; `/etc/skel` is populated in the image, which also removes the `useradd -m` ordering problem the network design had
-- [ ] JetBrainsMono Nerd Font: pinned nerd-fonts release + SHA256 (Debian packages none). **Offline:** downloaded and checksummed at ISO build time; a rotted pin fails our build instead of a user's install
-- [ ] git defaults: `configs/gitconfig` → `/etc/gitconfig` in the image. The name/email prompts are dropped: on GNOME the first-boot wizard already collects a full name, and asking again is the kind of question the rework removes (no packaged libsecret credential helper exists — do not invent one)
-- [ ] `ufw` enabled, deny incoming / allow outgoing (config-file enable, never `ufw enable` in chroot); KDE Connect ports 1714–1764 tcp/udp allowed on KDE
-- [ ] Printing/scanning: `cups` + `ipp-usb` + `sane-airscan`; `simple-scan` (GNOME) / `skanlite` (KDE)
+- [x] Fingerprint login: `fprintd` + `libpam-fprintd` (Debian main; enrollment via GNOME/KDE settings, dormant without a reader). Already unconditional, so it simply joins the variant package list
+- [x] oh-my-bash for all users: pinned clone → `/usr/share/oh-my-bash`, `configs/omb-bashrc` → `/etc/skel/.bashrc` (wires zoxide/fzf/`batcat`/`fdfind`/eza). **Offline:** fetched during the ISO build, not the install, so the pin is verified once on our machine; `/etc/skel` is populated in the image, which also removes the `useradd -m` ordering problem the network design had. `scripts/fetch-pins.sh` + `live/pins.env`
+- [x] JetBrainsMono Nerd Font: pinned nerd-fonts release + SHA256 (Debian packages none). **Offline:** downloaded and checksummed at ISO build time by `scripts/fetch-pins.sh`; a rotted pin fails our build instead of a user's install. Only the four standard-spacing faces are baked, to keep the ISO small
+- [x] git defaults: `configs/gitconfig` → `/etc/gitconfig` in the image. The installer still offers optional name/email for the user's `~/.gitconfig`; dropping those prompts is deferred to the first-boot/UI pass
+- [x] `ufw` enabled, deny incoming / allow outgoing (config-file enable, never `ufw enable` in chroot); KDE Connect ports 1714–1764 tcp/udp allowed on KDE — `live/config/hooks/live/0300-ufw.hook.chroot`
+- [x] Printing/scanning: `cups` + `ipp-usb` + `sane-airscan`; `simple-scan` (GNOME) / `skanlite` (KDE)
 
 **Move to the post-install tool** (`sensible-apps`, online, after first boot):
 
 - [ ] Developer tools: `docker.io` + `docker-compose` + `lazygit` + `gh`; user **not** added to the docker group (root-equivalent). Was an installer checkbox, which is exactly the kind of question the offline rework removes, and these cost nothing to add after first boot
 - [ ] BioPass face login: pinned `.deb` + SHA256 from [TickLabVN/biopass](https://github.com/TickLabVN/biopass), PAM via `pam-auth-update`. Third-party and young, so it does not belong in the offline image; biometrics never unlock LUKS and fingerprint login leaves the keyring locked — both must be stated where it is offered
-- [ ] Brave, Chromium, Flatpak/Flathub — third-party origins, already moved here by the offline decision
+- [ ] Brave, Audacious, and Flathub remote setup — optional or third-party additions moved here by the offline decision
 
 ---
 
@@ -196,7 +210,7 @@ package closure from the live image and requires no network. See
   filesystem and identity/locale choices, one destructive confirmation, and
   staged progress
 - [x] GNOME and KDE build variants; both keep account creation in the installer
-- [ ] `sensible-apps` post-install tool for Brave, Chromium and Flatpak/Flathub, which cannot run offline
+- [ ] `sensible-apps` post-install tool for Brave, Audacious, and Flathub remote setup
 
 ---
 

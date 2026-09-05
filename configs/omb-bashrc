@@ -2,7 +2,8 @@
 # oh-my-bash runs from a shared, read-only system install; per-user state
 # (history, custom themes) stays in $HOME as usual.
 #
-# Status: planned (PLAN Phase 6) — not yet wired into the installer.
+# Staged into the image by scripts/fetch-pins.sh, which also installs the
+# pinned oh-my-bash under /usr/share/oh-my-bash.
 
 # Interactive shells only.
 case $- in *i*) ;; *) return ;; esac

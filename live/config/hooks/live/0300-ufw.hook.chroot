@@ -1,0 +1,17 @@
+#!/bin/sh
+# Phase 6: ufw enabled by config file. The defaults in /etc/default/ufw are
+# already deny incoming / allow outgoing. Never `ufw enable` here -- in a
+# chroot it would touch the live kernel's netfilter. Allow rules are written
+# to /etc/ufw/user.rules while ufw is still disabled; flipping ENABLED=yes in
+# /etc/ufw/ufw.conf below switches them on at boot.
+set -e
+
+VARIANT="$(cat /etc/sensible/variant 2>/dev/null || printf gnome)"
+
+if [ "${VARIANT}" = "kde" ]; then
+    ufw allow 1714:1764/tcp >/dev/null  # KDE Connect discovery + transfer
+    ufw allow 1714:1764/udp >/dev/null
+fi
+
+sed -i 's/^ENABLED=no/ENABLED=yes/' /etc/ufw/ufw.conf
+systemctl enable ufw.service >/dev/null
