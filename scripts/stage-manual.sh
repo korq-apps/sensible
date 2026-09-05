@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="${1:-${REPO_ROOT}/live/config/includes.chroot}"
 
-for asset in index.html manual.css; do
+for asset in index.html applications.html terminal-tools.html manual.css; do
     install -Dm0644 "${REPO_ROOT}/manual/${asset}" "${DEST}/usr/share/sensible/manual/${asset}"
 done
 install -Dm0644 "${REPO_ROOT}/packaging/manual/sensible-manual-autostart.desktop" \

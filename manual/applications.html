@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Everyday Applications — Sensible Manual</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to main content</a>
+  <div class="app-container">
+    <aside class="sidebar" aria-label="Documentation Navigation">
+      <div class="brand"><div class="brand-title">Sensible</div><div class="brand-subtitle">Offline Manual · Applications</div></div>
+      <nav aria-label="Chapters and contents">
+        <ul class="nav-list">
+          <li><a class="nav-link" href="index.html">Installation &amp; desktop guide</a></li>
+          <li><a class="nav-link" href="applications.html" aria-current="page">Everyday applications</a></li>
+          <li><a class="nav-link" href="terminal-tools.html">Terminal tools &amp; recipes</a></li>
+          <li><a class="nav-link" href="#selection">Why this selection?</a></li>
+          <li><a class="nav-link" href="#browsers">Browsers &amp; communication</a></li>
+          <li><a class="nav-link" href="#productivity">Documents &amp; passwords</a></li>
+          <li><a class="nav-link" href="#media">Media &amp; editing</a></li>
+          <li><a class="nav-link" href="#gnome">GNOME utilities</a></li>
+          <li><a class="nav-link" href="#kde">KDE utilities</a></li>
+          <li><a class="nav-link" href="#support">Software, archives &amp; fonts</a></li>
+        </ul>
+      </nav>
+    </aside>
+    <div class="content-wrapper"><main id="main" class="content-main" tabindex="-1">
+      <header><h1>Everyday applications</h1><p>What each app adds, and something useful to try first. Open graphical apps by searching for their names in the desktop application menu.</p></header>
+      <section id="selection">
+        <h2>Why this selection?</h2>
+        <p>The baseline covers browsing, documents, mail, passwords, media and files without an immediate trip to an app store. Debian packages keep these tools on the same update path as the operating system. Native GNOME or KDE utilities handle smaller everyday tasks; the shared apps give both editions a familiar core.</p>
+        <p>These are reasons to provide the tools, not a claim that each is the only good choice. Use the ones that fit your workflow. Installation and this guide work offline; websites, mail delivery, account setup, software downloads and some editor plugins require a connection.</p>
+        <p>This chapter describes the current ISO package lists, not the future desktop wishlist. Shotwell, LocalSend and the planned GNOME extension collection are not yet part of this baseline.</p>
+      </section>
+      <section id="browsers">
+        <h2>Browsers &amp; communication · both editions</h2>
+        <article id="firefox" data-packages="firefox-esr"><h3>Firefox ESR</h3>
+          <p><strong>Why included:</strong> a general-purpose browser with Mozilla's extended-support release cadence. It provides an everyday browsing option alongside the Chromium engine.</p>
+          <p><strong>Start here:</strong> press <kbd>Ctrl</kbd> + <kbd>L</kbd> to enter an address or search, and <kbd>Ctrl</kbd> + <kbd>D</kbd> to bookmark the page. Use the bookmark menu for regularly used sites. Local HTML files, including this manual, can be read offline.</p>
+        </article>
+        <article id="chromium" data-packages="chromium"><h3>Chromium</h3>
+          <p><strong>Why included:</strong> a second browser engine for sites or development work that behave differently in Firefox. It is not a requirement to use two browsers.</p>
+          <p><strong>Start here:</strong> try a troublesome site in Chromium before changing system settings. Keep bookmarks and sign-ins separate unless you deliberately import them; installing Chromium does not set up Google Chrome account synchronization.</p>
+        </article>
+        <article id="thunderbird" data-packages="thunderbird"><h3>Thunderbird</h3>
+          <p><strong>Why included:</strong> desktop email that can bring several accounts into one interface and retain downloaded messages for offline reading.</p>
+          <p><strong>Start here:</strong> add an existing email account and follow your provider's sign-in instructions. Check offline/synchronization settings before travelling: an account being visible does not mean every message body has been downloaded. Sending and receiving need a connection.</p>
+        </article>
+      </section>
+      <section id="productivity">
+        <h2>Documents &amp; passwords · both editions</h2>
+        <article id="writer" data-packages="libreoffice-writer"><h3>LibreOffice Writer</h3>
+          <p><strong>Why included:</strong> letters, reports and other formatted documents without a cloud account.</p>
+          <p><strong>Start here:</strong> create a document, apply heading styles instead of manually enlarging headings, and save an editable <code>.odt</code> copy. Export a PDF when the recipient only needs to read or print it. Review layout after exchanging Microsoft Office files.</p>
+        </article>
+        <article id="calc" data-packages="libreoffice-calc"><h3>LibreOffice Calc</h3>
+          <p><strong>Why included:</strong> budgets, lists, calculations and small data tables.</p>
+          <p><strong>Start here:</strong> enter numbers in cells A1 through A5, then enter <code>=SUM(A1:A5)</code> in A6. Save as <code>.ods</code> to retain formulas and formatting; CSV is a plain table format, not a full workbook.</p>
+        </article>
+        <article id="impress" data-packages="libreoffice-impress"><h3>LibreOffice Impress</h3>
+          <p><strong>Why included:</strong> preparing and presenting slide decks offline.</p>
+          <p><strong>Start here:</strong> choose a slide layout, add a title and a few points, then start the slideshow with <kbd>F5</kbd>. Keep the editable <code>.odp</code> file and export a PDF handout. Test imported presentations and external displays before presenting.</p>
+        </article>
+        <article id="keepassxc" data-packages="keepassxc"><h3>KeePassXC</h3>
+          <p><strong>Why included:</strong> a local encrypted password database that does not require a hosted service.</p>
+          <p><strong>Start here:</strong> create a database, choose a strong master passphrase and add one entry using the password generator. Back up the <code>.kdbx</code> file and keep the passphrase recoverable by you: losing it can mean losing access to the database. Browser integration and synchronization need separate setup; neither is configured automatically.</p>
+        </article>
+      </section>
+      <section id="media">
+        <h2>Media &amp; editing · both editions</h2>
+        <article id="vlc" data-packages="vlc"><h3>VLC</h3>
+          <p><strong>Why included:</strong> one player for many local audio and video formats, with subtitle support.</p>
+          <p><strong>Start here:</strong> drag a video into the window, press <kbd>Space</kbd> to pause, and choose a subtitle file from the Subtitle menu if needed. Local media works offline; streaming addresses need a network connection.</p>
+        </article>
+        <article id="neovim" data-packages="neovim"><h3>Neovim &amp; the LazyVim starter</h3>
+          <p><strong>Why included:</strong> a keyboard-driven editor for code and configuration, also usable in a terminal without a desktop.</p>
+          <p><strong>Start here:</strong> run <code>nvim notes.txt</code>. Press <kbd>i</kbd> to type, then <kbd>Esc</kbd>, type <code>:wq</code> and press Enter to save and quit. <code>:q!</code> quits without saving your changes.</p>
+          <p>The supplied LazyVim starter needs internet for its initial plugin downloads. For a basic editor session without loading that configuration, run <code>nvim --clean notes.txt</code>. Run <code>nvim --clean</code> and enter <code>:Tutor</code> for the built-in lesson.</p>
+        </article>
+      </section>
+      <section id="gnome">
+        <h2>GNOME utilities · GNOME image only</h2>
+        <article id="file-roller" data-packages="file-roller"><h3>File Roller (Archive Manager)</h3><p><strong>Why included:</strong> browsing and unpacking archives without memorizing commands. <strong>Try:</strong> open a ZIP, inspect its contents, then extract into a new folder so existing files are not accidentally overwritten. Creating an archive is also available through the file manager's compression action.</p></article>
+        <article id="amberol" data-packages="amberol"><h3>Amberol</h3><p><strong>Why included:</strong> a small, focused local music player alongside VLC's broader media support. <strong>Try:</strong> add a music folder and use the queue to choose what plays next. It does not provide a streaming-service account or catalog.</p></article>
+        <article id="simple-scan" data-packages="simple-scan"><h3>Document Scanner (Simple Scan)</h3><p><strong>Why included:</strong> a straightforward route from paper to a PDF or image. <strong>Try:</strong> select a supported scanner, scan a page, crop or rotate it, and save. Scanning creates an image; searchable text requires a separate OCR workflow.</p></article>
+      </section>
+      <section id="kde">
+        <h2>KDE utilities · KDE image only</h2>
+        <article id="okular" data-packages="okular"><h3>Okular</h3><p><strong>Why included:</strong> a document/PDF reader with annotation tools. <strong>Try:</strong> search a PDF with <kbd>Ctrl</kbd> + <kbd>F</kbd>, add a highlight using the annotation tools, and save a copy. Reopen that copy to check annotations are retained before sharing it.</p></article>
+        <article id="ark" data-packages="ark"><h3>Ark</h3><p><strong>Why included:</strong> Plasma's native archive manager. <strong>Try:</strong> open an archive to inspect its file list, then extract into a new directory. Do not run unfamiliar programs just because they arrived inside an archive.</p></article>
+        <article id="gwenview" data-packages="gwenview"><h3>Gwenview</h3><p><strong>Why included:</strong> quick image viewing and simple adjustments without launching a photo-library manager. <strong>Try:</strong> open a photo folder, step through images and rotate a sideways photo. Save a copy when preserving the original matters.</p></article>
+        <article id="kate" data-packages="kate"><h3>Kate</h3><p><strong>Why included:</strong> a graphical text/code editor for people who prefer tabs and menus to Neovim's modes. <strong>Try:</strong> open two text files in tabs, search with <kbd>Ctrl</kbd> + <kbd>F</kbd>, and save with <kbd>Ctrl</kbd> + <kbd>S</kbd>. Use Writer, not Kate, for rich-text documents.</p></article>
+        <article id="kcalc" data-packages="kcalc"><h3>KCalc</h3><p><strong>Why included:</strong> fast calculations without creating a spreadsheet. <strong>Try:</strong> enter a calculation such as <code>125 * 1.2</code>; use the scientific mode for advanced functions. Use Calc when you need to retain a table of calculations.</p></article>
+        <article id="spectacle" data-packages="kde-spectacle"><h3>Spectacle</h3><p><strong>Why included:</strong> screenshots of a region, window or screen. <strong>Try:</strong> launch Spectacle, choose a rectangular region, capture it and save the image or copy it to the clipboard. Check for passwords and private notifications before sharing. This baseline does not add the planned OCR/Lens companion.</p></article>
+        <article id="elisa" data-packages="elisa"><h3>Elisa</h3><p><strong>Why included:</strong> a music-library player integrated with Plasma. <strong>Try:</strong> point its music-location settings at your local collection, browse albums and create a playlist. VLC remains useful for video and one-off media files.</p></article>
+        <article id="skanlite" data-packages="skanlite"><h3>Skanlite</h3><p><strong>Why included:</strong> a lightweight graphical scanning tool. <strong>Try:</strong> select a supported scanner, preview the page, select the scan area and save the resulting image. OCR and document organization are separate tasks.</p></article>
+      </section>
+      <section id="support">
+        <h2>Software, archives &amp; fonts</h2>
+        <article id="flatpak" data-packages="flatpak"><h3>Flatpak &amp; desktop stores</h3>
+          <p><strong>Why included:</strong> another application distribution route, integrated with GNOME Software or KDE Discover. It supplements APT; it does not replace Debian's system updates.</p>
+          <p><strong>Try:</strong> <code>flatpak list</code> lists installed Flatpak apps/runtimes and <code>flatpak remotes</code> shows configured sources. The base ISO does not configure Flathub or install Flatpak apps. Follow <a href="index.html#installing-software">repository setup</a> when online; <code>flatpak update</code> then checks for and offers Flatpak updates. Review an app's permissions rather than assuming every sandbox provides the same access limits. <a href="https://docs.flatpak.org/en/latest/using-flatpak.html">Upstream reference</a>.</p>
+        </article>
+        <article id="archives" data-packages="7zip unzip zip"><h3>7-Zip, unzip &amp; zip</h3>
+          <p><strong>Why included:</strong> compatible archive handling for downloaded files and sharing bundles, also supporting desktop archive managers. Compression alone is not encryption or a backup policy.</p>
+          <p><strong>Try:</strong> inspect before extracting; replace the example filenames with your own. The extraction commands below create files, so use a new destination.</p>
+          <pre><code># List a ZIP; then extract into a new folder
+unzip -l photos.zip
+unzip photos.zip -d unpacked-photos
+
+# Create a ZIP containing a folder (does not delete the source)
+zip -r notes.zip notes/
+
+# Debian's 7zip package provides 7zz
+7zz l bundle.7z
+7zz x bundle.7z -ounpacked-bundle</code></pre>
+          <p><a href="https://manpages.debian.org/testing/7zip/7zz.1.en.html">Debian 7zz command reference</a>.</p>
+        </article>
+        <article id="fonts" data-packages="fonts-noto-core fonts-noto-color-emoji fonts-liberation"><h3>Noto, Noto Color Emoji &amp; Liberation fonts</h3>
+          <p><strong>Why included:</strong> Noto broadens language/script coverage, Noto Color Emoji supplies emoji glyphs, and Liberation helps documents using common office-font metrics retain familiar layout.</p>
+          <p><strong>Try:</strong> select a Noto or Liberation family in Writer's font selector and inspect a document containing your language's characters. Font substitution can still change layout; check the exported PDF.</p>
+          <p>The image also stages JetBrainsMono Nerd Font for terminal symbols. Choose it in your terminal profile if prompt icons appear as boxes. Fonts are resources, not separate apps to launch.</p>
+        </article>
+        <p>For search, navigation, system inspection, Git, downloads and the supporting <code>sudo</code>/<code>ca-certificates</code> packages, continue to <a href="terminal-tools.html">Terminal tools &amp; recipes</a>.</p>
+      </section>
+      <footer><p><a href="index.html">Back to the main guide</a> · <a href="terminal-tools.html">Next: Terminal tools &amp; recipes</a></p></footer>
+    </main></div>
+  </div>
+</body>
+</html>

@@ -186,6 +186,26 @@ summary:focus-visible {
   background-color: var(--bg-surface);
 }
 
+.nav-link[aria-current="page"] {
+  background-color: var(--brand-amber-bg);
+  color: var(--brand-amber-dark);
+  font-weight: 700;
+}
+
+/* Long command names and paths must not widen a narrow reading viewport. */
+p, li, td {
+  overflow-wrap: anywhere;
+}
+
+p code, li code, td code {
+  display: inline-block;
+  max-width: 100%;
+}
+
+section, article {
+  scroll-margin-top: 1.5rem;
+}
+
 /* Content Area */
 .content-wrapper {
   flex: 1;

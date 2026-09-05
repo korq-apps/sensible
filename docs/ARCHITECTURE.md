@@ -240,6 +240,10 @@ autostart entry; a failed dispatch retries next login. No global live-session
 autostart or first-login downloads are added. The permanent launcher ignores
 the marker. Actual GNOME/KDE session launch remains a real-desktop test gate.
 
+The local manual has a main setup/recovery guide and linked application and
+terminal-tool chapters. Every chapter is staged and required by the pre-wipe
+payload check; tests validate local links and documented default-package coverage.
+
 ### Planned desktop profiles
 
 The next desktop milestone is specified in

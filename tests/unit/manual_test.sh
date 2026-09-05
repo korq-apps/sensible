@@ -53,6 +53,13 @@ done < <(grep -o 'href="#[a-zA-Z0-9_-]*"' "${REPO_ROOT}/manual/index.html" | sed
 assert_contains "CSS includes focus-visible styling" "${manual_css}" ":focus-visible"
 assert_contains "CSS includes dark mode media query" "${manual_css}" "prefers-color-scheme: dark"
 
+t_section "Multi-page links and shipped-app coverage"
+if python3 "${REPO_ROOT}/tests/lib/check_manual.py" "${REPO_ROOT}/manual" "$REPO_ROOT"; then
+    t_ok
+else
+    t_fail "manual links and app coverage" "chapter validation failed"
+fi
+
 t_section "Desktop launcher and autostart packaging files"
 assert_file_exists "permanent launcher desktop file exists" "${REPO_ROOT}/packaging/manual/sensible-manual.desktop"
 assert_file_exists "autostart template desktop file exists" "${REPO_ROOT}/packaging/manual/sensible-manual-autostart.desktop"
@@ -237,6 +244,18 @@ assert_contains "native build uses shared staging" "${native_build}" 'bash "${RE
 rc=0
 require_manual_payload "$MNT" || rc=$?
 assert_rc "shared staging produces complete payload" 0 "$rc"
+if python3 "${REPO_ROOT}/tests/lib/check_manual.py" "${MNT}/usr/share/sensible/manual" "$REPO_ROOT"; then
+    t_ok
+else
+    t_fail "staged manual links and app coverage" "chapter validation failed"
+fi
+for chapter in applications.html terminal-tools.html; do
+    mv "${MNT}/usr/share/sensible/manual/${chapter}" "${TMP_DIR}/${chapter}"
+    rc=0
+    require_manual_payload "$MNT" >/dev/null 2>&1 || rc=$?
+    assert_rc "missing ${chapter} rejected by payload check" 1 "$rc"
+    mv "${TMP_DIR}/${chapter}" "${MNT}/usr/share/sensible/manual/${chapter}"
+done
 assert_eq "staged opener is executable" 755 "$(stat -c %a "${MNT}/usr/local/bin/sensible-manual")"
 assert_eq "staged HTML is readable" 644 "$(stat -c %a "${MNT}/usr/share/sensible/manual/index.html")"
 assert_file_not_exists "staging cannot autostart in live session" "${MNT}/etc/xdg/autostart/sensible-manual.desktop"

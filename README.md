@@ -62,6 +62,9 @@ extensions and native KDE equivalents are recorded in the
 `sensible-manual`. The [local HTML manual](manual/index.html) opens on the
 installed user's first desktop login; failed launches retry next login. It
 needs no internet connection and remains available from the menu afterward.
+Its linked chapters explain [everyday application choices](manual/applications.html)
+and give [terminal-tool recipes](manual/terminal-tools.html), including the
+distinction between finding filenames, searching contents and filtering lists.
 
 **Not currently offered by the offline installer:** Brave, Audacious, and Flathub remote setup. Install additional applications after first boot; commercial applications belong on Flathub rather than in the base image.
 
