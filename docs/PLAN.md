@@ -116,6 +116,11 @@ below, not an optional follow-up.
 - [ ] Implement the agreed [desktop profiles](DESKTOP_PROFILES.md): Shotwell /
       digiKam, LocalSend, GNOME extensions, native KDE equivalents and reviewed
       defaults. Keep optional theme and backup choices distinct from shipped scope.
+  - [x] Application/dependency configuration: photo tools, pinned LocalSend,
+        phone integration, management tools, explicit runtime deps and sharing rules.
+  - [ ] Build both images; test offline app startup and actual discovery/transfer
+        with UFW enabled. Record image size/build-time impact before release.
+  - [ ] Curated extension activation, remaining extensions and desktop defaults.
 - [x] Offline HTML manual, permanent menu launcher, and per-user first-login
       autostart, shared by both build paths; unit and mocked installer tests.
 - [ ] Validate first-login opening and subsequent-login suppression on real
@@ -182,7 +187,7 @@ and the package gate proves it resolves), anything third-party or optional
 moves to the **post-install tool**, and the checkbox questions disappear
 because the answer is decided when the image is built.
 
-The newer [desktop profile plan](DESKTOP_PROFILES.md) proposes an explicit
+The newer [desktop profile plan](DESKTOP_PROFILES.md) establishes an explicit
 exception for approved default applications/extensions sourced upstream: they
 may be pinned, verified and baked at build time. This does not add downloads
 to installation or first login; unselected optional software stays post-install.
@@ -195,10 +200,10 @@ Architecture/spec sections mark them **(planned — post-install tool)**.
 **Bake into the ISO** (Debian packages, no question asked):
 
 - [x] Fingerprint login: `fprintd` + `libpam-fprintd` (Debian main; enrollment via GNOME/KDE settings, dormant without a reader). Already unconditional, so it simply joins the variant package list
-- [x] oh-my-bash for all users: pinned clone → `/usr/share/oh-my-bash`, `configs/omb-bashrc` → `/etc/skel/.bashrc` (wires zoxide/fzf/`batcat`/`fdfind`/eza). **Offline:** fetched during the ISO build, not the install, so the pin is verified once on our machine; `/etc/skel` is populated in the image, which also removes the `useradd -m` ordering problem the network design had. `scripts/fetch-pins.sh` + `live/pins.env`
+- [x] oh-my-bash for all users: pinned clone → `/usr/share/oh-my-bash`, `configs/omb-bashrc` → `/etc/skel/.bashrc` (uses the verified `powerline-multiline` theme and wires zoxide/fzf/`batcat`/`fdfind`/eza). Debian's `fonts-powerline` and the pinned Nerd Font provide prompt symbols. **Offline:** fetched during the ISO build, not the install, so the pin is verified once on our machine; `/etc/skel` is populated in the image, which also removes the `useradd -m` ordering problem the network design had. `scripts/fetch-pins.sh` + `live/pins.env`
 - [x] JetBrainsMono Nerd Font: pinned nerd-fonts release + SHA256 (Debian packages none). **Offline:** downloaded and checksummed at ISO build time by `scripts/fetch-pins.sh`; a rotted pin fails our build instead of a user's install. Only the four standard-spacing faces are baked, to keep the ISO small
 - [x] git defaults: `configs/gitconfig` → `/etc/gitconfig` in the image. The installer still offers optional name/email for the user's `~/.gitconfig`; dropping those prompts is deferred to the first-boot/UI pass
-- [x] `ufw` enabled, deny incoming / allow outgoing (config-file enable, never `ufw enable` in chroot); KDE Connect ports 1714–1764 tcp/udp allowed on KDE — `live/config/hooks/live/0300-ufw.hook.chroot`
+- [x] `ufw` enabled, deny incoming / allow outgoing (config-file enable, never `ufw enable` in chroot); both editions allow TCP/UDP 53317 for LocalSend and TCP/UDP 1714–1764 for GSConnect/KDE Connect. Debian's IPv6-enabled defaults generate IPv4/IPv6 rules across interfaces and source addresses, not only trusted networks — `live/config/hooks/live/0300-ufw.hook.chroot`
 - [x] Printing/scanning: `cups` + `ipp-usb` + `sane-airscan`; `simple-scan` (GNOME) / `skanlite` (KDE)
 
 **Move to the post-install tool** (`sensible-apps`, online, after first boot):
@@ -282,7 +287,20 @@ Worth taking, not yet taken:
 
 ## Later (not v1)
 
-- Snapper on Btrfs (`@swap` already keeps the swapfile out of snapshot sets) + `grub-btrfs` boot-menu rollback
+- **Separate follow-up after desktop apps: Btrfs snapshots and recovery.**
+  Configure Snapper only when Btrfs is selected; leave Ext4 unchanged. Reuse the
+  existing mounted `@snapshots` layout safely rather than blindly running
+  `snapper create-config /` over `/.snapshots`. Include snapshot creation policy
+  (timeline and/or APT hooks), cleanup/retention limits and a tested first baseline.
+  Evaluate pinned, build-time `grub-btrfs` integration separately from permanent
+  restoration: booting a snapshot is not itself a rollback. Resolve the explicit
+  `subvol=@` mount, separate ext4 `/boot` and kernel/module consistency, encrypted
+  root discovery (LUKS2 Argon2id), read-only boot writability and Secure Boot before
+  documenting a recovery command. Do not advertise `snapper rollback` plus
+  `update-grub` as sufficient for this layout. Require installed-disk reboot and
+  restore evidence with LUKS on/off. Home, logs and swap are separate subvolumes;
+  root snapshots do not replace personal-file backups. No target-time source
+  cloning/builds or snapshot tooling added by the current desktop-app slice.
 - TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis + `clevis-initramfs`); with biometrics this completes the Windows Hello flow — PCR policy must account for the unencrypted `/boot`, and Secure Boot in v1 strengthens the measurements
 - FIDO2 hardware keys for sudo/polkit (`libpam-u2f`, enrollment via `pamu2fcfg`)
 - GUI NVIDIA/MOK enrollment (unsigned NVIDIA module is rejected under Secure Boot lockdown)

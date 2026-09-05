@@ -214,7 +214,9 @@ Keep this list the single source of truth. README and the installer spec should 
 
 `sudo`, `locales`, `keyboard-configuration`, `console-setup`, NetworkManager, `fwupd`, Flatpak, fonts (`fonts-noto-core`, `fonts-noto-color-emoji`, `fonts-liberation`), `git`, `curl`, `ca-certificates`.
 
-JetBrainsMono Nerd Font from a pinned nerd-fonts release (Debian packages no Nerd Fonts; LazyVim and the fancier prompt themes want one), and `ufw` enabled with default deny incoming / allow outgoing — on KDE, ports 1714–1764 tcp/udp are allowed so KDE Connect keeps working (a silent-breakage trap otherwise). Both are baked at build time: the font by `scripts/fetch-pins.sh` (pin + SHA256 in `live/pins.env`), `ufw` by `live/config/hooks/live/0300-ufw.hook.chroot`, which writes allow rules while ufw is still disabled and flips `ENABLED=yes` in `/etc/ufw/ufw.conf` — never `ufw enable` in a chroot.
+The default interactive shell uses Oh My Bash's `powerline-multiline` theme. Debian's `fonts-powerline` supplies separator glyphs; JetBrainsMono Nerd Font comes from a pinned nerd-fonts release for the prompt and LazyVim's broader icon set. The build verifies that the pinned Oh My Bash archive still contains the configured theme. UFW defaults to deny incoming / allow outgoing, with TCP/UDP 1714–1764 for GSConnect/KDE Connect and TCP/UDP 53317 for LocalSend on both editions. With Debian's IPv6-enabled UFW defaults these cover IPv4 and IPv6, across all interfaces/source addresses rather than only trusted networks. The manual documents that exposure. The Nerd Font is baked by `scripts/fetch-pins.sh` (pin + SHA256 in `live/pins.env`); the UFW hook writes rules while UFW is still disabled and flips `ENABLED=yes` in `/etc/ufw/ufw.conf` — never `ufw enable` in a chroot.
+
+The desktop-app slice adds Shotwell, Extension Manager, Tweaks and packaged GSConnect/AppIndicator support on GNOME; digiKam, KDE Connect and Plasma System Monitor on KDE. GNOME extension activation and profile defaults remain separate. Both editions gain LocalSend: its official amd64 `.deb` and license are pinned/verified during the build, then live-build's local package repository resolves dependencies. A chroot hook checks the installed version and assets. This adds no install-time download or external APT source. LocalSend updates require a reviewed upstream package; ordinary Debian updates do not update it. See [desktop profiles](DESKTOP_PROFILES.md) for provenance, maintenance and pending real-session acceptance.
 
 ### Default apps
 
@@ -294,6 +296,6 @@ Steam, Slack, WhatsApp, Zoom, Discord, Spotify, Snapd, any SaaS “default clien
 
 **Planned (post-install tool):** developer tools and BioPass (§5, §7). `--config` unattended installs are release-test infrastructure (PLAN.md).
 
-**Later:** Btrfs Snapper (+ `grub-btrfs` boot-menu rollback), TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis; PCR policy must account for the unencrypted `/boot`), FIDO2 keys for sudo/polkit (`libpam-u2f`), GUI NVIDIA/MOK enrollment flow, Calamares if someone wants a GUI, other arches.
+**Later:** Btrfs Snapper and evaluated `grub-btrfs` recovery integration (a separate follow-up after desktop apps; see the layout/restore acceptance requirements in [PLAN.md](PLAN.md)), TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis; PCR policy must account for the unencrypted `/boot`), FIDO2 keys for sudo/polkit (`libpam-u2f`), GUI NVIDIA/MOK enrollment flow, Calamares if someone wants a GUI, other arches.
 
 **Never (Sensible):** LVM as the guided path, dual-DE live ISO, shipping commercial apps, pretending this is not Debian.

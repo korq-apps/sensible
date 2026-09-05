@@ -35,6 +35,7 @@ install_default_apps() {
         fonts-noto-core
         fonts-noto-color-emoji
         fonts-liberation
+        fonts-powerline
     )
 
     DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y --no-install-recommends "${pkgs[@]}"

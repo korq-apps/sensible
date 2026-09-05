@@ -1,8 +1,10 @@
 # Desktop profiles: GNOME and KDE
 
-Status: agreed scope for the next desktop milestone; **not implemented**.
-Recorded 2026-09-05, after installer PR #3 was merged. This document describes
-additions to the current package lists, not software already present in an ISO.
+Status: **application/dependency slice implemented in image configuration;
+full-image and real-session acceptance pending**. Extension activation, further
+extensions, native profile defaults and appearance remain planned.
+Recorded 2026-09-05, after installer PR #3 was merged. A configured package list
+is not evidence that an already published ISO contains these additions.
 
 ## Intent
 
@@ -57,7 +59,8 @@ backup jobs without a user-selected destination.
    selected application or extension with the required compatibility.
 2. When an agreed default is unavailable there, evaluate a pinned upstream
    release with a verified checksum and redistribution license. LocalSend's
-   upstream `.deb` is a candidate; non-Debian GNOME extensions need the same
+   official 1.18.2 amd64 `.deb` (control version `1.18.2+64`, Apache-2.0) is
+   pinned in `live/pins.env`; non-Debian GNOME extensions need the same
    provenance and compatibility checks.
 3. Fetch and stage approved artifacts **during the ISO build**, never during
    installation or first login. Build failure is preferable to silently
@@ -69,10 +72,29 @@ backup jobs without a user-selected destination.
    `sensible-apps` workflow. A default being sourced upstream does not imply
    that its installation must require the target machine to be online.
 
-This is a planned, explicit exception to the earlier broad statement that all
+This is an explicit exception to the earlier broad statement that all
 third-party applications are post-install only: approved default artifacts may
-be included after build-time review. It does not change the current image or
-authorize arbitrary upstream applications. Commercial clients remain excluded.
+be included after build-time review. It does not authorize arbitrary upstream
+applications. Commercial clients remain excluded.
+
+LocalSend is checksum/identity-checked by `scripts/fetch-pins.sh` and placed in
+`config/packages.chroot/localsend_amd64.deb`. live-build's local APT repository
+installs it with dependency resolution; a chroot hook requires the pinned version,
+launcher and license. Upstream's bundled third-party notices are retained. Both
+build paths use this mechanism. No external APT repository, autostart preference
+or automatic transfer acceptance is added. Refresh the version, control version,
+package checksum and license checksum together after reviewing a release; rerun
+dependency/runtime checks and both image builds. Existing installations need a
+reviewed upstream package update; Debian upgrades do not update this pin.
+
+GSConnect recommendations are explicit rather than relying only on APT policy:
+SSHFS, Nautilus Python integration, the relevant GI bindings and Folks EDS backend.
+The live image currently enables recommends; the builder toolchain does not.
+GSConnect and AppIndicator are packaged, not added to the enabled-extension list
+in this slice. GNOME uses GSConnect; KDE uses KDE Connect. Both editions gain
+TCP/UDP 53317 and 1714–1764 UFW rules (IPv4/IPv6 with Debian defaults). These
+rules are not restricted to a trusted-network profile; the manual explains the
+exposure. Real-device discovery, pairing and transfer remain acceptance checks.
 
 ### Integrations that belong in the implementation
 
@@ -130,6 +152,28 @@ each profile change is implemented and validated.
 
 Each change updates the manual and the actual-current-state documentation.
 Do not advertise planned features as shipped while this checklist is open.
+
+### Application-slice validation (2026-09-05)
+
+- All 14 local suites pass, including real staging-script tests with tiny pinned
+  fixtures and mocked package metadata/firewall commands, and manual coverage.
+- Each complete edition package set plus the real LocalSend `.deb` resolves in a
+  disposable Debian Testing APT simulation with recommends enabled.
+- Real pinned artifacts stage successfully for both editions from verified cache
+  with download attempts forbidden; LocalSend identity is `localsend`, amd64,
+  `1.18.2+64`. These are builder-side checks, not installed-disk acceptance.
+- LocalSend starts and reports its HTTPS listener under Xvfb in a minimal Debian
+  container after explicitly installing GTK, Secret Service, EGL/OpenGL ES and
+  Mesa support. It stays running until the test timeout. Missing system-bus,
+  NetworkManager and portal services in that fixture prevent treating it as a
+  complete desktop/network test.
+- The real UFW hook succeeds for both editions in a disposable container with a
+  private network namespace and NET_ADMIN for netfilter inspection. Generated
+  `user.rules` and `user6.rules` contain both TCP/UDP port sets. This checks rule
+  generation, not discovery or packet delivery between real devices.
+- Full ISO builds, offline real-session startup, file dialogs/tray behavior,
+  phone pairing, IPv4/IPv6 transfers, and before/after image/resource costs remain
+  unchecked release evidence. The tests do not mark the broader milestone done.
 
 ## Acceptance checklist
 

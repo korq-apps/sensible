@@ -54,9 +54,16 @@ The live ISO does **not** ship both desktops. Choose the GNOME or KDE release as
 
 **Default apps:** Firefox ESR and Chromium; LibreOffice Writer, Calc, and Impress; Thunderbird; KeePassXC; VLC; Neovim (LazyVim starter in `/etc/skel`); archive support; and modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`). GNOME adds File Roller and Amberol; KDE adds Okular, Ark, Gwenview, Kate, KCalc, Spectacle, and Elisa. Flatpak and the desktop store integration are ready for use after installation.
 
-**Planned desktop additions:** photo management, LocalSend, curated GNOME
-extensions and native KDE equivalents are recorded in the
-[desktop profile plan](docs/DESKTOP_PROFILES.md). These are not yet shipped.
+**Desktop app additions (image configuration):** Shotwell, Extension Manager,
+Tweaks and packaged GSConnect/AppIndicator support on GNOME; digiKam, KDE Connect
+and Plasma System Monitor on KDE; pinned LocalSend on both. LocalSend is staged
+at build time with its runtime dependencies, not downloaded by the installer.
+Its updates require a separately reviewed upstream package, not ordinary Debian
+updates. Sharing-port exceptions are configured on both editions; see the
+[manual](manual/applications.html#sharing-firewall) for their network exposure.
+Curated GNOME extension activation, further extensions, widgets and themes remain
+in the [desktop profile plan](docs/DESKTOP_PROFILES.md). Full-image and real-session
+acceptance for the app additions is still pending.
 
 **Offline help:** open **Sensible Manual** from the application menu or run
 `sensible-manual`. The [local HTML manual](manual/index.html) opens on the
@@ -70,7 +77,7 @@ distinction between finding filenames, searching contents and filtering lists.
 
 **Not currently offered:** AI CLIs. If added later, they will be optional and use pinned artifacts rather than `curl | sh` from the ISO.
 
-**Included, no question asked:** fingerprint login (`fprintd`, dormant without a reader), oh-my-bash for all users with a sensible `.bashrc`, system-wide git defaults, JetBrainsMono Nerd Font, `ufw` firewall (deny incoming / allow outgoing, KDE Connect-aware), and printing/scanning (CUPS driverless + `sane-airscan`) — all baked into the image at build time.
+**Included, no question asked:** fingerprint login (`fprintd`, dormant without a reader), oh-my-bash for all users with a two-line Powerline prompt, system-wide git defaults, Powerline symbols and JetBrainsMono Nerd Font, `ufw` firewall (deny incoming / allow outgoing, KDE Connect-aware), and printing/scanning (CUPS driverless + `sane-airscan`) — all baked into the image at build time.
 
 **Planned ([Phase 6](docs/PLAN.md#phase-6--sensible-extras-re-scoped-for-offline), post-install tool):** BioPass face login (pinned `.deb`), developer-tools checkbox (Docker + Compose, `lazygit`, `gh`), and unattended `--config` installs.
 

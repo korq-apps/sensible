@@ -11,7 +11,7 @@ case $- in *i*) ;; *) return ;; esac
 # --- oh-my-bash -------------------------------------------------------------
 export OSH=/usr/share/oh-my-bash
 
-OSH_THEME="font"            # renders with any font; Nerd Font themes are opt-in
+OSH_THEME="powerline-multiline"
 DISABLE_AUTO_UPDATE="true"  # /usr/share is root-owned; updates ship with the OS
 
 completions=(git ssh)

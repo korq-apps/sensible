@@ -19,6 +19,27 @@ neovim
 simple-scan
 file-roller
 amberol
+shotwell
+gnome-shell-extension-manager
+gnome-tweaks
+
+# Phone/tray integration is packaged here; curated activation is a later slice.
+gnome-shell-extension-gsconnect
+gnome-shell-extension-appindicator
+# Keep GSConnect's integration recommendations explicit and reviewable.
+sshfs
+python3-nautilus
+gir1.2-atspi-2.0
+gir1.2-folks-0.7
+gir1.2-goa-1.0
+gir1.2-gsound-1.0
+gir1.2-pango-1.0
+gir1.2-upowerglib-1.0
+libfolks-eds26
+
+# LocalSend file selection through the native desktop portal.
+xdg-desktop-portal-gnome
+xdg-desktop-portal-gtk
 
 # Boot stack the installer needs on the target and cannot download
 grub-efi-amd64

@@ -15,6 +15,7 @@
 #   /usr/local/share/fonts/jetbrains-mono-nerd   pinned JetBrainsMono Nerd Font
 #   /etc/gitconfig                 configs/gitconfig (system-wide defaults)
 #   /etc/keyd/default.conf         GNOME variant only
+#   config/packages.chroot/localsend_amd64.deb   local APT input for both editions
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -55,6 +56,10 @@ rm -rf "${OMB_DEST:?}"
 mkdir -p "${OMB_DEST}"
 tar -xzf "${OMB_TARBALL}" -C "${OMB_DEST}" --strip-components=1
 rm -rf "${OMB_DEST}/.github"
+if [ ! -s "${OMB_DEST}/themes/powerline-multiline/powerline-multiline.theme.sh" ]; then
+    echo "Error: pinned oh-my-bash archive lacks the configured powerline-multiline theme." >&2
+    exit 1
+fi
 
 mkdir -p "${CHROOT}/etc/skel"
 install -m 0644 "${REPO_ROOT}/configs/omb-bashrc" "${CHROOT}/etc/skel/.bashrc"
@@ -98,4 +103,26 @@ if [ "${SENSIBLE_VARIANT:-gnome}" = "gnome" ]; then
     install -m 0644 "${REPO_ROOT}/configs/keyd-default.conf" "${KEYD_DEST}/default.conf"
 fi
 
-echo "==> Pins staged: oh-my-bash, skel defaults, Nerd Font, git, keyd (${SENSIBLE_VARIANT:-gnome})"
+# --- LocalSend: install through live-build's local APT repository ------------
+# A stable, architecture-suffixed filename avoids stale versions accumulating
+# when a pin changes. live-build discovers this .deb and resolves its Depends.
+LOCALSEND_DEB="${CACHE}/LocalSend-${LOCALSEND_VERSION}-linux-x86-64.deb"
+fetch_verified \
+    "https://github.com/localsend/localsend/releases/download/v${LOCALSEND_VERSION}/LocalSend-${LOCALSEND_VERSION}-linux-x86-64.deb" \
+    "${LOCALSEND_DEB}" "${LOCALSEND_DEB_SHA256}" "LocalSend"
+if [ "$(dpkg-deb -f "${LOCALSEND_DEB}" Package)" != localsend ] \
+    || [ "$(dpkg-deb -f "${LOCALSEND_DEB}" Version)" != "${LOCALSEND_DEB_VERSION}" ] \
+    || [ "$(dpkg-deb -f "${LOCALSEND_DEB}" Architecture)" != amd64 ]; then
+    echo "Error: LocalSend package identity does not match its pin." >&2
+    exit 1
+fi
+install -Dm0644 "${LOCALSEND_DEB}" "${REPO_ROOT}/live/config/packages.chroot/localsend_amd64.deb"
+
+LOCALSEND_LICENSE="${CACHE}/LocalSend-${LOCALSEND_VERSION}-LICENSE"
+fetch_verified \
+    "https://raw.githubusercontent.com/localsend/localsend/v${LOCALSEND_VERSION}/LICENSE" \
+    "${LOCALSEND_LICENSE}" "${LOCALSEND_LICENSE_SHA256}" "LocalSend license"
+install -Dm0644 "${LOCALSEND_LICENSE}" "${CHROOT}/usr/share/doc/localsend/copyright"
+install -Dm0644 "${REPO_ROOT}/live/pins.env" "${CHROOT}/etc/sensible/pins.env"
+
+echo "==> Pins staged: oh-my-bash, skel defaults, Nerd Font, git, keyd, LocalSend (${SENSIBLE_VARIANT:-gnome})"

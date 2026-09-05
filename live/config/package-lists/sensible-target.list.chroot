@@ -77,9 +77,23 @@ ca-certificates
 flatpak
 # Offline manual uses the desktop URI handler on either edition.
 xdg-utils
+# Pinned LocalSend is supplied through config/packages.chroot by fetch-pins.sh.
+# Keep runtime dependencies explicit as well as the .deb dependency metadata.
+libgtk-3-0t64
+libsecret-1-0
+libegl1
+libgles2
+libegl-mesa0
+libgl1-mesa-dri
+libayatana-appindicator3-1
+gir1.2-ayatanaappindicator3-0.1
+libayatana-ido3-0.4-0
+xdg-user-dirs
+xdg-desktop-portal
 fonts-noto-core
 fonts-noto-color-emoji
 fonts-liberation
+fonts-powerline
 # dconf-cli needed for GNOME lock defaults
 dconf-cli
 
