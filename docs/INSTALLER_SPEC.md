@@ -410,13 +410,21 @@ disabled (they are only written to `/etc/ufw/user.rules`), then flips
 
 ```bash
 # 0300-ufw.hook.chroot (reads /etc/sensible/variant, staged by build.sh)
-if [ "$(cat /etc/sensible/variant)" = kde ]; then
-  ufw allow 1714:1764/tcp   # KDE Connect
+case "$(cat /etc/sensible/variant)" in
+gnome|kde)
+  ufw allow 1714:1764/tcp   # GSConnect / KDE Connect
   ufw allow 1714:1764/udp
-fi
+  ufw allow 53317/tcp       # LocalSend transfer
+  ufw allow 53317/udp       # LocalSend discovery
+  ;;
+esac
 sed -i 's/^ENABLED=no/ENABLED=yes/' /etc/ufw/ufw.conf
 systemctl enable ufw
 ```
+
+With Debian's default IPv6-enabled UFW configuration, the hook writes matching
+IPv4 and IPv6 rules. The exceptions apply across interfaces and source addresses,
+not only trusted networks; the offline manual warns users about that exposure.
 
 ### Planned — post-install tool (`sensible-apps`)
 

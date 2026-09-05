@@ -34,7 +34,7 @@ class DesktopApps(unittest.TestCase):
         return subprocess.run(["bash", str(script)], env=self.env,
                               text=True, capture_output=True)
 
-    def seed_pins(self):
+    def seed_pins(self, include_omb_theme=True):
         script = self.root / "scripts/fetch-pins.sh"
         script.parent.mkdir(parents=True)
         shutil.copyfile(REPO / "scripts/fetch-pins.sh", script)
@@ -47,7 +47,7 @@ class DesktopApps(unittest.TestCase):
                               ("lazyvim-starter-vim.tar.gz", "LAZYVIM_STARTER_TARBALL_SHA256")):
             with tarfile.open(cache / filename, "w:gz") as archive:
                 members = ["root/fixture"]
-                if filename.startswith("oh-my-bash"):
+                if filename.startswith("oh-my-bash") and include_omb_theme:
                     members.append("root/themes/powerline-multiline/powerline-multiline.theme.sh")
                 for member in members:
                     info = tarfile.TarInfo(member)
@@ -98,6 +98,20 @@ esac
                 self.assertEqual((chroot / "etc/sensible/pins.env").read_bytes(),
                                  (self.root / "live/pins.env").read_bytes())
                 self.assertEqual(len(list(self.staged.parent.glob("*.deb"))), 1)
+
+    def test_missing_configured_shell_theme_fails_staging(self):
+        script = self.seed_pins(include_omb_theme=False)
+        # Every cached artifact, including the deliberately incomplete OMB
+        # archive, has the checksum recorded by seed_pins(). No download or
+        # checksum failure may mask the missing-theme guard under test.
+        write(self.bin / "curl", "#!/bin/sh\nexit 89\n", True)
+        result = self.run_script(script)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "pinned oh-my-bash archive lacks the configured powerline-multiline theme",
+            result.stderr,
+        )
+        self.assertFalse(self.staged.exists())
 
     def test_wrong_package_identity_fails_before_staging(self):
         script = self.seed_pins()
