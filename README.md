@@ -134,6 +134,21 @@ The installed system hostname defaults to `debian`. The UEFI boot entry stays **
 
 Build: `./live/build.sh` (podman/docker) or `sudo ./scripts/build-native.sh` (containerless, on Debian) produces `sensible-$SENSIBLE_VARIANT-debian-testing-amd64.iso` (`SENSIBLE_VARIANT=gnome`, the default, or `kde`). Verify it the way CI does with `./scripts/smoke-boot.sh` (headless UEFI boot assertion), or launch it interactively with `./scripts/run-qemu.sh`. Tests: `tests/run-tests.sh` — no root, no network.
 
+CI builds both desktop editions and tests each under UEFI and Secure Boot.
+Smoke tests stop after both serial boot markers appear and QEMU remains alive
+for `SMOKE_SETTLE` seconds (default 5); `SMOKE_TIMEOUT` (default 600) is the
+failure deadline, not a mandatory wait. This checks live serial readiness, not
+graphical-desktop health or installed-disk boot.
+
+New pushes supersede older builds of the same PR. Named build containers and
+QEMU guests are cleaned up on cancellation. Container builds reuse only `.deb`
+downloads under `live/.cache/live-build` and checksum-verified pins under
+`live/local/pins`; chroots, bootstrap snapshots, APT indexes and stage state are
+rebuilt. CI restores those downloads after checkout and saves a new per-edition
+snapshot after successful runs, including weekly rebuilds. Package-name
+validation runs once inside the build entry point, and ISO uploads disable
+additional artifact compression.
+
 ---
 
 ## License

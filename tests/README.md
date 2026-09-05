@@ -16,6 +16,8 @@ tests/run-tests.sh    # no root, no container, no network — plain bash
 | `desktop_test.sh` | GNOME/KDE package sets, Plymouth spinner/breeze, gdm3/sddm enablement, keyd conf deployed from `configs/` (never generated — spec §11), hard-fail on missing conf |
 | `apps_test.sh` | Canonical default app set (Architecture §7), Flathub, LazyVim skel + user copy + ownership, Brave official apt origin + signed keyring, quoted whiptail checklist matching, amberol/elisa per tag, no Slack/Zoom/Steam/Snapd |
 | `syntax_test.sh` | `bash -n` over every shell script in the repo, executable bits, and live-build hook naming (`*.hook.{chroot,binary}` — anything else is silently skipped) |
+| `ci_runtime_test.sh` | Smoke-test early readiness, deadline failures, premature guest exits, settling, QEMU cancellation, and named-container status/cleanup using process mocks |
+| `build_cache_test.sh` | Real stage-driver filesystem operations with mocked build commands: clean state, package-only cache restore, successful snapshot refresh, and preservation of the prior snapshot after failure |
 
 ### Integration test (`tests/integration/installer_flow_test.sh`)
 

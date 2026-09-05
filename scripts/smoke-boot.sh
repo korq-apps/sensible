@@ -6,7 +6,8 @@
 #
 # Usage:  scripts/smoke-boot.sh [ISO]
 #   ISO            path to the ISO (default: sensible-$SENSIBLE_VARIANT-debian-testing-amd64.iso)
-#   SMOKE_TIMEOUT  seconds to let it boot before stopping    (default: 600)
+#   SMOKE_TIMEOUT  maximum seconds to wait for boot          (default: 600)
+#   SMOKE_SETTLE   seconds to keep QEMU alive after readiness (default: 5)
 #   SMOKE_MEM      guest RAM in MiB                           (default: 3072)
 #   SMOKE_LOG      serial log path              (default: a temp file, printed)
 #   SMOKE_FIRMWARE uefi = plain UEFI, Secure Boot off (default)
@@ -15,7 +16,7 @@
 #
 # Exit 0 = both banners seen; 1 = assertion failed or QEMU died unexpectedly.
 # Uses KVM when /dev/kvm is usable, otherwise falls back to TCG (as CI does).
-set -uo pipefail
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -26,7 +27,14 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SENSIBLE_VARIANT="${SENSIBLE_VARIANT:-gnome}"
 ISO_PATH="${1:-${REPO_ROOT}/sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.iso}"
 SMOKE_TIMEOUT="${SMOKE_TIMEOUT:-600}"
+SMOKE_SETTLE="${SMOKE_SETTLE:-5}"
 SMOKE_MEM="${SMOKE_MEM:-3072}"
+for setting in SMOKE_TIMEOUT SMOKE_SETTLE; do
+    if [[ ! "${!setting}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: ${setting} must be a positive integer in seconds." >&2
+        exit 1
+    fi
+done
 
 if [ ! -f "${ISO_PATH}" ]; then
     echo "Error: ISO not found at ${ISO_PATH}" >&2
@@ -86,9 +94,45 @@ fi
 echo "==> Firmware: ${SMOKE_FIRMWARE}${OVMF_CODE:+ (${OVMF_CODE})}"
 
 WORK="$(mktemp -d)"
-cleanup() { rm -rf "${WORK}"; }
+QEMU_PID=""
+QEMU_RC=0
+stop_qemu() {
+    local attempt
+    [ -n "${QEMU_PID}" ] || return 0
+    if kill -0 "${QEMU_PID}" 2>/dev/null; then
+        if ! kill -TERM "${QEMU_PID}" 2>/dev/null; then
+            echo "Warning: QEMU exited while stopping it." >&2
+        fi
+        for attempt in 1 2 3 4 5; do
+            if ! kill -0 "${QEMU_PID}" 2>/dev/null; then break; fi
+            sleep 1
+        done
+        if kill -0 "${QEMU_PID}" 2>/dev/null; then
+            if ! kill -KILL "${QEMU_PID}" 2>/dev/null; then
+                echo "Warning: could not force-stop QEMU." >&2
+            fi
+        fi
+    fi
+    QEMU_RC=0
+    wait "${QEMU_PID}" || QEMU_RC=$?
+    QEMU_PID=""
+}
+cleanup() {
+    local status=$?
+    trap - EXIT INT TERM
+    stop_qemu
+    rm -rf "${WORK}"
+    exit "${status}"
+}
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 SERIAL_LOG="${SMOKE_LOG:-${WORK}/boot-serial.log}"
+CLEAN="${WORK}/serial-clean.log"
+# Use the same normalization while polling and for the final assertions.
+clean_serial_log() {
+    tr -d '\000' < "${SERIAL_LOG}" | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g; s/\x1b[()][A-B0]//g' > "${CLEAN}"
+}
 VARS_COPY="${WORK}/OVMF_VARS.fd"
 SCRATCH="${WORK}/smoke-disk.qcow2"
 if [ -n "${OVMF_VARS}" ]; then
@@ -102,7 +146,7 @@ if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
     echo "==> Accel: KVM"
 else
     ACCEL=(-cpu max)
-    echo "==> Accel: TCG (no /dev/kvm) — slower, allow the full timeout"
+    echo "==> Accel: TCG (no /dev/kvm) — slower, retaining the full boot deadline"
 fi
 
 echo "==> Booting ${ISO_PATH} (firmware ${SMOKE_FIRMWARE}, timeout ${SMOKE_TIMEOUT}s, serial -> ${SERIAL_LOG})"
@@ -119,8 +163,8 @@ if [ "${SMOKE_FIRMWARE}" = "sb" ]; then
     MACHINE_OPT=(-machine q35,smm=on)
 fi
 
-set +e
-timeout "${SMOKE_TIMEOUT}"s qemu-system-x86_64 \
+: > "${SERIAL_LOG}"
+qemu-system-x86_64 \
     "${ACCEL[@]}" \
     "${MACHINE_OPT[@]}" \
     -m "${SMOKE_MEM}" \
@@ -130,27 +174,44 @@ timeout "${SMOKE_TIMEOUT}"s qemu-system-x86_64 \
     -drive file="${SCRATCH}",format=qcow2,if=virtio \
     -netdev user,id=net0 -device virtio-net-pci,netdev=net0 \
     -nographic \
-    > "${SERIAL_LOG}" 2>&1
-rc=$?
-set -e
+    > "${SERIAL_LOG}" 2>&1 &
+QEMU_PID=$!
 
-echo "==> QEMU exit code: ${rc} (124 = stopped after the boot window, expected)"
-if [ "${rc}" -ne 0 ] && [ "${rc}" -ne 124 ]; then
-    echo "----- last 50 lines of serial log -----" >&2
-    if ! tail -n 50 "${SERIAL_LOG}" >&2; then
-        echo "Warning: serial log could not be read." >&2
+started=${SECONDS}
+ready_at=-1
+completed=0
+while kill -0 "${QEMU_PID}" 2>/dev/null; do
+    clean_serial_log
+    if grep -q "Welcome to Debian" "${CLEAN}" \
+        && grep -q "SENSIBLE_LIVE_SERIAL_READY" "${CLEAN}"; then
+        if [ "${ready_at}" -lt 0 ]; then
+            ready_at=${SECONDS}
+            echo "==> Boot markers reached; checking QEMU stays alive for ${SMOKE_SETTLE}s"
+        fi
+        if [ "$((SECONDS - ready_at))" -ge "${SMOKE_SETTLE}" ]; then
+            completed=1
+            break
+        fi
     fi
-    echo "Error: QEMU exited unexpectedly (rc=${rc}) before completing the boot window." >&2
-    exit 1
-fi
+    if [ "$((SECONDS - started))" -ge "${SMOKE_TIMEOUT}" ]; then break; fi
+    sleep 1
+done
+stop_qemu
+echo "==> QEMU exit code: ${QEMU_RC}; elapsed $((SECONDS - started))s"
 
 # Strip NULs and ANSI/control escapes before asserting: systemd colourises its
 # banner, so its escape codes split "Welcome to Debian" in the raw log and a
 # plain grep misses it even on a perfect boot. Assert against the cleaned text.
-CLEAN="${WORK}/serial-clean.log"
-tr -d '\000' < "${SERIAL_LOG}" | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g; s/\x1b[()][A-B0]//g' > "${CLEAN}"
+clean_serial_log
 
 fail=0
+if [ "${completed}" -ne 1 ]; then
+    echo "  FAIL: QEMU exited or the boot deadline expired before readiness settled" >&2
+    fail=1
+elif [ "${QEMU_RC}" -ne 0 ] && [ "${QEMU_RC}" -ne 143 ]; then
+    echo "  FAIL: QEMU failed while completing the smoke test (rc=${QEMU_RC})" >&2
+    fail=1
+fi
 if grep -q "Welcome to Debian" "${CLEAN}"; then
     echo "  ok: systemd boot banner seen"
 else

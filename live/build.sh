@@ -75,10 +75,6 @@ printf '%s\n' "${SENSIBLE_VARIANT}" > "${VARIANT_MARKER}"
 echo "==> Checking package names resolve against Debian Testing..."
 "${REPO_ROOT}/scripts/check-packages.sh" "${SENSIBLE_VARIANT}"
 
-# Prepare cache directory
-CACHE_DIR="${REPO_ROOT}/live/.cache/apt"
-mkdir -p "${CACHE_DIR}"
-
 # Build the builder container image
 IMAGE_TAG="sensible-live-builder:latest"
 echo "==> Building container image ${IMAGE_TAG}..."
@@ -88,10 +84,10 @@ ${CONTAINER_ENGINE} build -t "${IMAGE_TAG}" -f "${REPO_ROOT}/live/Dockerfile" "$
 # live/build-stages.sh rather than `lb build`, so the chroot's device nodes can
 # be repaired between bootstrap and package installation -- see that script.
 echo "==> Running live-build inside container..."
-${CONTAINER_ENGINE} run --rm --privileged \
+bash "${REPO_ROOT}/scripts/run-build-container.sh" "${CONTAINER_ENGINE}" \
+    "${SENSIBLE_BUILD_CONTAINER:-sensible-build-${BUILD_LOCK_ID}-$$}" --privileged \
     -e SENSIBLE_VARIANT="${SENSIBLE_VARIANT}" \
     -v "${REPO_ROOT}:/workspace:rw" \
-    -v "${CACHE_DIR}:/var/cache/apt/archives:rw" \
     -w /workspace/live \
     "${IMAGE_TAG}" \
     bash /workspace/live/build-stages.sh

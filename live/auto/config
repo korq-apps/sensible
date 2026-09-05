@@ -27,5 +27,7 @@ lb config noauto \
     --iso-volume "SENSIBLE_${SENSIBLE_VARIANT}" \
     --image-name "sensible-${SENSIBLE_VARIANT}-debian-testing" \
     --apt-recommends true \
+    --cache true \
+    --cache-packages true \
     --bootappend-live "boot=live components sensible.variant=${SENSIBLE_VARIANT} console=tty0 console=ttyS0,115200n8" \
     "${@}"

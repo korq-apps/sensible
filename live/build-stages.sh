@@ -99,6 +99,19 @@ trap cleanup_build EXIT
 rm -rf chroot binary .build cache
 lb clean --purge
 
+# Only download caches survive a clean build, never bootstrap/chroot snapshots
+# or stage markers. live-build restores these .deb files into the chroot's APT
+# archives itself (functions/cache.sh upstream). Hardlinks avoid copying GBs;
+# both paths are deliberately on the same workspace filesystem.
+for stage in bootstrap chroot binary; do
+    saved=".cache/live-build/packages.${stage}"
+    if [ -d "${saved}" ]; then
+        mkdir -p "cache/packages.${stage}"
+        find "${saved}" -maxdepth 1 -type f -name '*.deb' \
+            -exec cp -l -t "cache/packages.${stage}" -- {} +
+    fi
+done
+
 # Phase 6 extras: fetch pinned oh-my-bash / Nerd Font and stage the shell and
 # git defaults into includes.chroot, so every user of the installed system
 # inherits them. Fails the build on a rotted pin (see live/pins.env).
@@ -111,3 +124,14 @@ lb chroot
 release_dev_nodes
 lb installer
 lb binary
+
+# Publish only after all stages succeed. Pins are separately checksum-verified
+# by fetch-pins.sh even when restored by actions/cache after checkout.
+mkdir -p .cache/live-build
+for stage in bootstrap chroot binary; do
+    saved=".cache/live-build/packages.${stage}"
+    rm -rf "${saved}"
+    if [ -d "cache/packages.${stage}" ]; then
+        mv "cache/packages.${stage}" "${saved}"
+    fi
+done

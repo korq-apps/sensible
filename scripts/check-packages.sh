@@ -119,7 +119,9 @@ printf '%s' "${TO_CHECK}" > "${LIST_FILE}"
 
 # apt-cache show is enough: it answers "does this name exist in the archive",
 # which is exactly the failure being prevented, without solving dependencies.
-MISSING="$(${ENGINE} run --rm -v "${LIST_FILE}:/names.txt:ro" debian:testing-slim bash -ceu '
+MISSING="$(bash "${REPO_ROOT}/scripts/run-build-container.sh" "${ENGINE}" \
+    "${SENSIBLE_BUILD_CONTAINER:-sensible-package-check-$$}-packages" \
+    -v "${LIST_FILE}:/names.txt:ro" debian:testing-slim bash -ceu '
     sed -i "s/^Components:.*/Components: main contrib non-free non-free-firmware/" \
         /etc/apt/sources.list.d/debian.sources
     apt-get update -qq >/dev/null

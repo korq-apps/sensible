@@ -43,6 +43,7 @@ sh_files=(
     scripts/smoke-boot.sh
     scripts/build-native.sh
     scripts/check-packages.sh
+    scripts/run-build-container.sh
     tests/run-tests.sh
     tests/lib/harness.sh
     tests/unit/common_test.sh
@@ -53,6 +54,8 @@ sh_files=(
     tests/unit/apps_test.sh
     tests/unit/syntax_test.sh
     tests/unit/verify_test.sh
+    tests/unit/ci_runtime_test.sh
+    tests/unit/build_cache_test.sh
     tests/integration/installer_flow_test.sh
 )
 for f in "${sh_files[@]}"; do
@@ -174,6 +177,12 @@ assert_contains "target enables fwupd's refresh timer" \
 workflow_source="$(<"${REPO_ROOT}/.github/workflows/build-iso.yml")"
 assert_contains "CI builds the GNOME and KDE variants" "$workflow_source" 'variant: [gnome, kde]'
 assert_contains "CI enforces the Secure Boot smoke path" "$workflow_source" 'SMOKE_FIRMWARE: sb'
+assert_contains "CI only cancels superseded PR runs" "$workflow_source" "cancel-in-progress: \${{ github.event_name == 'pull_request' }}"
+assert_contains "CI keeps both desktop editions" "$workflow_source" 'variant: [gnome, kde]'
+assert_contains "CI caches the actual live-build downloads" "$workflow_source" 'live/.cache/live-build'
+assert_contains "CI caches verified pinned assets" "$workflow_source" 'live/local/pins'
+assert_contains "CI does not recompress ISOs" "$workflow_source" 'compression-level: 0'
+assert_not_contains "CI avoids a duplicate package check" "$workflow_source" 'scripts/check-packages.sh'
 assert_file_contains "offline closure carries the NVIDIA driver" "${REPO_ROOT}/live/config/package-lists/sensible-target.list.chroot" "nvidia-driver"
 assert_contains "Debian browser package uses ESR name" "$apps_source" "firefox-esr"
 assert_not_contains "unsupported plain Firefox package is absent" "$apps_source" $'\n        firefox\n'
