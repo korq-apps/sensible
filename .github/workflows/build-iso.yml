@@ -198,22 +198,30 @@ jobs:
         run: |
           scripts/smoke-boot.sh sensible-${{ matrix.variant }}-debian-testing-amd64.iso
 
-      - name: Upload ISO and Checksum Artifacts
-        uses: actions/upload-artifact@v4
+      # Direct-file artifacts avoid wrapping already-compressed ISOs in ZIP
+      # archives. upload-artifact v7 accepts exactly one file in this mode, so
+      # publish the ISO and its checksum separately.
+      - name: Upload ISO Artifact
+        uses: actions/upload-artifact@v7
         with:
-          name: sensible-${{ matrix.variant }}-debian-testing-amd64
-          path: |
-            sensible-${{ matrix.variant }}-debian-testing-amd64.iso
-            sensible-${{ matrix.variant }}-debian-testing-amd64.iso.sha256
+          path: sensible-${{ matrix.variant }}-debian-testing-amd64.iso
           if-no-files-found: error
-          compression-level: 0
+          archive: false
+          retention-days: 14
+
+      - name: Upload Checksum Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          path: sensible-${{ matrix.variant }}-debian-testing-amd64.iso.sha256
+          if-no-files-found: error
+          archive: false
           retention-days: 14
 
   # Publication is isolated in its own job so that `contents: write` exists only
   # on tag pushes and never in a run that builds PR-controlled code. Keep
   # SENSIBLE_RELEASE_READY unset/false until the real installed-disk matrix and
   # documented release gate pass; enabling it is the final publication switch.
-  # This job consumes the build artifact rather than rebuilding.
+  # This job consumes the direct-file build artifacts rather than rebuilding.
   release:
     name: Publish Release Assets
     needs: build
@@ -224,9 +232,9 @@ jobs:
 
     steps:
       - name: Download built ISO artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          pattern: sensible-*-debian-testing-amd64
+          pattern: sensible-*-debian-testing-amd64.iso*
           merge-multiple: true
 
       - name: Publish Release Assets

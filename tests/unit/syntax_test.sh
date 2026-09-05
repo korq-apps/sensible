@@ -189,7 +189,16 @@ assert_contains "CI only cancels superseded PR runs" "$workflow_source" "cancel-
 assert_contains "CI keeps both desktop editions" "$workflow_source" 'variant: [gnome, kde]'
 assert_contains "CI caches the actual live-build downloads" "$workflow_source" 'live/.cache/live-build'
 assert_contains "CI caches verified pinned assets" "$workflow_source" 'live/local/pins'
-assert_contains "CI does not recompress ISOs" "$workflow_source" 'compression-level: 0'
+direct_uploads=$(grep -cF 'uses: actions/upload-artifact@v7' <<< "$workflow_source")
+direct_files=$(grep -cF 'archive: false' <<< "$workflow_source")
+assert_eq "CI uploads the ISO and checksum separately" 2 "$direct_uploads"
+assert_eq "both CI uploads bypass archive wrapping" 2 "$direct_files"
+assert_not_contains "CI no longer uses archive compression settings" "$workflow_source" 'compression-level:'
+assert_contains "release job supports direct-file artifacts" "$workflow_source" 'uses: actions/download-artifact@v8'
+assert_contains "release job collects ISO and checksum artifacts" "$workflow_source" 'pattern: sensible-*-debian-testing-amd64.iso*'
+assert_contains "tag release publication remains readiness-gated" \
+    "$workflow_source" "startsWith(github.ref, 'refs/tags/v') && vars.SENSIBLE_RELEASE_READY == 'true'"
+assert_contains "release job attaches the downloaded files" "$workflow_source" 'uses: softprops/action-gh-release@v2'
 assert_not_contains "CI avoids a duplicate package check" "$workflow_source" 'scripts/check-packages.sh'
 assert_file_contains "offline closure carries the NVIDIA driver" "${REPO_ROOT}/live/config/package-lists/sensible-target.list.chroot" "nvidia-driver"
 assert_contains "Debian browser package uses ESR name" "$apps_source" "firefox-esr"
