@@ -43,27 +43,31 @@ GPT partition layout — no LVM:
 
 ### Desktop release
 
-- **GNOME** — macOS-oriented: Wayland, gestures, dynamic workspaces. Includes **Mac copy/paste** via `keyd` (`Super+C` / `V` / `X`) so terminals do not get `SIGINT`.
+- **GNOME** — macOS-oriented: Wayland, gestures, dynamic workspaces. Includes **Mac copy/paste** via `keyd` (`Super+C` / `V` / `X`) so terminals do not get `SIGINT`, plus a user-overridable extension profile for monitoring, phone integration, clipboard history, a dock, battery time and screenshot OCR/QR.
 - **KDE Plasma** — Windows-oriented: panel, tray, familiar window management.
 
 The live ISO does **not** ship both desktops. Choose the GNOME or KDE release asset before writing the USB. The corresponding desktop is already baked into the offline image and copied to the target.
 
 ### Software (defaults vs optional)
 
-**Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak, fonts, `fwupd`, Secure Boot chain on the installed system (shim + Debian-signed GRUB). The Flathub remote is added later by the planned `sensible-apps` tool or manually after first boot.
+**Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak, fonts, `fwupd`, Secure Boot chain on the installed system (shim + Debian-signed GRUB). Flathub is preconfigured system-wide with its signing key; app browsing/downloads require a connection, but installation does not.
 
 **Default apps:** Firefox ESR and Chromium; LibreOffice Writer, Calc, and Impress; Thunderbird; KeePassXC; VLC; Neovim (LazyVim starter in `/etc/skel`); archive support; and modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`). GNOME adds File Roller and Amberol; KDE adds Okular, Ark, Gwenview, Kate, KCalc, Spectacle, and Elisa. Flatpak and the desktop store integration are ready for use after installation.
 
-**Desktop app additions (image configuration):** Shotwell, Extension Manager,
-Tweaks and packaged GSConnect/AppIndicator support on GNOME; digiKam, KDE Connect
-and Plasma System Monitor on KDE; pinned LocalSend on both. LocalSend is staged
-at build time with its runtime dependencies, not downloaded by the installer.
-Its updates require a separately reviewed upstream package, not ordinary Debian
-updates. Sharing-port exceptions are configured on both editions; see the
-[manual](manual/applications.html#sharing-firewall) for their network exposure.
-Curated GNOME extension activation, further extensions, widgets and themes remain
-in the [desktop profile plan](docs/DESKTOP_PROFILES.md). Full-image and real-session
-acceptance for the app additions is still pending.
+**Desktop profile additions (image configuration):** Shotwell, Extension Manager,
+Tweaks and a curated GNOME extension set; digiKam, KDE Connect and Plasma System
+Monitor on KDE; pinned LocalSend on both. The GNOME defaults enable Vitals,
+GSConnect, Caffeine, Clipboard Indicator, Dash to Dock, Battery Time, Shotzy,
+User Themes and AppIndicator support. Caffeine starts inactive, clipboard disk
+caching is limited to favorites, Vitals public-IP lookup is off, and users can
+override every default. LocalSend and the four non-Debian GNOME extensions are
+checksum-pinned at image-build time, not downloaded by the installer. Sharing-port
+exceptions are configured on both editions; see the [manual](manual/applications.html)
+for usage and privacy details. GNOME also includes selectable Marble, Good-Old-Shell
+50 and Graphite GTK 3 themes without changing the default appearance. Native KDE
+profile configuration and deferred themes remain in the
+[desktop profile plan](docs/DESKTOP_PROFILES.md). Full-image and real-session
+acceptance is still pending.
 
 **Offline help:** open **Sensible Manual** from the application menu or run
 `sensible-manual`. The [local HTML manual](manual/index.html) opens on the
@@ -73,7 +77,7 @@ Its linked chapters explain [everyday application choices](manual/applications.h
 and give [terminal-tool recipes](manual/terminal-tools.html), including the
 distinction between finding filenames, searching contents and filtering lists.
 
-**Not currently offered by the offline installer:** Brave, Audacious, and Flathub remote setup. Install additional applications after first boot; commercial applications belong on Flathub rather than in the base image.
+**Curated optional online app:** [Brave Origin](manual/applications.html#brave-origin), the separate `brave-origin` package, with its official one-line installer documented in the manual. It is not preinstalled. Audacious also remains optional/post-install; Flathub is already enabled for adding further apps.
 
 **Not currently offered:** AI CLIs. If added later, they will be optional and use pinned artifacts rather than `curl | sh` from the ISO.
 

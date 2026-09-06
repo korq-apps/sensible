@@ -38,8 +38,11 @@ sh_files=(
     live/config/hooks/live/0200-sb-efi-prefix.hook.binary
     live/config/hooks/live/0300-ufw.hook.chroot
     live/config/hooks/live/0250-desktop-apps.hook.chroot
+    live/config/hooks/live/0260-gnome-profile.hook.chroot
+    live/config/hooks/live/0270-desktop-sources-and-themes.hook.chroot
     tests/unit/desktop_apps_test.sh
     scripts/fetch-pins.sh
+    scripts/stage-themes.sh
     live/config/includes.chroot/usr/local/bin/sensible-install
     live/config/includes.chroot/etc/profile.d/98-sensible-serial-ready.sh
     live/config/includes.chroot/etc/profile.d/99-sensible-firmware-check.sh
@@ -179,6 +182,10 @@ assert_contains "native build stages its selected desktop list" "$native_build_s
 assert_contains "native build records the selected variant" "$native_build_source" 'etc/sensible/variant'
 assert_contains "native build runs the package gate" "$native_build_source" 'scripts/check-packages.sh'
 assert_contains "native dependencies include the package collector and Debian keyring" "$native_build_source" 'python3 debian-archive-keyring'
+assert_contains "native dependencies include the theme compiler" "$native_build_source" 'sassc'
+assert_file_contains "container dependencies include the theme compiler" "${REPO_ROOT}/live/Dockerfile" 'sassc'
+assert_file_contains "container builder includes the extension metadata validator" \
+    "${REPO_ROOT}/live/Dockerfile" "python3"
 assert_contains "native build stages the same pinned defaults" "$native_build_source" 'scripts/fetch-pins.sh'
 assert_contains "target enables fwupd's refresh timer" \
     "$(<"${REPO_ROOT}/installer/sensible-install.sh")" 'systemctl enable fwupd-refresh.timer'
@@ -291,7 +298,14 @@ stages_source="$(<"${REPO_ROOT}/live/build-stages.sh")"
 target_list="$(<"${REPO_ROOT}/live/config/package-lists/sensible-target.list.chroot")"
 ufw_hook="$(<"${REPO_ROOT}/live/config/hooks/live/0300-ufw.hook.chroot")"
 omb_bashrc="$(<"${REPO_ROOT}/configs/omb-bashrc")"
-for var in OH_MY_BASH_COMMIT OH_MY_BASH_TARBALL_SHA256 NERD_FONTS_TAG NERD_FONTS_JETBRAINS_MONO_ZIP_SHA256 LAZYVIM_STARTER_COMMIT LAZYVIM_STARTER_TARBALL_SHA256; do
+for var in \
+    OH_MY_BASH_COMMIT OH_MY_BASH_TARBALL_SHA256 \
+    NERD_FONTS_TAG NERD_FONTS_JETBRAINS_MONO_ZIP_SHA256 \
+    LAZYVIM_STARTER_COMMIT LAZYVIM_STARTER_TARBALL_SHA256 \
+    VITALS_VERSION VITALS_VERSION_TAG VITALS_ZIP_SHA256 \
+    CLIPBOARD_INDICATOR_VERSION CLIPBOARD_INDICATOR_VERSION_TAG CLIPBOARD_INDICATOR_ZIP_SHA256 \
+    BATTERY_TIME_VERSION BATTERY_TIME_VERSION_TAG BATTERY_TIME_ZIP_SHA256 \
+    SHOTZY_VERSION SHOTZY_VERSION_TAG SHOTZY_ZIP_SHA256; do
     assert_contains "pins.env pins ${var}" "${pins_source}" "${var}="
 done
 assert_contains "pins.env pins the oh-my-bash tarball by SHA256" "${pins_source}" "${OH_MY_BASH_TARBALL_SHA256}"
@@ -303,6 +317,9 @@ assert_contains "fetch-pins stages the system-wide git defaults" "${fetch_pins_s
 assert_contains "fetch-pins installs the Nerd Font into the image" "${fetch_pins_source}" "jetbrains-mono-nerd"
 assert_contains "fetch-pins stages the pinned LazyVim starter" "${fetch_pins_source}" "etc/skel/.config/nvim"
 assert_contains "fetch-pins stages the GNOME keyd mapping" "${fetch_pins_source}" "configs/keyd-default.conf"
+assert_contains "fetch-pins uses the official GNOME extension service" "${fetch_pins_source}" "https://extensions.gnome.org/download-extension/"
+assert_contains "fetch-pins validates extension metadata before extraction" "${fetch_pins_source}" 'metadata.get("uuid")'
+assert_contains "fetch-pins keeps GNOME extension assets out of KDE" "${fetch_pins_source}" 'rm -rf "${GNOME_EXTENSION_ROOT:?}/${uuid}"'
 assert_contains "build stages the pins before live-build runs" "${stages_source}" "scripts/fetch-pins.sh"
 assert_contains "cleanup restores ownership only after releasing device mounts" "${stages_source}" $'if release_dev_nodes; then\n        if ! restore_host_ownership'
 assert_contains "cleanup explains why ownership restoration was skipped" "${stages_source}" "skipping ownership restoration while chroot /dev mounts remain active"

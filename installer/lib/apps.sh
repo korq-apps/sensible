@@ -40,7 +40,7 @@ install_default_apps() {
 
     DEBIAN_FRONTEND=noninteractive chroot ${MNT} apt-get install -y --no-install-recommends "${pkgs[@]}"
 
-    log_info "Keeping Flathub setup outside the offline installer."
+    log_info "Flathub is preconfigured in the image; no online setup is needed here."
 
     # The pinned starter is staged into /etc/skel while the ISO is built.
     # Never replace it here with a moving network clone.

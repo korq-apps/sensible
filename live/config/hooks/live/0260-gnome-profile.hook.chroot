@@ -1,0 +1,141 @@
+#!/bin/sh
+# Validate the GNOME extension closure and prepare its local OCR data path.
+# Fresh-user activation/defaults are written by installer/lib/desktop.sh.
+set -eu
+
+if ! VARIANT="$(cat /etc/sensible/variant 2>/dev/null)"; then
+    echo "Error: desktop variant marker is missing while validating the GNOME profile." >&2
+    exit 1
+fi
+case "${VARIANT}" in
+    kde) exit 0 ;;
+    gnome) ;;
+    *) echo "Error: unknown desktop variant '${VARIANT}' while validating the GNOME profile." >&2; exit 1 ;;
+esac
+
+require_package() {
+    package="$1"
+    if ! status="$(dpkg-query -W -f='${Status}' "${package}" 2>/dev/null)"; then
+        echo "Error: GNOME profile package '${package}' is missing." >&2
+        exit 1
+    fi
+    if [ "${status}" != 'install ok installed' ]; then
+        echo "Error: GNOME profile package '${package}' is not fully installed (${status})." >&2
+        exit 1
+    fi
+}
+
+for package in \
+    gnome-shell \
+    gnome-shell-extension-appindicator \
+    gnome-shell-extension-caffeine \
+    gnome-shell-extension-dashtodock \
+    gnome-shell-extension-gsconnect \
+    gnome-shell-extension-user-theme \
+    gir1.2-gtop-2.0 \
+    lm-sensors \
+    python3 \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    zbar-tools; do
+    require_package "${package}"
+done
+
+if ! shell_version="$(dpkg-query -W -f='${Version}' gnome-shell 2>/dev/null)"; then
+    echo "Error: could not determine the installed GNOME Shell version." >&2
+    exit 1
+fi
+shell_major="$(printf '%s\n' "${shell_version}" | sed -n 's/^[0-9]*:\([0-9][0-9]*\).*/\1/p; t; s/^\([0-9][0-9]*\).*/\1/p')"
+case "${shell_major}" in
+    ''|*[!0-9]*)
+        echo "Error: could not parse GNOME Shell major version from '${shell_version}'." >&2
+        exit 1
+        ;;
+esac
+
+extension_root=/usr/share/gnome-shell/extensions
+all_uuids='ubuntu-appindicators@ubuntu.com
+gsconnect@andyholmes.github.io
+caffeine@patapon.info
+dash-to-dock@micxgx.gmail.com
+user-theme@gnome-shell-extensions.gcampax.github.com
+Vitals@CoreCoding.com
+clipboard-indicator@tudmotu.com
+batterytime@typeof.pw
+shotzy@SamkitJain660.github.io'
+for uuid in ${all_uuids}; do
+    if [ ! -s "${extension_root}/${uuid}/metadata.json" ] \
+        || [ ! -s "${extension_root}/${uuid}/extension.js" ]; then
+        echo "Error: GNOME extension '${uuid}' is missing its runtime assets." >&2
+        exit 1
+    fi
+done
+
+# Debian packages are coupled to Debian's Shell version. The four upstream
+# artifacts are not, so re-check their metadata against the Shell that actually
+# landed in the chroot and stop the image build when Testing moves ahead.
+if ! python3 - "${extension_root}" "${shell_major}" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+shell_major = sys.argv[2]
+uuids = (
+    "Vitals@CoreCoding.com",
+    "clipboard-indicator@tudmotu.com",
+    "batterytime@typeof.pw",
+    "shotzy@SamkitJain660.github.io",
+)
+for uuid in uuids:
+    metadata = json.loads((root / uuid / "metadata.json").read_text(encoding="utf-8"))
+    if metadata.get("uuid") != uuid:
+        raise SystemExit(f"{uuid}: metadata UUID mismatch")
+    compatible = [str(value) for value in metadata.get("shell-version", [])]
+    if shell_major not in compatible:
+        raise SystemExit(f"{uuid}: GNOME Shell {shell_major} is not supported")
+PY
+then
+    echo "Error: a pinned GNOME extension is incompatible with GNOME Shell ${shell_major}." >&2
+    exit 1
+fi
+
+for schema_dir in "${extension_root}"/*/schemas; do
+    [ -d "${schema_dir}" ] || continue
+    if ! glib-compile-schemas "${schema_dir}"; then
+        echo "Error: could not compile GNOME extension schemas in ${schema_dir}." >&2
+        exit 1
+    fi
+done
+
+# Shotzy currently looks in /usr/share/tessdata, while Debian installs language
+# data under a versioned directory. Use a relative link within /usr/share so it
+# remains correct when the live root is copied to the installed system.
+tessdata_source=/usr/share/tesseract-ocr/5/tessdata
+tessdata_link=/usr/share/tessdata
+if [ ! -s "${tessdata_source}/eng.traineddata" ]; then
+    echo "Error: Shotzy's English Tesseract data is missing." >&2
+    exit 1
+fi
+if [ ! -e "${tessdata_link}" ] && [ ! -L "${tessdata_link}" ]; then
+    if ! ln -s tesseract-ocr/5/tessdata "${tessdata_link}"; then
+        echo "Error: could not create Shotzy's Debian tessdata compatibility link." >&2
+        exit 1
+    fi
+fi
+if [ ! -s "${tessdata_link}/eng.traineddata" ]; then
+    echo "Error: /usr/share/tessdata does not resolve to Shotzy's English OCR data." >&2
+    exit 1
+fi
+for runtime_command in tesseract zbarimg; do
+    if ! command -v "${runtime_command}" >/dev/null 2>&1; then
+        echo "Error: Shotzy runtime command '${runtime_command}' is missing." >&2
+        exit 1
+    fi
+done
+
+source_manifest=/usr/share/doc/sensible-gnome-extensions/sources.txt
+if [ ! -s "${source_manifest}" ] || [ ! -s /usr/share/common-licenses/GPL-2 ]; then
+    echo "Error: pinned GNOME extension source or license records are incomplete." >&2
+    exit 1
+fi

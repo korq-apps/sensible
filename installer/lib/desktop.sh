@@ -57,16 +57,37 @@ configure_login() {
 
     # Screen lock on idle (and on resume from suspend) for both desktops.
     if [ "$desktop_env" = "gnome" ]; then
-        log_info "Configuring GNOME idle screen lock (5 min)..."
+        log_info "Configuring GNOME profile and idle screen lock (5 min)..."
         mkdir -p ${MNT}/etc/dconf/profile ${MNT}/etc/dconf/db/local.d
         printf 'user-db:user\nsystem-db:local\n' > ${MNT}/etc/dconf/profile/user
-        cat <<EOF > ${MNT}/etc/dconf/db/local.d/00-sensible-lock
+        # These are system defaults, not dconf locks: each user can still
+        # disable an extension or change any preference in Settings/Tweaks.
+        cat <<EOF > ${MNT}/etc/dconf/db/local.d/00-sensible-desktop
 [org/gnome/desktop/session]
 idle-delay=uint32 300
 
 [org/gnome/desktop/screensaver]
 lock-enabled=true
 lock-delay=uint32 0
+
+[org/gnome/desktop/wm/preferences]
+button-layout='appmenu:minimize,maximize,close'
+
+[org/gnome/shell]
+enabled-extensions=['ubuntu-appindicators@ubuntu.com', 'gsconnect@andyholmes.github.io', 'caffeine@patapon.info', 'clipboard-indicator@tudmotu.com', 'dash-to-dock@micxgx.gmail.com', 'batterytime@typeof.pw', 'shotzy@SamkitJain660.github.io', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'Vitals@CoreCoding.com']
+
+[org/gnome/shell/extensions/caffeine]
+user-enabled=false
+restore-state=false
+enable-fullscreen=false
+enable-mpris=false
+
+[org/gnome/shell/extensions/clipboard-indicator]
+cache-only-favorites=true
+cache-images=false
+
+[org/gnome/shell/extensions/vitals]
+include-public-ip=false
 EOF
         chroot ${MNT} dconf update
     else

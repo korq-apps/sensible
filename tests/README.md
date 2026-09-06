@@ -4,9 +4,19 @@
 tests/run-tests.sh    # no root, no container, no network
 ```
 
-Requires Bash, the usual command-line utilities, and Python 3.9+ (standard
-library only) for multi-page manual and desktop-app validation, plus `tar` and
-`unzip` for pinned-artifact fixtures. No Python packages are needed.
+Requires Bash, the usual command-line utilities, `tar`, `unzip`, and **Python
+3.9+ with `tarfile.data_filter` available** (standard library only). The Python
+version alone is insufficient: extraction filters were also
+[backported to older Python releases](https://docs.python.org/3.9/library/tarfile.html#extraction-filters).
+Check the interpreter's capability, as the theme builder does:
+
+```bash
+python3 -c 'import sys, tarfile; sys.exit(0 if sys.version_info >= (3, 9) and hasattr(tarfile, "data_filter") else "Python 3.9+ with tarfile.data_filter is required")'
+```
+
+No third-party Python packages are needed for the fixture tests.
+Theme fixture tests double `sassc`; real theme builds require the builder's
+`sassc` package as well as Python.
 
 ## What is covered
 
@@ -17,8 +27,8 @@ library only) for multi-page manual and desktop-app validation, plus `tar` and
 | `common_test.sh` | MNT override, UI tool detection (whiptail/dialog/text), logging and warning collection, text-mode widgets, network preflight, hostname/username validation, keyboard layout detection/validation/application, `check_root`/`check_uefi` |
 | `disk_test.sh` | Partition naming, swap/minimum math, GPT layouts, LUKS2, Btrfs subvolumes and swapfile resume offset, Ext4, candidate filtering, stable disk-identity revalidation, mounted-disk rejection, and installer-owned cleanup |
 | `fstab_test.sh` | All four engine combinations (Btrfs/Ext4 x LUKS on/off): crypttab root by LUKS header UUID, swapfile lines inside root, `@swap` subvolume mounts, tmpfs, and blkid-empty abort guards |
-| `desktop_test.sh` | GNOME/KDE package sets, Plymouth spinner/breeze, gdm3/sddm enablement, keyd conf deployed from `configs/` (never generated — spec §11), hard-fail on missing conf |
-| `desktop_apps_test.sh` | Real pin-staging script with tiny cached artifacts: checksum/identity failures, cache reuse, fixed local-deb path, license/pin staging; installed-version/asset hook failures; both editions' firewall rules and failure propagation; edition ownership |
+| `desktop_test.sh` | GNOME/KDE package sets, Plymouth spinner/breeze, gdm3/sddm enablement, keyd conf deployed from `configs/` (never generated — spec §11), hard-fail on missing conf, and GNOME's unlocked dconf extension/titlebar/privacy defaults |
+| `desktop_apps_test.sh` | Real pin/theme staging with tiny cached artifacts: checksum/identity/compatibility/license/path/asset/compiler failures, cache reuse, GNOME/KDE cleanup and fixed local-deb paths; LocalSend/GNOME-profile/theme hooks, Shell-version/package/schema/OCR guards; static Flathub source/key and enabled-remote guards; both editions' firewall rules and edition ownership |
 | `apps_test.sh` | Canonical default app set (Architecture §7), Flathub, LazyVim skel + user copy + ownership, Brave official apt origin + signed keyring, quoted whiptail checklist matching, amberol/elisa per tag, no Slack/Zoom/Steam/Snapd |
 | `manual_test.sh` | Offline chapter assets/links, current app-list coverage, both build paths, missing payload rejection, launcher fallback/retry/idempotency, and scoped per-user autostart ownership |
 | `syntax_test.sh` | `bash -n` over every shell script in the repo, executable bits, live-build hook naming (`*.hook.{chroot,binary}` — anything else is silently skipped), and direct-file/release CI guards |
@@ -71,6 +81,11 @@ codes.
 - Desktop app startup on real GNOME/KDE sessions, file-chooser/tray integration,
   phone pairing and LocalSend transfers with UFW enabled on IPv4/IPv6 networks.
   Mocked rule tests do not prove discovery or firewall behavior on hardware.
+- Actual GNOME Shell extension activation, panel/multi-monitor layout, Shotzy
+  OCR/QR/Lens behavior, battery/no-battery behavior, and persistence of user
+  overrides through logout, reboot and package upgrades.
+- Theme readability, transparency/contrast, scaling, GTK 3 application styling,
+  return to stock, and unchanged GDM/login/lock behavior in real sessions.
 - The local suite tests package-gate failure handling; CI performs the live
   Debian Testing archive query before each variant build.
 - Native builds query a disposable Testing-only APT index; host repositories,

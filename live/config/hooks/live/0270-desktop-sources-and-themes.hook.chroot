@@ -1,0 +1,51 @@
+#!/bin/sh
+# Initialize the static Flathub definition locally and validate GNOME themes.
+set -eu
+
+if ! remotes="$(flatpak remotes --system --columns=name,url,options)"; then
+    echo 'Error: could not initialize the preconfigured Flatpak remotes.' >&2
+    exit 1
+fi
+if ! printf '%s\n' "$remotes" | awk '
+    $1 == "flathub" && $2 == "https://dl.flathub.org/repo/" && $0 !~ /disabled/ { found = 1 }
+    END { exit !found }'; then
+    echo 'Error: the enabled system Flathub remote is missing or has the wrong URL.' >&2
+    exit 1
+fi
+
+case "$(cat /etc/sensible/variant)" in
+    kde) exit 0 ;;
+    gnome) ;;
+    *) echo 'Error: unknown desktop variant while validating themes.' >&2; exit 1 ;;
+esac
+if ! version="$(dpkg-query -W -f='${Version}' gnome-shell)"; then
+    echo 'Error: could not determine GNOME Shell version for the theme collection.' >&2
+    exit 1
+fi
+case "${version#*:}" in
+    50.*) ;;
+    *) echo "Error: pinned themes require GNOME Shell 50, found ${version}." >&2; exit 1 ;;
+esac
+
+require_asset() {
+    if [ ! -s "$1" ]; then
+        echo "Error: desktop theme asset is missing: $1" >&2
+        exit 1
+    fi
+}
+themes=/usr/share/themes
+for color in red yellow green blue purple gray; do
+    for mode in light dark; do
+        require_asset "${themes}/Marble-${color}-${mode}/gnome-shell/gnome-shell.css"
+    done
+done
+for mode in Light Dark; do
+    require_asset "${themes}/Graphite-${mode}/gtk-3.0/gtk.css"
+    require_asset "${themes}/Graphite-${mode}/gtk-3.0/gtk-dark.css"
+done
+for asset in gnome-shell.css overview-wallpaper.png login-dialog-frame.png gdm-wallpaper.png; do
+    require_asset "${themes}/good-old-shell/gnome-shell/${asset}"
+done
+for asset in sources.txt pins.env Marble.LICENSE Graphite.LICENSE Good-Old-Shell.LICENSE; do
+    require_asset "/usr/share/doc/sensible-themes/${asset}"
+done

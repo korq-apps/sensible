@@ -144,14 +144,14 @@ apt search &lt;name&gt;
 sudo apt install &lt;package-name&gt;</code></pre>
 
           <h3>Graphical &amp; Desktop Applications (Flatpak &amp; Flathub)</h3>
-          <p>Flatpak and desktop store integration are installed, but the Flathub remote is not added automatically. After connecting to the network, you can add it manually:</p>
-          <p>To verify or add the Flathub repository:</p>
+          <p>Flatpak, desktop store integration and the system-wide Flathub remote (with its signing key) are preconfigured on both editions. Installation does not contact Flathub; browsing, installing and updating apps requires a network connection. No Flatpak apps or runtimes are preinstalled.</p>
+          <p>Verify the source, or add it on an older Sensible image:</p>
           <pre><code># Check existing Flatpak remotes
-flatpak remotes
+flatpak remotes --system
 
-# Add Flathub if not already present
-flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo</code></pre>
-          <p>Once Flathub is added, browse and install desktop applications (e.g., Slack, Spotify, Discord, VS Code) directly from <strong>GNOME Software</strong> or <strong>KDE Discover</strong>.</p>
+# Older images only: add the system-wide Flathub source when online
+sudo flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo</code></pre>
+          <p>When online, browse and install desktop applications (e.g., Slack, Spotify, Discord, VS Code) directly from <strong>GNOME Software</strong> or <strong>KDE Discover</strong>. Flathub is a third-party source separate from Debian; inspect the publisher and permissions of each app.</p>
         </section>
 
         <section id="included-software">
@@ -313,13 +313,13 @@ systemctl status</code></pre>
         </section>
 
         <section id="planned-features">
-          <h2>11. What Is Planned, Not Shipped</h2>
-          <p>The following features are part of the post-v1 roadmap and are not yet enabled in the default image:</p>
+          <h2>11. Roadmap and Validation Still Pending</h2>
+          <p>The application baseline and GNOME profile are configured in the image sources. The following work is not yet complete or proven in a release image:</p>
           <ul>
             <li><strong><code>sensible-apps</code>:</strong> An interactive post-install tool for installing developer toolchains (Docker, GitHub CLI), additional browsers, and media software with verified signatures.</li>
-            <li><strong>Desktop Profiles:</strong> Photo management, LocalSend, curated GNOME extensions and corresponding KDE tools. These additions are planned, not installed by this change.</li>
+            <li><strong>Desktop Profiles:</strong> Native KDE profile tuning remains planned. The GNOME extension set still needs full ISO and real-session checks for activation, login/lock/reboot behavior, OCR/QR, battery and multi-monitor behavior, and preservation of user changes.</li>
             <li><strong>Face Recognition:</strong> Optional BioPass enrollment remains future work; fingerprint support is already included.</li>
-            <li><strong>Backups &amp; Appearance:</strong> A validated backup workflow and selected themes remain to be agreed and implemented.</li>
+            <li><strong>Backups &amp; Appearance:</strong> GNOME includes <a href="applications.html#themes">selectable themes</a> without changing the default appearance. Native KDE appearance choices and a validated backup workflow remain follow-ups.</li>
           </ul>
         </section>
 
