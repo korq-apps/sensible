@@ -252,11 +252,11 @@ payload check; tests validate local links and documented default-package coverag
 ### Desktop profiles
 
 [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md) records the milestone and acceptance
-evidence. Application/dependency configuration and the GNOME profile are now
-implemented in the image sources with user-overridable defaults. Native Plasma
-configuration, optional appearance and backup choices remain planned. Full ISO
-builds and real offline sessions are still required before release claims can
-treat the configured behavior as proven.
+evidence. Application/dependency configuration, the GNOME profile and optional
+GNOME themes are now implemented in the image sources with user-overridable
+defaults. Native Plasma configuration and appearance, plus backup choices,
+remain planned. Full ISO builds and real offline sessions are still required
+before release claims can treat the configured behavior as proven.
 
 ### Shell (all users)
 

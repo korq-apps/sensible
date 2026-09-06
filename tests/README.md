@@ -4,10 +4,17 @@
 tests/run-tests.sh    # no root, no container, no network
 ```
 
-Requires Bash, the usual command-line utilities, and Python 3.9+ (standard
-library only) for multi-page manual and desktop-app validation, plus `tar` and
-`unzip` for pinned-artifact fixtures. No Python packages are needed. Python's
-tarfile data filter is required (Python 3.12+, or 3.11.8+ with its backport).
+Requires Bash, the usual command-line utilities, `tar`, `unzip`, and **Python
+3.9+ with `tarfile.data_filter` available** (standard library only). The Python
+version alone is insufficient: extraction filters were also
+[backported to older Python releases](https://docs.python.org/3.9/library/tarfile.html#extraction-filters).
+Check the interpreter's capability, as the theme builder does:
+
+```bash
+python3 -c 'import sys, tarfile; sys.exit(0 if sys.version_info >= (3, 9) and hasattr(tarfile, "data_filter") else "Python 3.9+ with tarfile.data_filter is required")'
+```
+
+No third-party Python packages are needed for the fixture tests.
 Theme fixture tests double `sassc`; real theme builds require the builder's
 `sassc` package as well as Python.
 
