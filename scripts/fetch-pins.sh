@@ -16,6 +16,7 @@
 #   /etc/gitconfig                 configs/gitconfig (system-wide defaults)
 #   /etc/keyd/default.conf         GNOME variant only
 #   /usr/share/gnome-shell/extensions   pinned GNOME-only extensions
+#   /usr/share/themes                  optional GNOME-only theme collection
 #   config/packages.chroot/localsend_amd64.deb   local APT input for both editions
 set -euo pipefail
 
@@ -74,6 +75,10 @@ for uuid in "${GNOME_EXTENSION_UUIDS[@]}"; do
     rm -rf "${GNOME_EXTENSION_ROOT:?}/${uuid}"
 done
 rm -rf "${GNOME_EXTENSION_DOC:?}"
+# Theme outputs also belong only to GNOME, even on a reused build workspace.
+# shellcheck source=scripts/stage-themes.sh
+source "${SCRIPT_DIR}/stage-themes.sh"
+clear_staged_themes
 
 stage_gnome_extension() {
     local label="$1" uuid="$2" version="$3" version_tag="$4" sha256="$5" license_file="$6" license_id="$7"
@@ -192,6 +197,7 @@ tar -xzf "${LAZYVIM_TARBALL}" -C "${LAZYVIM_DEST}" --strip-components=1
 
 # --- GNOME Shell profile ----------------------------------------------------
 if [ "${SENSIBLE_VARIANT:-gnome}" = "gnome" ]; then
+    stage_gnome_themes
     mkdir -p "${GNOME_EXTENSION_DOC}"
     : > "${GNOME_EXTENSION_DOC}/sources.txt"
     stage_gnome_extension "Vitals" 'Vitals@CoreCoding.com' \
@@ -239,4 +245,4 @@ fetch_verified \
 install -Dm0644 "${LOCALSEND_LICENSE}" "${CHROOT}/usr/share/doc/localsend/copyright"
 install -Dm0644 "${REPO_ROOT}/live/pins.env" "${CHROOT}/etc/sensible/pins.env"
 
-echo "==> Pins staged: oh-my-bash, skel defaults, Nerd Font, git, keyd, GNOME extensions, LocalSend (${SENSIBLE_VARIANT:-gnome})"
+echo "==> Pins staged: oh-my-bash, skel defaults, Nerd Font, git, keyd, GNOME extensions/themes, LocalSend (${SENSIBLE_VARIANT:-gnome})"

@@ -41,7 +41,7 @@ DEPS=(
     grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed grub-efi-ia32-bin
     shim-signed sbsigntool
     rsync curl ca-certificates git coreutils util-linux findutils cpio bc procps unzip
-    python3 debian-archive-keyring
+    python3 debian-archive-keyring sassc
 )
 
 echo "==> Installing live-build toolchain (apt)..."

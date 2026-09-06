@@ -277,7 +277,19 @@ No credential helper is configured: Debian ships no packaged libsecret helper (`
 
 ### Optional software
 
-**Not currently offered by the offline installer:** Brave and Audacious. These belong in a post-install application tool or the desktop's software center.
+**Not currently offered by the offline installer:** Brave Origin and Audacious. Brave Origin (`brave-origin`, distinct from regular Brave) is a curated optional online app; the manual links its official installer and explains the added APT source/key. It is not a local package input or a preinstalled browser.
+
+GNOME's optional theme collection is image data, not a new default: Marble
+(six accents, light/dark), Good-Old-Shell 50 (session CSS/images only) and Graphite
+(grey GTK 3 Light/Dark only). `fetch-pins.sh` verifies the four source/release
+inputs, then `stage-themes.sh` and `build-theme-assets.py` build/stage assets in
+temporary directories. The builder never runs upstream installers that change
+host settings, GDM or libadwaita. Both build paths include Python and `sassc`;
+KDE staging removes only this collection's named outputs. The image hook checks
+Shell 50 and required assets. Sources, licenses and build adapters accompany the
+image in `/usr/share/doc/sensible-themes/`. These pinned assets are not updated
+by Debian APT. Selection/reset instructions and limitations are in the manual;
+full-image and real-session validation remains pending.
 
 **Later, not implemented:** AI CLIs may be added as an optional module with pinned artifacts. They are not current installer checkboxes.
 
@@ -285,7 +297,7 @@ No credential helper is configured: Debian ships no packaged libsecret helper (`
 
 ### Explicitly not installed
 
-Steam, Slack, WhatsApp, Zoom, Discord, Spotify, Snapd, any SaaS “default client”. The planned post-install tool configures Flathub so the user can add them without making the offline installer contact a third-party origin.
+Steam, Slack, WhatsApp, Zoom, Discord, Spotify, Snapd, any SaaS “default client”. Flathub is preconfigured system-wide via the checked-in upstream `.flatpakrepo` (including its GPG key) in `/usr/share/flatpak/remotes.d/`. Flatpak initializes it locally during the image hook; no app metadata, apps or runtimes are downloaded by that step. GNOME Software/KDE Discover can use it once online. The installed system inherits the remote and definition from the live root; the installer does not contact Flathub.
 
 ---
 

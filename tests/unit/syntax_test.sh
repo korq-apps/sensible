@@ -39,8 +39,10 @@ sh_files=(
     live/config/hooks/live/0300-ufw.hook.chroot
     live/config/hooks/live/0250-desktop-apps.hook.chroot
     live/config/hooks/live/0260-gnome-profile.hook.chroot
+    live/config/hooks/live/0270-desktop-sources-and-themes.hook.chroot
     tests/unit/desktop_apps_test.sh
     scripts/fetch-pins.sh
+    scripts/stage-themes.sh
     live/config/includes.chroot/usr/local/bin/sensible-install
     live/config/includes.chroot/etc/profile.d/98-sensible-serial-ready.sh
     live/config/includes.chroot/etc/profile.d/99-sensible-firmware-check.sh
@@ -180,6 +182,8 @@ assert_contains "native build stages its selected desktop list" "$native_build_s
 assert_contains "native build records the selected variant" "$native_build_source" 'etc/sensible/variant'
 assert_contains "native build runs the package gate" "$native_build_source" 'scripts/check-packages.sh'
 assert_contains "native dependencies include the package collector and Debian keyring" "$native_build_source" 'python3 debian-archive-keyring'
+assert_contains "native dependencies include the theme compiler" "$native_build_source" 'sassc'
+assert_file_contains "container dependencies include the theme compiler" "${REPO_ROOT}/live/Dockerfile" 'sassc'
 assert_file_contains "container builder includes the extension metadata validator" \
     "${REPO_ROOT}/live/Dockerfile" "python3"
 assert_contains "native build stages the same pinned defaults" "$native_build_source" 'scripts/fetch-pins.sh'

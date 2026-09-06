@@ -24,7 +24,8 @@ by installing to real QEMU disks, then boot those disks without the ISO attached
 
 **Desktop roadmap:** application/dependency and GNOME-profile source changes are
 implemented. Next, validate them in real images/sessions, then deliver the native
-KDE profile and selected themes/backup workflow as focused changes. The agreed
+KDE profile and backup workflow as focused changes. Selectable GNOME theme assets
+are now included; their real-session acceptance remains pending. The agreed
 scope is recorded in [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md); source
 configuration does not waive the release gate or prove a published image.
 
@@ -108,8 +109,9 @@ below, not an optional follow-up.
 - [x] Optional autologin (LUKS only, default on) + enforced idle screen lock on both DEs
 - [x] `keyd` + `configs/keyd-default.conf` when Mac clipboard is on
 - [x] Complete desktop defaults: Firefox ESR + Chromium, LibreOffice Writer/Calc/Impress, Thunderbird, KeePassXC, VLC, Neovim + pinned LazyVim skel, archive support, CLI set, Flatpak, and native GNOME/KDE utilities
-- [ ] Flathub remote setup moves to `sensible-apps`; the offline installer does
-      not contact a third-party origin
+- [x] Flathub is preconfigured system-wide with its signing key via a static
+      `.flatpakrepo`; the build hook initializes/verifies it without downloading
+      app metadata. No installer/first-login network setup or preinstalled Flatpaks.
 - [x] Debian-packaged Chromium and the native GNOME/KDE media utilities are
       baked into their images; Brave and alternative apps remain post-install
 - [x] Do not preinstall Slack/Zoom/etc.
@@ -123,6 +125,12 @@ below, not an optional follow-up.
   - [x] GNOME profile image configuration: curated extension activation,
         build-validated pins/dependencies, titlebar buttons and privacy-conscious
         fresh-user defaults. These are dconf defaults, not locks.
+  - [x] Optional GNOME themes: pinned Marble, Good-Old-Shell 50 and Graphite
+        GTK 3 assets, sources/licenses, build guards and offline manual guidance.
+        Default styling is unchanged; Flat Remix/Transparent Shell remain blocked
+        as recorded in the desktop profile plan.
+  - [ ] Theme session acceptance: readability, scaling, menus/overview, dock,
+        GTK 3 apps and unchanged login/lock behavior; confirm return to stock.
   - [ ] Validate the GNOME extensions in a real offline session across login,
         lock/reboot, laptop/desktop and multi-monitor cases; confirm user changes
         survive. Implement and validate the native KDE profile separately.
@@ -215,7 +223,8 @@ Architecture/spec sections mark them **(planned — post-install tool)**.
 
 - [ ] Developer tools: `docker.io` + `docker-compose` + `lazygit` + `gh`; user **not** added to the docker group (root-equivalent). Was an installer checkbox, which is exactly the kind of question the offline rework removes, and these cost nothing to add after first boot
 - [ ] BioPass face login: pinned `.deb` + SHA256 from [TickLabVN/biopass](https://github.com/TickLabVN/biopass), PAM via `pam-auth-update`. Third-party and young, so it does not belong in the offline image; biometrics never unlock LUKS and fingerprint login leaves the keyring locked — both must be stated where it is offered
-- [ ] Brave, Audacious, and Flathub remote setup — optional or third-party additions moved here by the offline decision
+- [x] Brave Origin is documented as a curated optional online app with its official installer; it is not preinstalled.
+- [ ] Post-install app tooling for Brave Origin and Audacious; Flathub itself is already preconfigured in the image.
 
 ---
 
@@ -240,7 +249,7 @@ package closure from the live image and requires no network. See
   filesystem and identity/locale choices, one destructive confirmation, and
   staged progress
 - [x] GNOME and KDE build variants; both keep account creation in the installer
-- [ ] `sensible-apps` post-install tool for Brave, Audacious, and Flathub remote setup
+- [ ] `sensible-apps` post-install tool for Brave Origin and Audacious (Flathub is already preconfigured)
 
 ---
 

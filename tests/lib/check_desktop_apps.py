@@ -11,6 +11,7 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
+from theme_fixtures import seed_themes
 
 REPO = Path(sys.argv.pop(1)).resolve()
 
@@ -35,7 +36,7 @@ class DesktopApps(unittest.TestCase):
         return subprocess.run(["bash", str(script)], env=self.env,
                               text=True, capture_output=True)
 
-    def seed_pins(self, include_omb_theme=True, extension_problem=None):
+    def seed_pins(self, include_omb_theme=True, extension_problem=None, theme_problem=None):
         script = self.root / "scripts/fetch-pins.sh"
         script.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(REPO / "scripts/fetch-pins.sh", script)
@@ -44,6 +45,7 @@ class DesktopApps(unittest.TestCase):
         pins = {"OH_MY_BASH_COMMIT": "omb", "NERD_FONTS_TAG": "font",
                 "LAZYVIM_STARTER_COMMIT": "vim", "LOCALSEND_VERSION": "1.18.2",
                 "LOCALSEND_DEB_VERSION": "1.18.2+64"}
+        self.theme_archives = seed_themes(REPO, self.root, pins, self.bin, theme_problem)
         for filename, key in (("oh-my-bash-omb.tar.gz", "OH_MY_BASH_TARBALL_SHA256"),
                               ("lazyvim-starter-vim.tar.gz", "LAZYVIM_STARTER_TARBALL_SHA256")):
             with tarfile.open(cache / filename, "w:gz") as archive:
@@ -117,12 +119,17 @@ esac
             with self.subTest(variant=variant):
                 self.env["SENSIBLE_VARIANT"] = variant
                 if variant == "kde":
-                    for archive in self.extension_archives:
+                    for archive in self.extension_archives + self.theme_archives:
                         archive.unlink()
                 result = self.run_script(script)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(self.staged.read_bytes(), self.deb.read_bytes())
                 chroot = self.root / "live/config/includes.chroot"
+                themes = chroot / "usr/share/themes"
+                self.assertEqual(len(list(themes.iterdir())), 15 if variant == "gnome" else 0)
+                self.assertFalse((themes / "Graphite-Light/gnome-shell").exists())
+                self.assertFalse((themes / "Graphite-Light/gtk-4.0").exists())
+                self.assertFalse((themes / "good-old-shell/extension").exists())
                 self.assertEqual((chroot / "usr/share/doc/localsend/copyright").read_bytes(),
                                  self.license.read_bytes())
                 self.assertEqual((chroot / "etc/sensible/pins.env").read_bytes(),
@@ -311,6 +318,100 @@ esac
         result = self.run_script(script)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse((self.root / "usr/share/tessdata").exists())
+
+    def test_theme_inputs_fail_closed(self):
+        for problem, diagnostic in (("license", "theme license is missing"),
+                                    ("asset", "Good-Old-Shell asset is missing"),
+                                    ("traversal", "unsafe theme archive member"),
+                                    ("css-asset", "theme CSS asset is missing")):
+            with self.subTest(problem=problem):
+                script = self.seed_pins(theme_problem=problem)
+                result = self.run_script(script)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(diagnostic, result.stderr)
+
+    def test_theme_checksum_and_compiler_failures(self):
+        script = self.seed_pins()
+        self.theme_archives[0].write_text("corrupt")
+        result = self.run_script(script)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Marble does not match the pinned SHA256", result.stderr)
+        script = self.seed_pins()
+        self.env["MOCK_SASSC_FAIL"] = "1"
+        result = self.run_script(script)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("could not stage the pinned theme collection", result.stderr)
+
+    def test_sources_and_themes_hook(self):
+        result = self.run_script(self.seed_pins())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        shutil.copytree(self.root / "live/config/includes.chroot/usr", self.root / "usr")
+        script = self.hook("0270-desktop-sources-and-themes.hook.chroot")
+        write(self.bin / "flatpak", '#!/bin/sh\nprintf "%s\\n" "$MOCK_REMOTES"\nexit "${MOCK_FLATPAK_FAIL:-0}"\n', True)
+        write(self.bin / "dpkg-query", '#!/bin/sh\necho "${MOCK_SHELL_VERSION:-50.2-1}"\n', True)
+        self.env["MOCK_REMOTES"] = "flathub\thttps://dl.flathub.org/repo/\t"
+        for variant in ("gnome", "kde"):
+            write(self.root / "etc/sensible/variant", variant)
+            result = self.run_script(script)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.env["MOCK_REMOTES"] += "disabled"
+        result = self.run_script(script)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("enabled system Flathub remote is missing", result.stderr)
+        self.env["MOCK_REMOTES"] = ""
+        self.assertNotEqual(self.run_script(script).returncode, 0)
+        self.env["MOCK_REMOTES"] = "flathub\thttps://example.invalid/repo/\t"
+        self.assertNotEqual(self.run_script(script).returncode, 0)
+        self.env["MOCK_REMOTES"] = "flathub\thttps://dl.flathub.org/repo/\t"
+        self.env["MOCK_FLATPAK_FAIL"] = "1"
+        result = self.run_script(script)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("could not initialize the preconfigured Flatpak remotes", result.stderr)
+        del self.env["MOCK_FLATPAK_FAIL"]
+        write(self.root / "etc/sensible/variant", "gnome")
+        self.env["MOCK_SHELL_VERSION"] = "51.0-1"
+        result = self.run_script(script)
+        self.assertIn("pinned themes require GNOME Shell 50", result.stderr)
+        self.assertNotEqual(result.returncode, 0)
+        self.env["MOCK_SHELL_VERSION"] = "1:50.2-1"
+        asset = self.root / "usr/share/themes/Marble-gray-dark/gnome-shell/gnome-shell.css"
+        asset.unlink()
+        result = self.run_script(script)
+        self.assertIn("desktop theme asset is missing", result.stderr)
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_flathub_static_definition(self):
+        import base64
+        import configparser
+        config = configparser.ConfigParser()
+        config.read(REPO / "live/config/includes.chroot/usr/share/flatpak/remotes.d/flathub.flatpakrepo")
+        remote = config["Flatpak Repo"]
+        self.assertEqual(remote["Url"], "https://dl.flathub.org/repo/")
+        self.assertGreater(len(base64.b64decode(remote["GPGKey"], validate=True)), 1000)
+        self.assertNotEqual(remote.get("Enable", "true"), "false")
+        # Exact reviewed upstream definition, including the key (2026-09-06).
+        definition = REPO / "live/config/includes.chroot/usr/share/flatpak/remotes.d/flathub.flatpakrepo"
+        self.assertEqual(hashlib.sha256(definition.read_bytes()).hexdigest(),
+                         "3371dd250e61d9e1633630073fefda153cd4426f72f4afa0c3373ae2e8fea03a")
+
+    def test_theme_cleanup_preserves_unrelated_assets(self):
+        script = self.seed_pins()
+        themes = self.root / "live/config/includes.chroot/usr/share/themes"
+        write(themes / "Custom/gnome-shell/gnome-shell.css", "keep")
+        write(themes / "Marble-blue-dark/gnome-shell/gnome-shell.css", "remove")
+        self.env["SENSIBLE_VARIANT"] = "kde"
+        result = self.run_script(script)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((themes / "Custom/gnome-shell/gnome-shell.css").read_text(), "keep")
+        self.assertFalse((themes / "Marble-blue-dark").exists())
+
+    def test_manual_describes_optional_origin_and_theme_selection(self):
+        manual = (REPO / "manual/applications.html").read_text()
+        self.assertIn('id="brave-origin"', manual)
+        self.assertIn("curl -fsS https://dl.brave.com/install.sh | FLAVOR=origin sh", manual)
+        self.assertIn("not a preinstalled browser", manual)
+        self.assertIn('id="themes"', manual)
+        self.assertIn("gsettings reset org.gnome.desktop.interface gtk-theme", manual)
 
     def test_firewall_both_editions_and_failure(self):
         script = self.hook("0300-ufw.hook.chroot")

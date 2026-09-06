@@ -1,8 +1,8 @@
 # Desktop profiles: GNOME and KDE
 
-Status: **application/dependency and GNOME-profile slices implemented in image
-configuration; full-image and real-session acceptance pending**. Native KDE
-profile defaults, optional appearance and backup choices remain planned.
+Status: **application/dependency, GNOME-profile and optional GNOME-theme slices
+implemented in image configuration; full-image and real-session acceptance
+pending**. Native KDE profile/appearance defaults and backup choices remain planned.
 Recorded 2026-09-05, after installer PR #3 was merged. A configured package list
 is not evidence that an already published ISO contains these additions.
 
@@ -24,6 +24,8 @@ land, and review those costs explicitly.
 | :--- | :--- | :--- | :--- |
 | Photo library | Shotwell | digiKam; keep Gwenview for quick viewing | Include in the respective image |
 | Nearby file sharing | LocalSend | LocalSend | Include in both images |
+| Flatpak application source | Flathub via GNOME Software | Flathub via KDE Discover | System remote/key preconfigured offline; downloads require network; no Flatpak apps/runtimes preinstalled |
+| Optional browser | Brave Origin | Brave Origin | Curated online alternative, not preinstalled; official installer and source/key implications documented in the manual |
 | Manage desktop additions | Extension Manager | Native widget browser and System Settings | Provide working management tools |
 | Resource and sensor monitoring | Vitals | Plasma System Monitor and native sensor widgets | Include; choose a restrained default display |
 | Phone integration | GSConnect, including supporting dependencies | KDE Connect | Include; pairing remains a user action |
@@ -33,7 +35,7 @@ land, and review those costs explicitly.
 | Window controls | Close, Minimize and Maximize titlebar buttons | Native Plasma titlebar controls | Apply as a fresh-user GNOME default; never overwrite later user changes |
 | Battery estimate | Battery Time | Native battery widget | Show useful laptop information; avoid empty desktop indicators |
 | Screenshot search, OCR and QR | Shotzy | Retain Spectacle; investigate an OCR/search companion | GNOME scope agreed; KDE feature parity still exploratory |
-| Themes | User Themes plus the shortlist below | Native Plasma appearance settings; theme shortlist still pending | Evaluate in a separate appearance slice; no new default selected |
+| Themes | User Themes; Marble, Good-Old-Shell 50 and Graphite GTK 3 | Native Plasma appearance settings; theme shortlist still pending | Selectable offline GNOME options; no new default selected; session acceptance pending |
 
 The requested GNOME extensions are Vitals, GSConnect, Caffeine, Clipboard
 Indicator, Dash to Dock, Battery Time, Shotzy and User Themes. Do not silently
@@ -73,8 +75,9 @@ backup jobs without a user-selected destination.
    on downloading an unpinned branch, disabling extension-version checks, or
    letting a root-owned installation self-update unexpectedly.
 5. Keep optional applications and online repository setup in the planned
-   `sensible-apps` workflow. A default being sourced upstream does not imply
-   that its installation must require the target machine to be online.
+   `sensible-apps` workflow or documented manual instructions. Flathub's static
+   definition/key is already image data, not an online setup task. A default
+   being sourced upstream does not imply that installation must be online.
 
 This is an explicit exception to the earlier broad statement that all
 third-party applications are post-install only: approved default artifacts may
@@ -146,21 +149,48 @@ Document what is uploaded and to which service, and require an explicit user
 action before sending screenshot content. Do not claim Spectacle alone offers
 the same OCR/search workflow on KDE.
 
-## Theme shortlist for the appearance follow-up
+## Optional GNOME themes and remaining shortlist
 
-Recorded from the user-supplied candidates on 2026-09-05. These are inputs to a
-separate appearance slice, not installed assets or a choice of default theme.
-Preserve all five sources and the exact Good-Old-Shell branch below. Upstream
-claims are planning evidence, not proof of compatibility with the Shell version
-in a Sensible image.
+Recorded from the user-supplied candidates on 2026-09-05, packaging reviewed on
+2026-09-06. Three candidates now have selectable image assets. The default
+appearance remains unchanged. All five sources and the exact Good-Old-Shell
+branch are retained below; compilation and asset checks do not replace actual
+Shell/GTK session validation.
 
 | Candidate / source | Scope | Packaging and compatibility notes |
 | :--- | :--- | :--- |
 | [Flat Remix GNOME](https://drasite.com/flat-remix-gnome) | GNOME Shell | Upstream provides version-specific downloads and currently lists through Shell 49. Check the actual build's Shell version before selecting an artifact; do not assume Shell 50 support. The project states CC BY-SA 4.0. |
-| [Marble](https://github.com/imarkoff/Marble-shell-theme) | GNOME Shell | Upstream advertises GNOME 42–50, User Themes and Python 3.10+. Generate selected variants during the image build, not first login. Repository identifies GPL-3.0. |
+| [Marble](https://github.com/imarkoff/Marble-shell-theme) | GNOME Shell | Included: six accents (red/yellow/green/blue/purple/gray), light and dark, generated for Shell 50 through upstream's Python build API. Pin `df788bc3d9d2147bcdeaedb907b90ced64f0ad48`; GPL-3.0-or-later. The upstream installer and its settings-changing post-install step are not run. |
 | [Transparent Shell Theme](https://github.com/mrbrownstone07/Transparent-Shell-Theme) | GNOME Shell | README requires User Themes but does not state a supported Shell range. Redistribution licensing is not established by the reviewed README/top-level listing; verify licensing and compatibility before bundling. Test contrast over varied wallpapers. |
-| [Good-Old-Shell — `good-old-shell-50`](https://github.com/mx-2/gnome-shell-sass/tree/good-old-shell-50) | GNOME Shell 50 | Keep this requested branch, not the different branch in the README's generic build link. Pin a commit and build its CSS. Full-color shell icons require an appropriate separate icon theme. README states GPL-2.0-or-later. |
-| [Graphite GTK](https://github.com/vinceliuice/Graphite-gtk-theme) | GTK application theme, with Shell-related options | Assess application and Shell components separately. Upstream lists GTK >=3.20, theme-engine dependencies and `sassc` for building; it also offers GDM and libadwaita options. Repository identifies GPL-3.0. |
+| [Good-Old-Shell — `good-old-shell-50`](https://github.com/mx-2/gnome-shell-sass/tree/good-old-shell-50) | GNOME Shell 50 | Included: session CSS/PNG assets from verified release 50.0, whose tag matches requested-branch commit `4809458e1f78eaa28a5d0c181ee3e705f80887c0`. Its source archive lacks the overview wallpaper, so retain both the source and release inputs. No GDM extension/helper is installed. Full-color icons depend on a separate icon theme. GPL-2.0-or-later. |
+| [Graphite GTK](https://github.com/vinceliuice/Graphite-gtk-theme) | GTK 3 application theme only | Included: grey Light/Dark variants compiled with `sassc` from pin `364173f47407164948788e4abb5e2eb46600f71a`; GPL-3.0. Do not ship its older Shell styles, GTK 2 engine-dependent assets, GTK 4/libadwaita overrides, application launcher or other-desktop components. |
+
+Flat Remix remains blocked on a reviewed Shell 50 artifact. Transparent Shell
+remains blocked on explicit redistribution licensing and a supported Shell
+range. Neither is bundled just because its source is publicly downloadable.
+
+`scripts/fetch-pins.sh` sources `scripts/stage-themes.sh`: verify all four theme
+archives against `live/pins.env`, build in temporary directories with
+`scripts/build-theme-assets.py`, then stage under `/usr/share/themes` for GNOME
+only. Both native/container builders include `sassc` and Python. A KDE rebuild
+removes only the named generated themes/docs, not unrelated themes. Exact source
+archives, licenses, pins and the build adapter accompany the image under
+`/usr/share/doc/sensible-themes/`. The chroot hook checks required assets and
+rejects Shell major-version drift. These assets are not updated by Debian APT;
+future image pins and session acceptance must be refreshed for major upgrades.
+
+Use Tweaks > Appearance > Shell for Marble/Good-Old-Shell and Legacy Applications
+for Graphite. Return Shell to Default (or disable User Themes), and restore the
+previous application theme. See the [manual](../manual/applications.html#themes)
+for usage, limitations and reset instructions.
+
+Validation recorded on 2026-09-06: the complete GNOME pin-staging path built
+all 15 theme variants in a Debian Testing builder with networking disabled,
+using verified cached archives; a subsequent KDE pass removed the collection.
+Staged footprint was about 3.7 MiB of themes plus 23 MiB of source/license inputs,
+not a measured ISO-size delta. The unit suite exercises missing/corrupt inputs,
+licenses/assets, unsafe archive paths, compiler failure and Shell-version drift.
+Real ISO boot, session behavior and visual/accessibility acceptance remain open.
 
 Appearance-slice boundaries and acceptance:
 
@@ -214,7 +244,7 @@ each profile change is implemented and validated.
 | 1. Applications and dependencies | Photo tools, LocalSend, phone integration, management tools and approved support packages | Both images build; applications start offline; network integrations work with the firewall |
 | 2. GNOME profile | Image configuration complete: package/pin the selected extensions and apply fresh-user defaults, including titlebar buttons | Correct Shell compatibility, enabled state, dependency checks and user-overridable defaults are automated; reboot/login/lock tests remain |
 | 3. KDE profile | Native feature configuration, selected apps and evaluation of screenshot OCR/search | Equivalent task coverage, correct panel behavior, reboot/login/lock tests |
-| 4. Optional appearance and backups | User-selected themes; validated backup workflow | Readability/accessibility review; successful backup and restore before recommending defaults |
+| 4. Optional appearance and backups | GNOME theme assets included; native KDE appearance and validated backup workflow pending | GNOME readability/accessibility and session review; successful backup and restore before recommending defaults |
 
 Each change updates the manual and the actual-current-state documentation.
 Do not advertise planned features as shipped while this checklist is open.

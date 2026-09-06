@@ -164,12 +164,13 @@ sudo apt update
 sudo apt full-upgrade
 ```
 
-Restart if a kernel or core system component was updated. Until the planned
-`sensible-apps` tool lands, add Flathub once before using GNOME Software or KDE
-Discover to install Flatpak applications:
+Restart if a kernel or core system component was updated. Flathub is already
+enabled system-wide on both editions, with its signing key. Use GNOME Software
+or KDE Discover when online; no Flatpak apps/runtimes are preinstalled. Check it
+with `flatpak remotes --system`. For an older image only, add the source online:
 
 ```bash
-flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+sudo flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 ```
 
 For supported device firmware, check LVFS through `fwupd`:

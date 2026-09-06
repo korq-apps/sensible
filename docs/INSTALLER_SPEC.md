@@ -434,12 +434,17 @@ not only trusted networks; the offline manual warns users about that exposure.
 
 ### Planned — post-install tool (`sensible-apps`)
 
+Flathub is already enabled for both editions via the image's static system
+remote definition and signing key. The build hook initializes/verifies it
+without downloading app metadata; no installer/first-login network setup is
+required. Actual Flatpak browsing, app installation and updates require network.
+
 These stay optional or third-party/online and move out of the installer entirely:
 
 ```text
-Brave:            official apt origin + brave-browser (never from Debian)
+Brave Origin:     official Brave apt source + brave-origin (never from Debian);
+                  official online installer documented in the manual
 Audacious:        optional alternative media player from Debian
-Flathub:          configure the third-party remote after first boot
 Developer tools:  docker.io docker-compose lazygit gh; systemctl enable docker;
                   the user is NOT added to the docker group (root-equivalent)
 BioPass:          pinned biopass_<ver>_amd64.deb from GitHub releases, SHA256

@@ -36,7 +36,7 @@ wiped disk on the user's.
 | Variants | Two ISOs: GNOME (base), KDE (alternative) | Parameterised build, two artifacts, two CI builds; the installer never asks which desktop |
 | Live session | Branded console installer | The selected desktop is carried in the image and starts on the installed system |
 | Identity setup | Shared installer forms for GNOME and KDE | Account, hostname, timezone, and locale are configured before first boot |
-| Third-party setup | Out of the installer, into a post-install tool | Brave and the Flathub remote need network and third-party origins; Debian's Chromium and Flatpak packages are baked into the ISO |
+| Third-party setup | No online setup in the installer | Brave Origin stays optional/online. Flathub's source and key are now preconfigured as static image data; only browsing/installing Flatpak apps needs network. Debian's Chromium and Flatpak packages remain baked into the ISO |
 | TUI toolkit | `gum` | In Testing `main`, depends only on `libc6` (~21 MB) |
 | Swap | Swapfile inside root, mirroring RAM; no swap partition | Encryption no longer changes the partition layout; minimum disk still scales with RAM |
 
@@ -141,8 +141,9 @@ unchecked acceptance gates in PLAN.md, not by completion of these steps.
 4. **Prompt rework** — `gum`, the reduced screen set, and first-boot
    delegation on GNOME.
 5. **KDE variant** — second ISO and its account-creation path.
-6. **Post-install app tool** — `sensible-apps` for Brave, optional alternatives,
-   and Flathub remote setup.
+6. **Post-install app tool** — `sensible-apps` for Brave Origin and optional
+   alternatives. Update (2026-09-06): Flathub remote/key configuration is now
+   static image data, not a network-dependent post-install task.
 
 ## Open questions
 

@@ -50,7 +50,7 @@ The live ISO does **not** ship both desktops. Choose the GNOME or KDE release as
 
 ### Software (defaults vs optional)
 
-**Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak, fonts, `fwupd`, Secure Boot chain on the installed system (shim + Debian-signed GRUB). The Flathub remote is added later by the planned `sensible-apps` tool or manually after first boot.
+**Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak, fonts, `fwupd`, Secure Boot chain on the installed system (shim + Debian-signed GRUB). Flathub is preconfigured system-wide with its signing key; app browsing/downloads require a connection, but installation does not.
 
 **Default apps:** Firefox ESR and Chromium; LibreOffice Writer, Calc, and Impress; Thunderbird; KeePassXC; VLC; Neovim (LazyVim starter in `/etc/skel`); archive support; and modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`). GNOME adds File Roller and Amberol; KDE adds Okular, Ark, Gwenview, Kate, KCalc, Spectacle, and Elisa. Flatpak and the desktop store integration are ready for use after installation.
 
@@ -63,8 +63,10 @@ caching is limited to favorites, Vitals public-IP lookup is off, and users can
 override every default. LocalSend and the four non-Debian GNOME extensions are
 checksum-pinned at image-build time, not downloaded by the installer. Sharing-port
 exceptions are configured on both editions; see the [manual](manual/applications.html)
-for usage and privacy details. KDE profile configuration and optional themes remain
-in the [desktop profile plan](docs/DESKTOP_PROFILES.md). Full-image and real-session
+for usage and privacy details. GNOME also includes selectable Marble, Good-Old-Shell
+50 and Graphite GTK 3 themes without changing the default appearance. Native KDE
+profile configuration and deferred themes remain in the
+[desktop profile plan](docs/DESKTOP_PROFILES.md). Full-image and real-session
 acceptance is still pending.
 
 **Offline help:** open **Sensible Manual** from the application menu or run
@@ -75,7 +77,7 @@ Its linked chapters explain [everyday application choices](manual/applications.h
 and give [terminal-tool recipes](manual/terminal-tools.html), including the
 distinction between finding filenames, searching contents and filtering lists.
 
-**Not currently offered by the offline installer:** Brave, Audacious, and Flathub remote setup. Install additional applications after first boot; commercial applications belong on Flathub rather than in the base image.
+**Curated optional online app:** [Brave Origin](manual/applications.html#brave-origin), the separate `brave-origin` package, with its official one-line installer documented in the manual. It is not preinstalled. Audacious also remains optional/post-install; Flathub is already enabled for adding further apps.
 
 **Not currently offered:** AI CLIs. If added later, they will be optional and use pinned artifacts rather than `curl | sh` from the ISO.
 
