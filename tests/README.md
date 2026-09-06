@@ -18,6 +18,44 @@ No third-party Python packages are needed for the fixture tests.
 Theme fixture tests double `sassc`; real theme builds require the builder's
 `sassc` package as well as Python.
 
+### Optional real theme/icon loading check
+
+After staging the GNOME assets into a **disposable Debian image/container**,
+install its icon/SVG dependencies (`papirus-icon-theme`, `librsvg2-common`,
+`gtk-update-icon-cache`) and test-only `python3-gi`, `gir1.2-gtk-3.0`, `gir1.2-gtk-4.0`, `xvfb`
+and `xauth`. Copy the staged themes/icons into that container's `/usr/share`
+(not the host desktop), generate Qogir's icon caches, then run:
+
+```bash
+xvfb-run -a python3 /repo/tests/lib/check_theme_runtime.py --gtk 3
+xvfb-run -a python3 /repo/tests/lib/check_theme_runtime.py --gtk 4
+```
+
+Run this inside the container's shell, or use an init-enabled container; do not
+make `xvfb-run` PID 1, where its X server readiness signal can leave it waiting.
+
+The check compares named GTK discovery against the exact installed CSS, rejects
+CSS parse errors (apart from deprecation notices), renders application/folder/
+symbolic icons at normal and HiDPI scales, and exercises inherited fallback icons.
+It does not change user settings. It is intentionally outside the rootless,
+offline fixture runner and does not replace full GNOME session acceptance.
+
+To compare Matcha with its real manual installation, run the pinned upstream
+installer **only inside that disposable container** (it also writes editor styles
+outside its theme destination). From the extracted pinned Matcha repository:
+
+```bash
+mkdir -p /tmp/matcha-upstream
+bash install.sh -d /tmp/matcha-upstream -t sea
+python3 /repo/tests/lib/check_theme_upstream.py /tmp/matcha-upstream /usr/share/themes
+```
+
+The comparator is read-only: it requires all upstream GTK 3/4 and Shell paths,
+identical symlink targets and matching file bytes, except the intentionally
+compiled/adapted GTK 3 CSS. The fixture suite separately protects the restored
+components, known upstream Matcha GTK 4 references, new missing-file failures,
+and path confinement even for a known reference.
+
 ## What is covered
 
 ### Unit tests (`tests/unit/`)
@@ -27,8 +65,8 @@ Theme fixture tests double `sassc`; real theme builds require the builder's
 | `common_test.sh` | MNT override, UI tool detection (whiptail/dialog/text), logging and warning collection, text-mode widgets, network preflight, hostname/username validation, keyboard layout detection/validation/application, `check_root`/`check_uefi` |
 | `disk_test.sh` | Partition naming, swap/minimum math, GPT layouts, LUKS2, Btrfs subvolumes and swapfile resume offset, Ext4, candidate filtering, stable disk-identity revalidation, mounted-disk rejection, and installer-owned cleanup |
 | `fstab_test.sh` | All four engine combinations (Btrfs/Ext4 x LUKS on/off): crypttab root by LUKS header UUID, swapfile lines inside root, `@swap` subvolume mounts, tmpfs, and blkid-empty abort guards |
-| `desktop_test.sh` | GNOME/KDE package sets, Plymouth spinner/breeze, gdm3/sddm enablement, keyd conf deployed from `configs/` (never generated — spec §11), hard-fail on missing conf, and GNOME's unlocked dconf extension/titlebar/privacy defaults |
-| `desktop_apps_test.sh` | Real pin/theme staging with tiny cached artifacts: checksum/identity/compatibility/license/path/asset/compiler failures, cache reuse, GNOME/KDE cleanup and fixed local-deb paths; LocalSend/GNOME-profile/theme hooks, Shell-version/package/schema/OCR guards; static Flathub source/key and enabled-remote guards; both editions' firewall rules and edition ownership |
+| `desktop_test.sh` | GNOME/KDE package sets, Plymouth spinner/breeze, gdm3/sddm enablement, keyd conf deployed from `configs/` (never generated — spec §11), hard-fail on missing conf, and GNOME's unlocked dconf extension/titlebar/privacy and Paper/Orchis defaults |
+| `desktop_apps_test.sh` | Real pin/theme staging with tiny cached artifacts: checksum/identity/compatibility/license/path/asset/compiler failures, Qogir/Matcha/Fluent/Graphite GTK 3/4 and Shell installation, Qogir alias overlay and light/dark recoloring, known CSS corrections, icon directory/link/index/fallback validation, cache reuse, GNOME/KDE cleanup and fixed local-deb paths; LocalSend/GNOME-profile/theme hooks, Shell-version/package/schema/OCR/icon-cache guards; static Flathub source/key and enabled-remote guards; both editions' firewall rules and edition ownership |
 | `apps_test.sh` | Canonical default app set (Architecture §7), Flathub, LazyVim skel + user copy + ownership, Brave official apt origin + signed keyring, quoted whiptail checklist matching, amberol/elisa per tag, no Slack/Zoom/Steam/Snapd |
 | `manual_test.sh` | Offline chapter assets/links, current app-list coverage, both build paths, missing payload rejection, launcher fallback/retry/idempotency, and scoped per-user autostart ownership |
 | `syntax_test.sh` | `bash -n` over every shell script in the repo, executable bits, live-build hook naming (`*.hook.{chroot,binary}` — anything else is silently skipped), and direct-file/release CI guards |
@@ -73,8 +111,9 @@ codes.
 ## Not covered here (future work)
 
 - **E2E installed-disk boot**: boot the ISO in QEMU, drive the real
-  Gum installer, then inspect and boot the installed disk. Blocked on
-  having a buildable ISO environment (podman/docker + qemu + expect). The CI
+  installer through validated unattended input (#4), then inspect and boot the
+  installed disk (#5). Virtualization/build tooling is also required; a passing
+  ISO build alone does not provide this missing harness. The CI
   boot smoke (`build-iso.yml`) asserts UEFI boot reaches a stable marker from
   the live serial autologin shell.
 - Plymouth graphical unlock and `systemctl` behavior of the installed system.
@@ -84,7 +123,7 @@ codes.
 - Actual GNOME Shell extension activation, panel/multi-monitor layout, Shotzy
   OCR/QR/Lens behavior, battery/no-battery behavior, and persistence of user
   overrides through logout, reboot and package upgrades.
-- Theme readability, transparency/contrast, scaling, GTK 3 application styling,
+- Theme readability, transparency/contrast, scaling, GTK 3/4 application styling,
   return to stock, and unchanged GDM/login/lock behavior in real sessions.
 - The local suite tests package-gate failure handling; CI performs the live
   Debian Testing archive query before each variant build.

@@ -16,6 +16,7 @@
         <li><a class="nav-link" href="applications.html">Everyday applications</a></li>
         <li><a class="nav-link" href="terminal-tools.html" aria-current="page">Terminal tools &amp; recipes</a></li>
         <li><a class="nav-link" href="#start">Before you start</a></li>
+        <li><a class="nav-link" href="#classic">Classic tools first</a></li>
         <li><a class="nav-link" href="#fd-find">fd-find: find filenames</a></li>
         <li><a class="nav-link" href="#ripgrep">ripgrep: find text</a></li>
         <li><a class="nav-link" href="#fzf">fzf: choose interactively</a></li>
@@ -33,16 +34,64 @@
         <p>Open your desktop's terminal application. <code>pwd</code> prints the current directory; <code>cd</code> changes it. Examples with <code>.</code> search the current directory. Replace sample paths such as <code>notes.txt</code> with files you actually have. Your Documents folder may have a translated name.</p>
         <p><code>~/</code> means your home directory: for example, <code>~/Documents</code> is the Documents folder inside it. Leave the leading <code>~</code> outside quotation marks so the shell expands it; for a folder with spaces, write <code>~/"My Documents"</code>.</p>
         <p>Shell variables are named values. A dollar sign reads one: <code>$HOME</code> contains your home-directory path, so <code>echo "$HOME"</code> prints it. Double quotes keep a value containing spaces together as one argument. This guide uses the shorter <code>~/</code> notation for home-directory paths.</p>
-        <p>A line beginning with <code>#</code> is a comment. A pipe (<code>|</code>) sends one command's output to another. Examples below do not need administrator privileges except the explicitly marked <code>sudo</code> example. Searching a directory you cannot read is a reason to check the path, not automatically add <code>sudo</code>.</p>
+        <p>A line beginning with <code>#</code> is a comment. A pipe (<code>|</code>) sends one command's output to another. Examples below do not need administrator privileges except the explicitly marked <code>sudo</code> examples. Searching a directory you cannot read is a reason to check the path, not automatically add <code>sudo</code>.</p>
         <p>Debian calls the executables <code>fdfind</code> and <code>batcat</code>. Sensible's default interactive Bash configuration also provides <code>fd</code> and <code>bat</code> aliases, plus <code>ls</code>/<code>ll</code>/<code>tree</code> aliases for eza. We use the actual executable names here so examples also work without those aliases.</p>
-        <div class="table-container"><table><thead><tr><th scope="col">Your question</th><th scope="col">Use</th></tr></thead><tbody>
-          <tr><td>“Where is the file with invoice in its name?”</td><td><a href="#fd-find">fdfind</a></td></tr>
-          <tr><td>“Which files contain this sentence?”</td><td><a href="#ripgrep">rg</a></td></tr>
-          <tr><td>“Can I narrow this list by typing?”</td><td><a href="#fzf">fzf</a></td></tr>
+        <div class="table-container"><table><thead><tr><th scope="col">Your question</th><th scope="col">Classic command</th><th scope="col">Sensible tool</th></tr></thead><tbody>
+          <tr><td>“Where is the file with invoice in its name?”</td><td><code>find . -iname '*invoice*'</code></td><td><a href="#fd-find">fdfind</a></td></tr>
+          <tr><td>“Which files contain this sentence?”</td><td><code>grep -rn 'sentence' .</code></td><td><a href="#ripgrep">rg</a></td></tr>
+          <tr><td>“Can I narrow this list by typing?”</td><td>pipe the list into <code>grep</code></td><td><a href="#fzf">fzf</a></td></tr>
         </tbody></table></div>
+      </section>
+      <section id="classic"><h2>Classic tools first</h2>
+        <p>The tools in this chapter are modern conveniences. The classic commands behind them are part of every Debian and Linux system: scripts, servers, containers, recovery shells and most online instructions use them, and they work even where Sensible's aliases are absent. Learn enough of them to read and follow instructions; use the modern tools when you are working interactively.</p>
+        <div class="table-container"><table><thead><tr><th scope="col">Task</th><th scope="col">Classic command</th><th scope="col">Sensible addition</th></tr></thead><tbody>
+          <tr><td>List a directory with details</td><td><code>ls -la</code></td><td><a href="#eza">eza</a>, behind the <code>ls</code> alias</td></tr>
+          <tr><td>Find files by name</td><td><code>find . -iname '*invoice*'</code></td><td><a href="#fd-find">fdfind</a></td></tr>
+          <tr><td>Search inside files</td><td><code>grep -rn 'meeting notes' .</code></td><td><a href="#ripgrep">rg</a></td></tr>
+          <tr><td>Read a text file</td><td><code>less</code>, <code>cat</code>, <code>head</code></td><td><a href="#bat">batcat</a></td></tr>
+          <tr><td>Change directory</td><td><code>cd ~/Documents</code>, <code>cd -</code></td><td><a href="#zoxide">z</a></td></tr>
+          <tr><td>Watch processes and load</td><td><code>top</code>, <code>ps aux</code></td><td><a href="#btop">btop</a></td></tr>
+          <tr><td>Summarize the system</td><td><code>hostnamectl</code>, <code>free -h</code>, <code>df -h</code></td><td><a href="#fastfetch">fastfetch</a></td></tr>
+          <tr><td>Pretty-print JSON</td><td><code>python3 -m json.tool</code></td><td><a href="#jq">jq</a></td></tr>
+          <tr><td>Recall an earlier command</td><td><code>history</code>, <kbd>Ctrl</kbd> + <kbd>R</kbd></td><td><a href="#fzf">fzf</a> history search</td></tr>
+        </tbody></table></div>
+        <p>Each section below repeats its classic equivalent, so instructions written for either style remain usable.</p>
+        <div class="callout info">
+          <div class="callout-title">Aliases only change your interactive shell</div>
+          Sensible's <code>ls</code>, <code>ll</code>, <code>tree</code>, <code>fd</code> and <code>bat</code> aliases, and oh-my-bash's general set such as <code>less</code> with extra options and <code>wget -c</code>, apply to your own interactive Bash sessions. Scripts, <code>sudo</code>, other accounts and other shells run the classic programs. <code>alias</code> lists what is active, <code>type ls</code> shows what a name resolves to, and <code>command ls -la</code> bypasses an alias once. To stop using them, delete the lines under <em>Sensible CLI defaults</em> in <code>~/.bashrc</code>, or the <code>aliases=(general)</code> entry above them; that file belongs to you and updates never rewrite it.
+        </div>
+        <h3>Essentials with no replacement</h3>
+        <p>These have no modern substitute in the image and appear in almost every guide. Every example only reads or prints unless its comment says otherwise.</p>
+        <pre><code># Files and disk space
+cp notes.txt notes-copy.txt     # copies; mv renames or moves
+rm notes-copy.txt               # deletes immediately, with no trash
+mkdir -p ~/Projects/demo        # creates a directory and any missing parents
+du -sh ~/Documents              # space used by a folder
+df -h                           # free space per filesystem
+lsblk                           # disks and partitions
+file notes.txt                  # what kind of file this is
+tar -tzf archive.tar.gz         # lists an archive without extracting it</code></pre>
+        <pre><code># Text pipelines
+head -n 20 notes.txt            # first 20 lines; tail -n 20 shows the last 20
+sort names.txt | uniq -c        # counts repeated lines
+wc -l notes.txt                 # counts lines
+cut -d ',' -f 2 data.csv        # second comma-separated column
+sed 's/colour/color/g' notes.txt   # prints with a replacement; the file is unchanged
+diff old.txt new.txt            # what changed between two files</code></pre>
+        <pre><code># Processes, services and network
+ps aux | grep -i firefox        # is a program running, and under which process id?
+kill 12345                      # asks a process to stop; use the id shown by ps
+systemctl status NetworkManager # state of a system service; q leaves the pager
+journalctl -f                   # follows your session's log as it grows; Ctrl+C stops
+sudo journalctl -b -p err       # system-wide errors since this boot; needs sudo
+ip a                            # network interfaces and addresses
+ss -tuln                        # listening ports
+ping -c 3 debian.org            # online: is the network reachable?</code></pre>
+        <p><strong>Editing text:</strong> <code>nano notes.txt</code> opens the default terminal editor; <kbd>Ctrl</kbd> + <kbd>O</kbd> saves and <kbd>Ctrl</kbd> + <kbd>X</kbd> exits. <code>vi</code> is also installed for instructions that assume it; press <kbd>Esc</kbd>, then type <code>:q!</code> and <kbd>Enter</kbd> to leave without saving. <strong>Help:</strong> <code>man ls</code> opens a manual page (<kbd>q</kbd> quits), and <code>ls --help</code> prints a short summary for most commands.</p>
       </section>
       <section id="fd-find" data-packages="fd-find"><h2>fd-find → fdfind · find filenames</h2>
         <p><strong>Why included:</strong> a concise recursive filename search, without needing to learn the longer expressions of <code>find</code>.</p>
+        <p><strong>Classic equivalent:</strong> <code>find . -iname '*invoice*'</code> matches names regardless of case; <code>find . -type f -name '*.pdf'</code> lists PDF files. <code>find</code> also descends into hidden and Git-ignored directories, which <code>fdfind</code> skips by default.</p>
         <pre><code># Names containing invoice, below the current directory
 fdfind invoice
 
@@ -61,6 +110,7 @@ fdfind -H bashrc ~/</code></pre>
       </section>
       <section id="ripgrep" data-packages="ripgrep"><h2>ripgrep → rg · search inside files</h2>
         <p><strong>Why included:</strong> fast recursive text search for notes, source code and logs.</p>
+        <p><strong>Classic equivalent:</strong> <code>grep -rn -F 'meeting notes' .</code> and <code>grep -rli invoice --include='*.md' .</code>. <code>grep</code> searches hidden and ignored files too, and reports binary matches instead of skipping them.</p>
         <pre><code># Literal text, with line numbers
 rg -n -F 'meeting notes' .
 
@@ -73,6 +123,7 @@ rg -l -F 'TODO' .</code></pre>
       </section>
       <section id="fzf" data-packages="fzf"><h2>fzf · choose from a list</h2>
         <p><strong>Why included:</strong> an interactive filter when remembering part of a filename is easier than reading a long list.</p>
+        <p><strong>Classic equivalent:</strong> filter the list without interaction: <code>fdfind -t f | grep -i invoice</code>, or <code>find . -type f | grep -i invoice</code> on a system without fd.</p>
         <pre><code># List regular files, then narrow the list interactively
 fdfind -t f | fzf</code></pre>
         <p>Type fragments, use the arrow keys and press Enter to print a selection; Esc cancels. This recipe <strong>does not open or modify</strong> the selected file. It is a line-based recipe, so filenames containing newline characters need a different, NUL-delimited workflow.</p>
@@ -80,6 +131,7 @@ fdfind -t f | fzf</code></pre>
       </section>
       <section id="bat" data-packages="bat"><h2>bat → batcat · read text comfortably</h2>
         <p><strong>Why included:</strong> syntax highlighting and line numbers when inspecting text files.</p>
+        <p><strong>Classic equivalent:</strong> <code>less notes.txt</code> pages through a file (<kbd>q</kbd> quits), <code>cat -n notes.txt</code> prints it with line numbers, and <code>head -n 40 notes.txt</code> shows the first 40 lines.</p>
         <pre><code>batcat notes.txt
 batcat --paging=never --line-range 1:40 notes.txt</code></pre>
         <p>The second command prints just the first 40 lines without a pager. If the first command opens a pager, use its arrow keys to move and <kbd>q</kbd> to quit. It is a viewer, not an editor; use <a href="applications.html#neovim">Neovim</a> or <a href="applications.html#kate">Kate (KDE)</a> to change text. <a href="https://github.com/sharkdp/bat">Upstream reference</a>.</p>
@@ -87,6 +139,7 @@ batcat --paging=never --line-range 1:40 notes.txt</code></pre>
       <section id="navigation"><h2>Inspect and revisit directories</h2>
         <article id="eza" data-packages="eza"><h3>eza · clearer directory listings</h3>
           <p><strong>Why included:</strong> readable file metadata and a tree view in one tool.</p>
+          <p><strong>Classic equivalent:</strong> <code>ls -la</code> for the detailed listing and <code>find . -maxdepth 2 -type d</code> for a two-level directory overview.</p>
           <pre><code># Detailed listing, including hidden entries
 eza -la
 
@@ -99,6 +152,7 @@ eza -la --git</code></pre>
         </article>
         <article id="zoxide" data-packages="zoxide"><h3>zoxide · jump to familiar folders</h3>
           <p><strong>Why included:</strong> less repeated typing when you move between the same directories.</p>
+          <p><strong>Classic equivalent:</strong> <code>cd ~/Documents</code>; <code>cd -</code> returns to the previous directory and <code>cd</code> alone returns home.</p>
           <pre><code># First visit an existing folder normally
 cd ~/Documents
 cd
@@ -112,10 +166,11 @@ zoxide query -l -s</code></pre>
         </article>
       </section>
       <section id="inspection"><h2>Understand the system and structured data</h2>
-        <article id="btop" data-packages="btop"><h3>btop · live resource monitor</h3><p><strong>Why included:</strong> a quick way to investigate a busy fan, memory pressure or a slow application. <strong>Try:</strong> run <code>btop</code>, look at CPU/memory usage and the process list, then press <kbd>q</kbd> to leave. Viewing is enough for a first investigation; do not terminate unfamiliar processes.</p></article>
-        <article id="fastfetch" data-packages="fastfetch"><h3>fastfetch · a system summary</h3><p><strong>Why included:</strong> a compact overview of the OS, desktop and hardware when orienting yourself or reporting an issue. <strong>Try:</strong> run <code>fastfetch</code>. It reports information, not a hardware health test. Review usernames, hostnames and other identifying details before sharing its output.</p></article>
+        <article id="btop" data-packages="btop"><h3>btop · live resource monitor</h3><p><strong>Why included:</strong> a quick way to investigate a busy fan, memory pressure or a slow application. <strong>Try:</strong> run <code>btop</code>, look at CPU/memory usage and the process list, then press <kbd>q</kbd> to leave. Viewing is enough for a first investigation; do not terminate unfamiliar processes.</p><p><strong>Classic equivalent:</strong> <code>top</code>, also left with <kbd>q</kbd>, and <code>ps aux --sort=-%mem | head</code> for the largest processes.</p></article>
+        <article id="fastfetch" data-packages="fastfetch"><h3>fastfetch · a system summary</h3><p><strong>Why included:</strong> a compact overview of the OS, desktop and hardware when orienting yourself or reporting an issue. <strong>Try:</strong> run <code>fastfetch</code>. It reports information, not a hardware health test. Review usernames, hostnames and other identifying details before sharing its output.</p><p><strong>Classic equivalent:</strong> <code>hostnamectl</code>, <code>uname -a</code>, <code>cat /etc/os-release</code>, <code>free -h</code> and <code>df -h</code> each answer one part of the same question.</p></article>
         <article id="jq" data-packages="jq"><h3>jq · read and filter JSON</h3>
           <p><strong>Why included:</strong> structured inspection of JSON settings and API responses without manually scanning a single long line.</p>
+          <p><strong>Classic equivalent:</strong> <code>python3 -m json.tool settings.json</code> pretty-prints; extracting one field needs jq or a short Python script.</p>
           <pre><code># A self-contained example: output just the name
 printf '%s\n' '{"name":"Sensible","offline":true}' | jq -r '.name'
 
@@ -147,7 +202,7 @@ curl --head https://www.debian.org/</code></pre>
 sudo less /var/log/sensible-install.log</code></pre>
         <p>Press <kbd>q</kbd> to quit the log viewer. A password prompt normally shows no characters as you type. Use administrator access only when the task needs it; most tools in this chapter should run as your ordinary user.</p>
         <h3>Where to go next</h3>
-        <p>Try <code>fdfind --help</code>, <code>rg --help</code> or the corresponding tool's help option for the version installed on your machine. Online reference links are optional: the explanations and examples on these pages remain readable offline.</p>
+        <p>Manual pages are installed: <code>man find</code>, <code>man grep</code> or <code>man rg</code> describe the version on your machine, and <kbd>q</kbd> leaves the page. <code>fdfind --help</code> and <code>rg --help</code> give shorter summaries. Online reference links are optional: the explanations and examples on these pages remain readable offline.</p>
         <p>See <a href="applications.html#archives">archive recipes</a> for zip/unzip/7-Zip and <a href="applications.html#flatpak">Flatpak basics</a> for managing desktop apps.</p>
       </section>
       <footer><p><a href="applications.html">Back: Everyday applications</a> · <a href="index.html">Main guide</a></p></footer>

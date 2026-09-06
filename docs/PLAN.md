@@ -19,8 +19,10 @@ than asked, and third-party software leaves the install path entirely.
 | Desktop profiles | applications and GNOME image configuration implemented; real-session acceptance and native KDE profile pending; see [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md) |
 | Offline first-login manual | implemented from PR #2 on the current installer; real desktop first-login validation remains pending |
 
-**Next step:** exercise both release variants across Btrfs/Ext4 and LUKS on/off
-by installing to real QEMU disks, then boot those disks without the ISO attached.
+**Next implementation PR:** validated unattended installer input
+([#4](https://github.com/korq-apps/sensible/issues/4)). It unblocks the real
+GNOME/KDE × Btrfs/Ext4 × LUKS on/off installed-disk matrix in #5. Do not start
+that matrix by bypassing prompts or disabling destructive-device checks.
 
 **Desktop roadmap:** application/dependency and GNOME-profile source changes are
 implemented. Next, validate them in real images/sessions, then deliver the native
@@ -28,6 +30,151 @@ KDE profile and backup workflow as focused changes. Selectable GNOME theme asset
 are now included; their real-session acceptance remains pending. The agreed
 scope is recorded in [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md); source
 configuration does not waive the release gate or prove a published image.
+
+## Reconciled priorities (2026-09-06)
+
+This queue governs the next work; the numbered phases below also retain
+implementation history. PR #15 is merged: the GNOME profile, optional themes
+and Flathub configuration are on `main`, not a new implementation task.
+GitHub issues #4–#9, #11 and #13 remain open as of this review. New scopes below
+are recorded here only; no new issues or changes to existing tickets have been
+published by this reconciliation.
+
+| Order | Bounded change | Completion evidence / existing owner |
+| :--- | :--- | :--- |
+| 1 | Validated `--config` input, sharing interactive validation | #4: strict data parsing, protected secrets, no prompts, explicit wipe permission, unchanged disk revalidation, deterministic completion and failure tests |
+| 2 | Build provenance and footprint reporting | Manifest inside both images, matching external metadata/package lists, ISO/squashfs sizes and comparable per-edition summaries; no invented size budget |
+| 3 | Complete offline payload validation and a non-destructive image check | #9: one shared validator used before wipe and by a no-target-disk smoke mode; missing packages/assets and variant mismatches fail explicitly |
+| 4 | Installed-system and desktop acceptance | #5: eight installs and detached-ISO boots, including installed Secure Boot; #13: real GNOME profile/manual/theme behavior. #6 physical Intel/AMD evidence can be collected independently whenever hardware is available |
+| 5 | Editor neutrality, native KDE profile and reversible customization, in separate small PRs | Include Vim and Neovim without forcing an editor; keep LazyVim opt-in. Preserve user overrides and security settings while completing the existing desktop scope |
+| 6 | Curated optional-app catalog and AI manual, then approved CLI additions | One `sensible-apps` backend, a small first catalog, official optional recipes, and the unresolved AI delivery decision in [AI_TOOLS.md](AI_TOOLS.md) |
+| 7 | Storage/recovery and broader optional capabilities | #11 hybrid ZRAM/swap, Btrfs Snapper recovery and personal backups are distinct slices; use the installed-disk harness and require restore/hibernate evidence |
+
+Orders 2 and 3 support acceptance without changing desktop choices. They do not
+replace #4–#6 or authorize release publication. #7 back-navigation and #8
+hibernation messaging retain their existing scopes; fix discovered safety
+failures before release rather than waiting for their position in this queue.
+Manual-only curation can proceed without committing to AI preinstallation or
+blocking release tests on an app catalog, diagnostics suite or new UI framework.
+
+### Recommendations: adopt, narrow or defer
+
+The external recommendations are proposals, not evidence of prior decisions.
+
+| Recommendation | Disposition and correction |
+| :--- | :--- |
+| System-level switches for defaults | Adopt the reversibility goal, not one universal switch. Shell defaults are copied into skel; Git already uses `/etc/gitconfig`, and GNOME already uses unlocked system dconf defaults. Separate optional styling from idle/resume locking before adding opt-outs. |
+| `sensible-doctor` | Adopt incrementally after shared validators/provenance exist. Start with read-only evidence, explicit unknown states and redacted JSON; do not make a large diagnostic framework a prerequisite for #5. |
+| Build provenance / `sensible-info` | Adopt early, paired with footprint reporting. Distinguish the baked build inventory from the installed system's later package state. |
+| Declarative `sensible-apps` | Adopt a small common catalog; reconcile Brave Origin, Audacious, developer tools and optional AI entries. BioPass needs separate PAM/removal validation; LazyVim is an opt-in configuration for the included Neovim, not a reason to remove Neovim. |
+| Save interactive answers | Adopt a sanitized export follow-up to #4, not automatic replay authorization. Omit secrets and target disk, clear wipe confirmation, and require fresh inputs/revalidation. |
+| Pin Debian archive snapshots | Evaluate after provenance is available. Use one archive selection for the package gate and build; keep a rolling Testing canary or reviewed bump builds. Snapshotting only the target archive is not complete ISO reproducibility. |
+| Size/package deltas and a hard budget | Adopt reports now; select warning/failure thresholds after comparable baselines exist. The old numbers in OFFLINE_REWORK.md are already labeled historical, not a current agreed cap or proof of unnoticed regression. |
+| Installer dry-run in ISO smoke | Adopt a narrowly defined image/payload check, shared with #9. The existing smoke attaches a disposable 10 GiB disk and waits for live serial markers; no-disk checking needs a distinct mode, not the normal disk-selection flow. |
+| Auto-file weekly build failures | Defer until stage classification is useful. Deduplicate/update one tracking issue, distinguish archive failures from infrastructure/pins/tests, and use a trusted write-capable job isolated from PR build code. |
+| Generate manual HTML from Markdown | Defer. The manual is already multi-page and has different readers from the developer specs. Reuse structured app metadata first; do not add Pandoc and migrate stable anchors/navigation merely to accompany the AI chapter. |
+| Make Vim default / move LazyVim out | Do not adopt the forced-default proposal. User decision: include both Vim and Neovim, retain Debian's editor selection, remove Sensible's `EDITOR`/`VISUAL` override and make LazyVim opt-in. Current source still forces Neovim until this follow-up lands. |
+
+### Small follow-up contracts
+
+**Next PR — #4:** parse TOML as data, reject unknown options/keys and invalid or
+missing values before mutation, reuse the interactive validators, and require
+an explicit disk and `confirm_wipe = true`. Specify safe secret-file handling
+and the password contract before integration; never echo secrets in diagnostics.
+Keep variant selection image-owned and retain identity/state revalidation
+immediately before wipe. Define a bounded noninteractive completion action
+instead of waiting at a final menu. Tests must prove malformed input, no wipe
+permission and unsafe/changed disks never reach destructive commands, while
+valid inputs drive the same execution path. Optional apps are not new installer
+keys. Resolve schema details in [INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode-planned--release-test-infrastructure).
+Exporting a reusable profile can follow independently: allowlist non-secret
+preferences, omit disk identifiers and password hashes as well as passwords,
+write with restrictive permissions, and make `confirm_wipe = false` explicit.
+An export is an incomplete template, not a ready-to-run destructive command.
+
+**Provenance and footprint:** record schema/build ID, source commit and dirty
+state, UTC build time, variant/architecture, builder image digest or native
+toolchain versions, effective source configuration, the actual signed
+InRelease/Release identities used, hook/pin digests and package versions.
+Capture metadata while it is used, before APT cleanup; a fresh query after the
+build is not its provenance. Retain the manifest in the copied target and expose
+it through a simple `sensible-info`; report later installed-package drift
+separately. Pair external metadata with the final ISO checksum rather than
+trying to embed an ISO's own final hash inside itself. Attach per-edition
+package inventories/metadata without losing the existing four required ISO and
+checksum release assets or fail-closed tests. Report ISO/squashfs bytes, package
+counts and largest installed packages; installed package size is not compressed
+ISO contribution. Compare against an identified successful `main` build of the
+same edition, or say baseline unavailable. No pruning the agreed app set or
+arbitrary hard ceiling follows from these reports.
+
+**Shared checks and diagnostics:** an image-check mode must exit without a target
+disk, account prompts, network, mounts, formatting or reboot, and report exactly
+which payload checks ran. It cannot pass disk suitability tests it did not run.
+Reuse a side-effect-free validation module in the normal installer; do not
+source its interactive lifecycle or fork a second validation implementation.
+Keep installed-target checks as defense in depth. Later `sensible-doctor` may
+collect boot/crypttab/swap/resume configuration, service health and pin drift,
+with timeouts and `pass`/`fail`/`unknown`/`not-applicable` results. Missing session
+access, privileges or hardware is not a pass. Do not auto-escalate, repair,
+upload reports or dump raw journals containing identifiers/secrets. A valid
+configuration or manifest is not proof of boot, hibernation, firmware operation
+or snapshot restore; #5/#6 still require executing those paths.
+
+**Reversible defaults:** consider stock Debian shell startup plus a guarded,
+optional Sensible include, without rewriting existing users' dotfiles. Preserve
+the selected Powerline theme unless the user opts out. Give system Git defaults
+a Sensible-owned include rather than deleting unrelated `/etc/gitconfig` rules.
+Keep GNOME appearance/extension defaults separate from screen-lock policy; a
+cosmetic reset must not disable locking or weaken privacy defaults. Dconf needs
+database regeneration and may need a new session; deleting a file alone is not
+a universal live reset. Test fresh/existing users, missing include files and
+user overrides, and document per-component disable/re-enable behavior in the
+manual instead of starting another overlapping opinions document.
+See [GNOME's system-defaults guidance](https://help.gnome.org/system-admin-guide/dconf-custom-defaults.html).
+
+**One optional-app catalog:** start with noninteractive `list`/`status` and one
+Debian-backed install/remove path; add source adapters only for approved entries.
+Store rationale, source identity, verification, dependencies, license, update
+owner, removal behavior and network/first-run requirements as data, not shell
+snippets to evaluate. Later adapters may cover Flatpak, scoped signed APT origins
+and verified local packages; Python or other AI installation routes need explicit
+review, not an arbitrary-command escape hatch. Preserve existing repositories,
+shared dependencies and user data during removal. Require explicit privilege
+and source-change approval. A Gum checklist is a frontend, not a second backend.
+Brave Origin remains the curated browser; do not substitute regular Brave.
+BioPass/PAM and LazyVim user-config migrations need dedicated acceptance, not
+the assumption that any entry is safely reversible because package removal works.
+
+**Archive control and CI follow-ups:** a candidate snapshot must supply the
+same suite/components to bootstrap, chroot and both package-gate paths; record
+builder dependencies separately. Preserve signed metadata checks. Any expired
+metadata exception must be restricted to the explicit historic snapshot source,
+not the installed system's normal update configuration. Keep installed machines
+on the intended update channel, not indefinitely frozen at the image timestamp.
+Test refreshes and transient archive failures; keep snapshot availability and
+cache costs visible. A scheduled rebuild of an unchanged frozen snapshot cannot
+detect current Testing transitions: retain a rolling canary or test proposed
+snapshot bumps before review. Do not auto-merge them. Provenance, dependency
+consistency and byte-for-byte reproducibility are separate claims. A snapshot
+constrains Debian input versions; it does not by itself guarantee a solvable
+package set or byte-identical ISO outputs. [Debian snapshot documentation](https://snapshot.debian.org/).
+
+**Editor decision (confirmed):** include both `vim` and `neovim`; let Debian's
+normal editor selection and user preferences apply. Remove Sensible's exported
+`EDITOR=nvim` / `VISUAL=nvim`, do not force a replacement value or a Git editor,
+and do not call `update-alternatives --set editor` to choose either editor.
+Package maintainer scripts may still register their normal alternatives.
+Make LazyVim an explicitly chosen configuration, not a first-launch bootstrap
+from a default skel directory. Move its starter/pin staging out of the default
+image path, retain its initial-network requirement in optional instructions,
+and never delete an existing user's Neovim setup. This does not remove the
+already selected Powerline/Nerd Font support. Update package lists, pins, skel,
+shell defaults, tests and manual in one small editor-only PR. Verify both plain
+editors start offline, ordinary `editor` callers follow Debian's selected
+alternative, and later admin/user choices survive. Current image sources remain
+Neovim/LazyVim until that PR lands.
+[Debian alternatives documentation](https://manpages.debian.org/testing/dpkg/update-alternatives.1.en.html).
 
 ---
 
@@ -46,8 +193,8 @@ Phase 1  Build harness (live-build ISO, TUI live session)
         → Phase 3  Hardware packages (firmware, PipeWire, GPU, fwupd)
             → Phase 4  Desktops + keyd + default apps
                 → Phase 5  CI and release plumbing
-                    → RELEASE GATE  Beginner journey + reliability
-                        → Phase 6  Sensible extras (biometrics, shell, git, firewall, unattended)
+                    → RELEASE GATE  Automated input + installed tests + hardware evidence
+                        → Phase 6  Sensible extras (biometrics, shell, git, firewall)
 ```
 
 Phase 3 is hardware, Phase 4 is desktop. Do not swap those.
@@ -125,12 +272,21 @@ below, not an optional follow-up.
   - [x] GNOME profile image configuration: curated extension activation,
         build-validated pins/dependencies, titlebar buttons and privacy-conscious
         fresh-user defaults. These are dconf defaults, not locks.
-  - [x] Optional GNOME themes: pinned Marble, Good-Old-Shell 50 and Graphite
-        GTK 3 assets, sources/licenses, build guards and offline manual guidance.
-        Default styling is unchanged; Flat Remix/Transparent Shell remain blocked
-        as recorded in the desktop profile plan.
+  - [x] Optional GNOME themes: pinned Marble Shell and Graphite GTK 3/4 + Shell
+        assets, sources/licenses, build guards and offline manual guidance.
+        Flat Remix/Transparent Shell remain blocked as recorded in the desktop
+        profile plan.
+  - [x] Requested GNOME appearance follow-up: Paper icons and Orchis GTK 3 as
+        unlocked defaults; Papirus plus pinned Qogir/Matcha/Fluent GTK 3/4 + Shell
+        standard/light/dark and complete Qogir icon variants, including SVG loader,
+        cache/alias validation and manual selection/reset instructions. Retire the
+        earlier four palette collections and Good-Old-Shell. Install complete
+        GNOME components globally; no forced Shell/GDM/personal CSS override.
+        Murrine omitted because Testing removed it; the selected GTK 3/4
+        components do not depend on GTK 2.
   - [ ] Theme session acceptance: readability, scaling, menus/overview, dock,
-        GTK 3 apps and unchanged login/lock behavior; confirm return to stock.
+        GTK 3/4 apps, libadwaita boundaries and unchanged login/lock behavior;
+        confirm return to stock.
   - [ ] Validate the GNOME extensions in a real offline session across login,
         lock/reboot, laptop/desktop and multi-monitor cases; confirm user changes
         survive. Implement and validate the native KDE profile separately.
@@ -165,7 +321,7 @@ unsafe disk operation reliable.
 - [x] **Owned cleanup and live sanitization:** track mounts and mappings created by this installer run and clean only those resources; remove live autostart, commands, branding, packages/state, staged source, and reused machine identity from the target
 - [x] **Truthful failures and logs:** critical failures produce failure rather than success; non-critical skipped choices are summarized; terminal/package output is retained in sudo-readable `/var/log/sensible-install.log` and copied to the target, including post-wipe failure cleanup when possible
 - [x] **Beginner install guide:** `docs/INSTALL.md` covers release download/checksum, trusted USB writing, requirements, destructive scope, offline flow, choices, first boot, updates, and honest support/log expectations
-- [ ] **Automated install input:** implement the validated `--config answers.toml` path below as release-test infrastructure, including explicit `confirm_wipe = true`; it belongs before the matrix rather than waiting behind the release gate
+- [ ] **Automated install input:** implement the validated `--config answers.toml` path in [INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode-planned--release-test-infrastructure) as release-test infrastructure, including explicit `confirm_wipe = true`; it belongs before the matrix rather than waiting behind the release gate
 - [ ] **Real QEMU installed-boot matrix:** install each GNOME/KDE release image onto fresh virtual disks for Btrfs/Ext4 × LUKS on/off, then boot from those installed disks under UEFI (not the ISO); verify expected partitions, mounts, `fstab`/`crypttab`, swap/resume arguments, desktop/login, and the LUKS prompt where applicable. Include an installed-system Secure Boot boot
 - [ ] **Physical hardware smoke:** install and first-boot the candidate on at least one Intel and one AMD amd64 UEFI machine; record disk selection, wired/Wi-Fi, graphics, audio input/output, suspend/resume, Secure Boot state, and `fwupd` detection. Document hardware unavailable for a check rather than silently treating it as passed
 - [ ] **Release decision:** archive the candidate ISO checksum and matrix/hardware results, review all failures and warnings, then and only then set `SENSIBLE_RELEASE_READY` to `true` for the release tag
@@ -224,7 +380,27 @@ Architecture/spec sections mark them **(planned — post-install tool)**.
 - [ ] Developer tools: `docker.io` + `docker-compose` + `lazygit` + `gh`; user **not** added to the docker group (root-equivalent). Was an installer checkbox, which is exactly the kind of question the offline rework removes, and these cost nothing to add after first boot
 - [ ] BioPass face login: pinned `.deb` + SHA256 from [TickLabVN/biopass](https://github.com/TickLabVN/biopass), PAM via `pam-auth-update`. Third-party and young, so it does not belong in the offline image; biometrics never unlock LUKS and fingerprint login leaves the keyring locked — both must be stated where it is offered
 - [x] Brave Origin is documented as a curated optional online app with its official installer; it is not preinstalled.
-- [ ] Post-install app tooling for Brave Origin and Audacious; Flathub itself is already preconfigured in the image.
+- [ ] One declarative post-install catalog for Brave Origin, Audacious and
+  approved developer/AI tools, introduced through the small backend/adapters
+  described in the reconciled queue above; Flathub itself is already configured.
+
+**AI and CLI follow-ups (planned, selection pending):**
+
+- [ ] [Curated AI manual](AI_TOOLS.md): tool-selection rationale, safe usage,
+  official optional installation/update/removal recipes, and current Linux
+  support for Claude Code, Claude Desktop and ChatGPT desktop.
+- [ ] Evaluate OpenCode as the first open-source CLI candidate and LLM as a
+  complement. Decide small preinstalled core versus all-opt-in delivery before
+  packaging; keep proprietary clients optional and installation/first login
+  offline. Codex CLI, Gemini CLI and Aider are curated alternatives, not an
+  agreement to bundle every agent.
+- [ ] Evaluate tmux/tealdeer and an isolated Python-tool installation mechanism;
+  reconcile with the existing `gh`/`lazygit` developer-tools scope above.
+- [ ] Evaluate optional local inference separately; no bundled model weights,
+  automatic downloads or inference services by default.
+
+Acceptance requirements and issue-ready scopes are in [AI_TOOLS.md](AI_TOOLS.md).
+These do not supersede the installer/release gate or desktop acceptance work.
 
 ---
 
@@ -249,7 +425,8 @@ package closure from the live image and requires no network. See
   filesystem and identity/locale choices, one destructive confirmation, and
   staged progress
 - [x] GNOME and KDE build variants; both keep account creation in the installer
-- [ ] `sensible-apps` post-install tool for Brave Origin and Audacious (Flathub is already preconfigured)
+- [ ] `sensible-apps` post-install tool: the shared catalog tracked in Phase 6
+      and the reconciled queue, not a separate implementation
 
 ---
 
@@ -301,6 +478,12 @@ Worth taking, not yet taken:
 
 ## Later (not v1)
 
+- **Hybrid ZRAM and disk swap ([#11](https://github.com/korq-apps/sensible/issues/11)).**
+  Evaluate compressed RAM swap ahead of the persistent RAM-sized swapfile, not
+  instead of it. Retain the disk-backed hibernation target and require the
+  issue's memory-pressure, fallback, shutdown and hibernate/resume tests across
+  the existing storage matrix. Coordinate Secure Boot messaging with #8. This
+  is independent of Btrfs snapshots; do not combine both storage changes in one PR.
 - **Separate follow-up after desktop apps: Btrfs snapshots and recovery.**
   Configure Snapper only when Btrfs is selected; leave Ext4 unchanged. Reuse the
   existing mounted `@snapshots` layout safely rather than blindly running
@@ -327,13 +510,13 @@ Worth taking, not yet taken:
 
 | Risk | Mitigation |
 | :--- | :--- |
-| Testing transition breaks the ISO | Snapshot mirror or retry; do not pin a random half of the archive |
+| Testing transition breaks the ISO | Capture actual archive provenance; evaluate consistent snapshot inputs and a rolling canary, not mixed archive states or blind retries |
 | Wrong firmware package names | Use the Architecture list (`firmware-brcm80211`, not `firmware-broadcom`) |
 | Initramfs unlock / Plymouth fail | Unencrypted `/boot`; crypttab only; `update-initramfs -u -k all`; release-gate QEMU LUKS installs |
 | Target disk changes between selection and wipe | Stable identity plus immediate pre-wipe revalidation; block release until destructive-device tests pass |
 | Offline closure is incomplete | Validate every Debian package at build time and fail closed if the archive query itself fails |
 | Mocked tests hide an unbootable install | Real GNOME/KDE × Btrfs/Ext4 × LUKS on/off installed-disk QEMU matrix is release-blocking |
-| Brave or AI CLIs add untrusted install paths | Brave only from the documented origin; AI CLIs stay optional and pinned |
+| Brave or AI CLIs add untrusted install paths | Official optional install routes; any approved AI image artifacts require pins, license/dependency review and an installed-system update path ([AI_TOOLS.md](AI_TOOLS.md)) |
 | BioPass is young third-party PAM code (Phase 6) | Checkbox off by default; pinned `.deb` + SHA256; PAM via `pam-auth-update` so removal is clean; `fprintd` covers fingerprint without it |
 | Pinned artifacts rot (BioPass, Nerd Font, oh-my-bash, LazyVim) | Versions + SHA256 recorded in one place; CI fails loudly when a pin 404s |
 | live-build silently skips misnamed hooks | Hooks must match `*.hook.{chroot,binary}`; unit test enforces the naming |

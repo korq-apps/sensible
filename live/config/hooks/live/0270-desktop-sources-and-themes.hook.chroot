@@ -34,6 +34,18 @@ require_asset() {
     fi
 }
 themes=/usr/share/themes
+for package in paper-icon-theme papirus-icon-theme orchis-gtk-theme gtk-update-icon-cache librsvg2-common; do
+    if ! status="$(dpkg-query -W -f='${Status}' "$package")" \
+        || [ "$status" != 'install ok installed' ]; then
+        echo "Error: required GNOME appearance package is not installed: ${package}" >&2
+        exit 1
+    fi
+done
+require_asset "${themes}/Orchis/gtk-3.0/gtk.css"
+require_asset "${themes}/Orchis/index.theme"
+for name in Paper Papirus Papirus-Light Papirus-Dark; do
+    require_asset "/usr/share/icons/${name}/index.theme"
+done
 for color in red yellow green blue purple gray; do
     for mode in light dark; do
         require_asset "${themes}/Marble-${color}-${mode}/gnome-shell/gnome-shell.css"
@@ -42,10 +54,26 @@ done
 for mode in Light Dark; do
     require_asset "${themes}/Graphite-${mode}/gtk-3.0/gtk.css"
     require_asset "${themes}/Graphite-${mode}/gtk-3.0/gtk-dark.css"
+    require_asset "${themes}/Graphite-${mode}/gtk-4.0/gtk.css"
+    require_asset "${themes}/Graphite-${mode}/gtk-4.0/gtk-dark.css"
+    require_asset "${themes}/Graphite-${mode}/gnome-shell/gnome-shell.css"
 done
-for asset in gnome-shell.css overview-wallpaper.png login-dialog-frame.png gdm-wallpaper.png; do
-    require_asset "${themes}/good-old-shell/gnome-shell/${asset}"
-done
-for asset in sources.txt pins.env Marble.LICENSE Graphite.LICENSE Good-Old-Shell.LICENSE; do
+for asset in sources.txt pins.env Marble.LICENSE Graphite.LICENSE Qogir.LICENSE Qogir-icons.LICENSE Matcha.LICENSE Fluent.LICENSE; do
     require_asset "/usr/share/doc/sensible-themes/${asset}"
+done
+for name in Qogir Qogir-Light Qogir-Dark Matcha-sea Matcha-light-sea Matcha-dark-sea Fluent Fluent-Light Fluent-Dark; do
+    require_asset "${themes}/${name}/index.theme"
+    require_asset "${themes}/${name}/gtk-3.0/gtk.css"
+    require_asset "${themes}/${name}/gtk-3.0/gtk-dark.css"
+    require_asset "${themes}/${name}/gtk-4.0/gtk.css"
+    require_asset "${themes}/${name}/gtk-4.0/gtk-dark.css"
+    require_asset "${themes}/${name}/gnome-shell/gnome-shell.css"
+done
+for name in Qogir Qogir-Light Qogir-Dark; do
+    require_asset "/usr/share/icons/${name}/index.theme"
+    require_asset "/usr/share/icons/${name}/scalable/places/folder.svg"
+    if ! gtk-update-icon-cache -q -t "/usr/share/icons/${name}"; then
+        echo "Error: could not build icon cache for ${name}." >&2
+        exit 1
+    fi
 done

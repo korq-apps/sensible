@@ -126,10 +126,40 @@ esac
                 self.assertEqual(self.staged.read_bytes(), self.deb.read_bytes())
                 chroot = self.root / "live/config/includes.chroot"
                 themes = chroot / "usr/share/themes"
-                self.assertEqual(len(list(themes.iterdir())), 15 if variant == "gnome" else 0)
-                self.assertFalse((themes / "Graphite-Light/gnome-shell").exists())
-                self.assertFalse((themes / "Graphite-Light/gtk-4.0").exists())
-                self.assertFalse((themes / "good-old-shell/extension").exists())
+                self.assertEqual(len(list(themes.iterdir())), 23 if variant == "gnome" else 0)
+                icons = chroot / "usr/share/icons"
+                self.assertEqual(len(list(icons.iterdir())), 3 if variant == "gnome" else 0)
+                if variant == "gnome":
+                    for name in ("Qogir", "Qogir-Light", "Qogir-Dark", "Matcha-sea", "Matcha-light-sea",
+                                 "Matcha-dark-sea", "Fluent", "Fluent-Light", "Fluent-Dark"):
+                        palette = themes / name
+                        self.assertIn("assets/test.svg", (palette / "gnome-shell/gnome-shell.css").read_text())
+                        self.assertTrue((palette / "gnome-shell/assets/test.svg").is_file())
+                        self.assertFalse((palette / "gtk-2.0").exists())
+                        self.assertIn("assets/asset.png", (palette / "gtk-4.0/gtk.css").read_text())
+                        self.assertTrue((palette / "gtk-4.0/gtk-dark.css").is_file())
+                        self.assertTrue((palette / "gtk-4.0/assets/asset.png").is_file())
+                        self.assertTrue((palette / "gtk-4.0/thumbnail.png").is_file())
+                        self.assertIn("assets/asset.png", (palette / "gtk-3.0/gtk.css").read_text())
+                    self.assertIn('text-select-start.png', (themes / 'Matcha-sea/gtk-4.0/gtk.css').read_text())
+                    self.assertIn('text-select-start.png', (chroot / 'usr/share/doc/sensible-themes/known-upstream-assets.txt').read_text())
+                    self.assertIn('assets/check-symbolic.svg', (themes / 'Qogir/gtk-4.0/gtk.css').read_text())
+                    self.assertNotIn('assets/scalable/check-symbolic.svg', (themes / 'Qogir/gtk-4.0/gtk.css').read_text())
+                    self.assertNotIn("thumbnail-frame.png", (themes / "Qogir/gtk-3.0/gtk.css").read_text())
+                    self.assertNotIn("titlebutton-close.png", (themes / "Qogir/gtk-3.0/gtk.css").read_text())
+                    index = (icons / "Qogir/index.theme").read_text()
+                    self.assertIn("upstream credits", (icons / "Qogir/AUTHORS").read_text())
+                    self.assertIn("Name=Qogir", index)
+                    self.assertIn("Inherits=Papirus,Adwaita,hicolor", index)
+                    self.assertIn('#d3dae3', (icons / 'Qogir-Dark/16/actions/alias.svg').read_text())
+                    self.assertIn('#5d656b', (icons / 'Qogir-Light/16/panel/test.svg').read_text())
+                    self.assertTrue((icons / 'Qogir/16@2x/actions/alias.svg').is_file())
+                    self.assertTrue((icons / 'Qogir/symbolic/status/microphone-sensitivity-none-symbolic.svg').is_file())
+                    for retired in ("Everforest-Light", "Tokyonight-Light", "Osaka-Light", "Catppuccin-Light", "good-old-shell"):
+                        self.assertFalse((themes / retired).exists())
+                self.assertEqual((themes / "Graphite-Light/gnome-shell/gnome-shell.css").is_file(), variant == "gnome")
+                self.assertEqual((themes / "Graphite-Light/gtk-4.0/gtk.css").is_file(), variant == "gnome")
+                self.assertFalse((themes / "good-old-shell").exists())
                 self.assertEqual((chroot / "usr/share/doc/localsend/copyright").read_bytes(),
                                  self.license.read_bytes())
                 self.assertEqual((chroot / "etc/sensible/pins.env").read_bytes(),
@@ -321,9 +351,23 @@ esac
 
     def test_theme_inputs_fail_closed(self):
         for problem, diagnostic in (("license", "theme license is missing"),
-                                    ("asset", "Good-Old-Shell asset is missing"),
                                     ("traversal", "unsafe theme archive member"),
-                                    ("css-asset", "theme CSS asset is missing")):
+                                    ("css-asset", "theme CSS asset is missing"),
+                                    ("replacement-license", "theme license is missing"),
+                                    ("replacement-asset", "logo-.svg"),
+                                    ("replacement-css", "theme CSS asset is missing"),
+                                    ("gtk4-source", "gtk-Dark.scss"),
+                                    ("gtk4-asset", "theme CSS asset is missing"),
+                                    ("matcha-gtk4-source", "gtk-dark-sea.css"),
+                                    ("matcha-gtk4-unknown-asset", "theme CSS asset is missing"),
+                                    ("matcha-gtk4-escaping-known", "theme CSS asset escapes"),
+                                    ("shell-source", "gnome-shell-dark-sea.css"),
+                                    ("shell-asset", "calendar-today.svg"),
+                                    ("icon-index", "icon theme index is missing"),
+                                    ("icon-index-invalid", "icon theme index is invalid"),
+                                    ("icon-directory", "icon theme directory is missing"),
+                                    ("icon-link", "icon theme asset is missing or escapes"),
+                                    ("icon-dangling", "icon theme asset is missing or escapes")):
             with self.subTest(problem=problem):
                 script = self.seed_pins(theme_problem=problem)
                 result = self.run_script(script)
@@ -342,13 +386,32 @@ esac
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("could not stage the pinned theme collection", result.stderr)
 
+    def test_replacement_checksums_fail_closed(self):
+        for index, name in enumerate(("Qogir-theme", "Qogir-icon-theme", "Matcha-gtk-theme", "Fluent-gtk-theme"), 2):
+            with self.subTest(name=name):
+                script = self.seed_pins()
+                self.theme_archives[index].write_text("corrupt")
+                result = self.run_script(script)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"{name} does not match the pinned SHA256", result.stderr)
+
     def test_sources_and_themes_hook(self):
         result = self.run_script(self.seed_pins())
         self.assertEqual(result.returncode, 0, result.stderr)
         shutil.copytree(self.root / "live/config/includes.chroot/usr", self.root / "usr")
         script = self.hook("0270-desktop-sources-and-themes.hook.chroot")
         write(self.bin / "flatpak", '#!/bin/sh\nprintf "%s\\n" "$MOCK_REMOTES"\nexit "${MOCK_FLATPAK_FAIL:-0}"\n', True)
-        write(self.bin / "dpkg-query", '#!/bin/sh\necho "${MOCK_SHELL_VERSION:-50.2-1}"\n', True)
+        write(self.bin / "dpkg-query", '''#!/bin/sh
+if [ "$3" = "${MOCK_MISSING_PACKAGE:-}" ]; then exit 1; fi
+case "$2" in
+ *Status*) echo 'install ok installed';;
+ *) echo "${MOCK_SHELL_VERSION:-50.2-1}";;
+esac
+''', True)
+        write(self.bin / "gtk-update-icon-cache", '#!/bin/sh\nexit "${MOCK_ICON_CACHE_FAIL:-0}"\n', True)
+        for asset in ("themes/Orchis/gtk-3.0/gtk.css", "themes/Orchis/index.theme",
+                      *(f"icons/{name}/index.theme" for name in ("Paper", "Papirus", "Papirus-Light", "Papirus-Dark"))):
+            write(self.root / "usr/share" / asset, "fixture")
         self.env["MOCK_REMOTES"] = "flathub\thttps://dl.flathub.org/repo/\t"
         for variant in ("gnome", "kde"):
             write(self.root / "etc/sensible/variant", variant)
@@ -369,6 +432,15 @@ esac
         self.assertIn("could not initialize the preconfigured Flatpak remotes", result.stderr)
         del self.env["MOCK_FLATPAK_FAIL"]
         write(self.root / "etc/sensible/variant", "gnome")
+        for package in ("orchis-gtk-theme", "librsvg2-common"):
+            self.env["MOCK_MISSING_PACKAGE"] = package
+            result = self.run_script(script)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"required GNOME appearance package is not installed: {package}", result.stderr)
+        del self.env["MOCK_MISSING_PACKAGE"]
+        self.env["MOCK_ICON_CACHE_FAIL"] = "1"
+        self.assertIn("could not build icon cache", self.run_script(script).stderr)
+        del self.env["MOCK_ICON_CACHE_FAIL"]
         self.env["MOCK_SHELL_VERSION"] = "51.0-1"
         result = self.run_script(script)
         self.assertIn("pinned themes require GNOME Shell 50", result.stderr)
@@ -398,12 +470,24 @@ esac
         script = self.seed_pins()
         themes = self.root / "live/config/includes.chroot/usr/share/themes"
         write(themes / "Custom/gnome-shell/gnome-shell.css", "keep")
-        write(themes / "Marble-blue-dark/gnome-shell/gnome-shell.css", "remove")
+        removed_themes = ("Marble-blue-dark", "good-old-shell", "Everforest-Light", "Tokyonight-Dark",
+                          "Osaka-Light", "Catppuccin-Dark", "Qogir", "Matcha-sea", "Fluent")
+        for name in removed_themes:
+            write(themes / name / "index.theme", "remove")
+        icons = self.root / "live/config/includes.chroot/usr/share/icons"
+        write(icons / "Custom/index.theme", "keep")
+        removed_icons = ("Everforest-Light", "Tokyonight-Dark", "Osaka_Light", "Catppuccin-Mocha", "Qogir")
+        for name in removed_icons:
+            write(icons / name / "index.theme", "remove")
         self.env["SENSIBLE_VARIANT"] = "kde"
         result = self.run_script(script)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((themes / "Custom/gnome-shell/gnome-shell.css").read_text(), "keep")
-        self.assertFalse((themes / "Marble-blue-dark").exists())
+        for name in removed_themes:
+            self.assertFalse((themes / name).exists(), name)
+        self.assertEqual((icons / "Custom/index.theme").read_text(), "keep")
+        for name in removed_icons:
+            self.assertFalse((icons / name).exists(), name)
 
     def test_manual_describes_optional_origin_and_theme_selection(self):
         manual = (REPO / "manual/applications.html").read_text()
@@ -412,6 +496,20 @@ esac
         self.assertIn("not a preinstalled browser", manual)
         self.assertIn('id="themes"', manual)
         self.assertIn("gsettings reset org.gnome.desktop.interface gtk-theme", manual)
+        self.assertIn("gsettings reset org.gnome.desktop.interface icon-theme", manual)
+        self.assertIn("gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita'", manual)
+        self.assertIn("gsettings set org.gnome.desktop.interface icon-theme 'Adwaita'", manual)
+        for name in ("Qogir-theme", "Qogir-icon-theme", "Matcha-gtk-theme", "Fluent-gtk-theme"):
+            self.assertIn(f"https://github.com/vinceliuice/{name}", manual)
+        for name in ("Qogir-Light", "Qogir-Dark", "Matcha-light-sea", "Matcha-dark-sea", "Fluent-Light", "Fluent-Dark"):
+            self.assertIn(name, manual)
+        self.assertIn("GTK 3, GTK 4 and GNOME Shell components", manual)
+        self.assertIn("gsettings set org.gnome.shell.extensions.user-theme name 'Matcha-dark-sea'", manual)
+        self.assertIn("sudo cp -a --no-clobber ~/Downloads/MyTheme /usr/share/themes/", manual)
+        self.assertIn("~/.local/share/themes/", manual)
+        self.assertNotIn("Legacy Applications", manual)
+        self.assertNotIn("Fausto-Korpsvart", manual)
+        self.assertNotIn("good-old-shell", manual)
 
     def test_firewall_both_editions_and_failure(self):
         script = self.hook("0300-ufw.hook.chroot")
@@ -454,6 +552,10 @@ printf 'ufw %s\n' "$*" >> "$MOCK_LOG"
                          "gnome-shell-extension-dashtodock", "gnome-shell-extension-user-theme",
                          "gir1.2-gtop-2.0", "lm-sensors", "tesseract-ocr",
                          "tesseract-ocr-eng", "zbar-tools", "sshfs", "python3-nautilus"} <= gnome)
+        appearance = {"paper-icon-theme", "papirus-icon-theme", "orchis-gtk-theme", "gtk-update-icon-cache", "librsvg2-common"}
+        self.assertTrue(appearance <= gnome)
+        self.assertFalse(appearance & kde)
+        self.assertNotIn("gtk2-engines-murrine", gnome | kde)
         self.assertTrue({"digikam", "gwenview", "kdeconnect", "plasma-systemmonitor"} <= kde)
         self.assertNotIn("kdeconnect", gnome)
         self.assertNotIn("gnome-shell-extension-gsconnect", kde)

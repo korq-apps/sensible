@@ -73,6 +73,10 @@ lock-delay=uint32 0
 [org/gnome/desktop/wm/preferences]
 button-layout='appmenu:minimize,maximize,close'
 
+[org/gnome/desktop/interface]
+icon-theme='Paper'
+gtk-theme='Orchis'
+
 [org/gnome/shell]
 enabled-extensions=['ubuntu-appindicators@ubuntu.com', 'gsconnect@andyholmes.github.io', 'caffeine@patapon.info', 'clipboard-indicator@tudmotu.com', 'dash-to-dock@micxgx.gmail.com', 'batterytime@typeof.pw', 'shotzy@SamkitJain660.github.io', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'Vitals@CoreCoding.com']
 

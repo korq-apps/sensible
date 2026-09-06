@@ -127,16 +127,56 @@
         <article id="skanlite" data-packages="skanlite"><h3>Skanlite</h3><p><strong>Why included:</strong> a lightweight graphical scanning tool. <strong>Try:</strong> select a supported scanner, preview the page, select the scan area and save the resulting image. OCR and document organization are separate tasks.</p></article>
       </section>
       <section id="themes">
-        <h2>Optional GNOME themes · available offline</h2>
-        <p>These are selectable alternatives, not new defaults. Shell themes affect panels, menus and the overview; application themes affect supported app widgets. They are separate choices and do not make every application look identical.</p>
-        <ul>
-          <li><strong>Marble:</strong> a colorful Shell option, with red, yellow, green, blue, purple and gray accents in light and dark variants. In Tweaks, names look like <code>Marble-blue-dark</code>. <a href="https://github.com/imarkoff/Marble-shell-theme">Upstream project</a>.</li>
-          <li><strong>Good-Old-Shell 50:</strong> a more classic, transparent-black GNOME look. Select <code>good-old-shell</code>; full-color icons still depend on the icon theme you choose. Only its session theme assets are installed, not its separate GDM/lock-screen extension. <a href="https://github.com/mx-2/gnome-shell-sass/tree/good-old-shell-50">Upstream Shell 50 branch</a>.</li>
-          <li><strong>Graphite:</strong> understated grey GTK 3 application styling, in <code>Graphite-Light</code> and <code>Graphite-Dark</code>. Only GTK 3 components are included. This does not theme GNOME Shell, GTK 4/libadwaita apps or guarantee matching Flatpak apps. <a href="https://github.com/vinceliuice/Graphite-gtk-theme">Upstream project</a>.</li>
-        </ul>
-        <p><strong>Try:</strong> open <strong>Tweaks &gt; Appearance</strong>. Under <strong>Shell</strong>, choose a Marble variant or <code>good-old-shell</code>; if the chooser is unavailable, confirm User Themes is enabled in Extension Manager. Under <strong>Legacy Applications</strong>, choose Graphite. Record the original choices first, change one at a time, and reopen an app to check the result.</p>
-        <p><strong>Return to stock:</strong> choose <strong>Default</strong> for Shell, or turn off User Themes in Extension Manager. Restore the previous Legacy Applications choice; <code>gsettings reset org.gnome.desktop.interface gtk-theme</code> restores that setting's system default. Desktop light/dark preference remains a separate option in Settings &gt; Appearance. Do not replace GDM resources or link theme files into <code>~/.config/gtk-4.0/</code> to force consistency.</p>
-        <p>The collection is pinned for GNOME Shell 50 and built into the GNOME image; no theme downloads run at login. Debian package upgrades do not update these third-party assets. Source archives, licenses, checksums and the build adapter are in <code>/usr/share/doc/sensible-themes/</code>. Sensible refreshes them with future images. Major Shell upgrades require renewed compatibility checks; return to stock styling if a theme misbehaves. Real-session readability, scaling and lock/unlock acceptance remain pending.</p>
+        <h2>GNOME appearance · installed themes and icons</h2>
+        <p data-packages="paper-icon-theme papirus-icon-theme orchis-gtk-theme"><strong>Defaults:</strong> Paper icons and the Orchis application theme. Papirus is also included. Your choices remain yours: Sensible does not reset appearance at each login, and the login screen keeps its default styling.</p>
+        <p><strong>Already installed for everyone:</strong> Qogir, Matcha, Fluent and Graphite live in <code>/usr/share/themes/</code>, with <strong>GTK 3, GTK 4 and GNOME Shell components</strong>. There is nothing to download or compile to use the included choices. The separate Qogir icon collection is in <code>/usr/share/icons/</code>, with application, folder, device and symbolic icons, light/dark variants and Papirus/Adwaita/hicolor fallbacks.</p>
+        <div class="table-container"><table>
+          <thead><tr><th>Collection</th><th>Installed names</th><th>What it changes</th></tr></thead>
+          <tbody>
+            <tr><td><a href="https://github.com/vinceliuice/Qogir-theme">Qogir</a></td><td><code>Qogir</code>, <code>Qogir-Light</code>, <code>Qogir-Dark</code></td><td>Applications and Shell; blue accents. The <a href="https://github.com/vinceliuice/Qogir-icon-theme">Qogir icons</a> use the same three names, but are selected separately.</td></tr>
+            <tr><td><a href="https://github.com/vinceliuice/Matcha-gtk-theme">Matcha</a></td><td><code>Matcha-sea</code>, <code>Matcha-light-sea</code>, <code>Matcha-dark-sea</code></td><td>Applications and Shell; sea-green accent. Pair with Qogir or Papirus icons. Other accents, such as aliz, can be installed from upstream.</td></tr>
+            <tr><td><a href="https://github.com/vinceliuice/Fluent-gtk-theme">Fluent</a></td><td><code>Fluent</code>, <code>Fluent-Light</code>, <code>Fluent-Dark</code></td><td>Applications and Shell; blue accents. Pair with Qogir or Papirus; the separate Fluent icon project is not bundled.</td></tr>
+            <tr><td><a href="https://github.com/vinceliuice/Graphite-gtk-theme">Graphite</a></td><td><code>Graphite-Light</code>, <code>Graphite-Dark</code></td><td>Applications and Shell; understated grey styling. Icons are independent.</td></tr>
+            <tr><td><a href="https://github.com/imarkoff/Marble-shell-theme">Marble</a></td><td>Six accents in light/dark, e.g. <code>Marble-blue-dark</code></td><td>Shell only: red, yellow, green, blue, purple and gray. Keep any application and icon theme you like.</td></tr>
+          </tbody>
+        </table></div>
+        <h3>Apply an included theme</h3>
+        <p>Application styling, Shell styling (panel, menus and overview), and icons are separate settings. For example, select Matcha dark with Qogir dark icons using these commands <strong>without sudo</strong>:</p>
+        <pre><code>gsettings set org.gnome.desktop.interface gtk-theme 'Matcha-dark-sea'
+gsettings set org.gnome.shell.extensions.user-theme name 'Matcha-dark-sea'
+gsettings set org.gnome.desktop.interface icon-theme 'Qogir-Dark'</code></pre>
+        <p>Reopen applications to see the change. You can also choose the Shell and Icons in <strong>Tweaks &gt; Appearance</strong>; Shell selection requires User Themes to be enabled in Extension Manager. Light/dark preference in Settings &gt; Appearance is separate from a fixed Light/Dark theme name.</p>
+        <p><strong>If your image has only <code>gtk-3.0/</code>:</strong> that is the earlier, incomplete Sensible packaging. A corrected installation has <code>gtk-4.0/gtk.css</code>, <code>gnome-shell/gnome-shell.css</code> and their assets too. Selection commands cannot add missing files: use a rebuilt image or install the theme yourself as described below.</p>
+        <details><summary>Why do some GTK 4 applications still look different?</summary>
+          <p>GTK 4 and libadwaita are not the same thing. Standard GTK applications can load the installed theme; libadwaita applications manage their own styling and commonly keep Adwaita. Installing globally does not override that. Flatpak applications also have a separate runtime. Sensible does not force a global CSS override or relax all Flatpak permissions.</p>
+          <p>Upstream offers a separate libadwaita override. If you deliberately want to try it, this equivalent personal CSS import uses the already installed Matcha files. It refuses to overwrite an existing <code>gtk.css</code>; review and back up any existing customization first. A fixed dark override can interfere with automatic light/dark or high-contrast behavior and may need removing after toolkit updates.</p>
+          <pre><code>mkdir -p ~/.config/gtk-4.0
+( set -C; printf '@import url("file:///usr/share/themes/Matcha-dark-sea/gtk-4.0/gtk.css");\n' &gt; ~/.config/gtk-4.0/gtk.css )</code></pre>
+          <p>Restart the application. To undo the import created above, move it aside, then restart the application again:</p>
+          <pre><code>mv -i ~/.config/gtk-4.0/gtk.css ~/.config/gtk-4.0/gtk.css.disabled</code></pre>
+          <p>This is optional, not part of first-login setup, and not a promise that every application will look identical. <a href="https://docs.gtk.org/gtk4/class.CssProvider.html">GTK theme loading</a> and the <a href="https://github.com/vinceliuice/Matcha-gtk-theme">upstream installation options</a> explain the separate mechanisms.</p>
+        </details>
+        <h3>Install a theme of your own</h3>
+        <p>Choose a project that supports your GTK and GNOME Shell versions, then download and extract its <strong>built theme</strong>. A GitHub source archive may need compilation first; follow that project's build instructions and inspect its installer before running it. Installing files and selecting a theme are separate steps.</p>
+        <p>For an application theme named <code>MyTheme</code>, the extracted folder should contain <code>gtk-4.0/gtk.css</code> for GTK 4, usually <code>gtk-3.0/gtk.css</code> for GTK 3, and all referenced assets. Copy the theme folder itself, not an extra archive wrapper. Replace <code>MyTheme</code> below with its actual folder name; use a new name so existing themes are not merged.</p>
+        <pre><code># Install globally, available to every user
+sudo install -d /usr/share/themes
+sudo cp -a --no-clobber ~/Downloads/MyTheme /usr/share/themes/
+
+# Select it for your own session, without sudo
+gsettings set org.gnome.desktop.interface gtk-theme 'MyTheme'</code></pre>
+        <p>For a private installation without administrator access, use <code>~/.local/share/themes/</code> instead. Icon themes go separately in <code>/usr/share/icons/</code> (all users) or <code>~/.local/share/icons/</code> (just you), and need their own <code>index.theme</code> and complete icon folders. Select their name under Tweaks &gt; Appearance &gt; Icons. A Shell theme needs a compatible <code>gnome-shell/gnome-shell.css</code> and the User Themes extension; a GTK 4 theme is not automatically a GNOME Shell 50 theme.</p>
+        <p><strong>Before removing your theme:</strong> switch back to an included choice and remove any personal CSS override that imports it. Only remove the exact folder you installed; do not delete the shared themes or icons directory, or manually remove Debian-managed themes.</p>
+        <h3>Reset and maintenance</h3>
+        <p><strong>Return to Sensible defaults:</strong> clear your application/icon overrides and select the default Shell. If you added the optional CSS import above, undo it separately.</p>
+        <pre><code>gsettings reset org.gnome.desktop.interface gtk-theme
+gsettings reset org.gnome.desktop.interface icon-theme
+gsettings reset org.gnome.shell.extensions.user-theme name</code></pre>
+        <p><strong>Use stock Adwaita instead:</strong></p>
+        <pre><code>gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita'
+gsettings set org.gnome.desktop.interface icon-theme 'Adwaita'</code></pre>
+        <p data-packages="gtk-update-icon-cache librsvg2-common">Paper, Papirus and Orchis update through Debian APT. Qogir's icon caches and SVG-loading support are set up during the image build; no extra login commands are needed. The pinned upstream collections update with reviewed Sensible images, not APT. Sources, licenses, checksums, build scripts and known upstream limitations are recorded in <code>/usr/share/doc/sensible-themes/</code>.</p>
+        <p>The image includes the GNOME components, not the upstream installers' Cinnamon, XFCE, Openbox and other-desktop extras. GTK 2 is also omitted because its Murrine dependency was <a href="https://tracker.debian.org/news/1703411/gtk2-engines-murrine-removed-from-testing/">removed from Debian Testing</a>; GTK 3/4 and Shell do not need it. Shell assets follow upstream's version selection for GNOME 50; full ISO and real-session readability, scaling and lock/unlock checks remain pending.</p>
       </section>
       <section id="support">
         <h2>Software, archives &amp; fonts</h2>

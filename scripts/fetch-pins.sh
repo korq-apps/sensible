@@ -17,6 +17,7 @@
 #   /etc/keyd/default.conf         GNOME variant only
 #   /usr/share/gnome-shell/extensions   pinned GNOME-only extensions
 #   /usr/share/themes                  optional GNOME-only theme collection
+#   /usr/share/icons                   matching GNOME-only palette icon sets
 #   config/packages.chroot/localsend_amd64.deb   local APT input for both editions
 set -euo pipefail
 

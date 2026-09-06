@@ -308,6 +308,15 @@ for var in \
     SHOTZY_VERSION SHOTZY_VERSION_TAG SHOTZY_ZIP_SHA256; do
     assert_contains "pins.env pins ${var}" "${pins_source}" "${var}="
 done
+for palette in QOGIR QOGIR_ICONS MATCHA FLUENT; do
+    commit_key="${palette}_COMMIT"
+    sha_key="${palette}_TARBALL_SHA256"
+    pin_valid=0
+    if [[ "${!commit_key:-}" =~ ^[a-f0-9]{40}$ && "${!sha_key:-}" =~ ^[a-f0-9]{64}$ ]]; then
+        pin_valid=1
+    fi
+    assert_eq "${palette} has a full commit and SHA256 pin" 1 "${pin_valid}"
+done
 assert_contains "pins.env pins the oh-my-bash tarball by SHA256" "${pins_source}" "${OH_MY_BASH_TARBALL_SHA256}"
 assert_contains "pins.env pins the Nerd Font zip by SHA256" "${pins_source}" "${NERD_FONTS_JETBRAINS_MONO_ZIP_SHA256}"
 assert_contains "fetch-pins verifies every download against the pin" "${fetch_pins_source}" "sha256sum -c"
