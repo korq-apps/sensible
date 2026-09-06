@@ -67,9 +67,28 @@ t_section "configure_login: GNOME idle lock defaults + GDM autologin"
 mock_setup
 configure_login gnome true alice
 assert_file_contains "dconf profile" "${MNT}/etc/dconf/profile/user" "system-db:local"
-assert_file_contains "idle lock after 300s" "${MNT}/etc/dconf/db/local.d/00-sensible-lock" "idle-delay=uint32 300"
-assert_file_contains "lock enabled" "${MNT}/etc/dconf/db/local.d/00-sensible-lock" "lock-enabled=true"
-assert_file_contains "lock immediately on idle" "${MNT}/etc/dconf/db/local.d/00-sensible-lock" "lock-delay=uint32 0"
+gnome_defaults="${MNT}/etc/dconf/db/local.d/00-sensible-desktop"
+assert_file_contains "idle lock after 300s" "${gnome_defaults}" "idle-delay=uint32 300"
+assert_file_contains "lock enabled" "${gnome_defaults}" "lock-enabled=true"
+assert_file_contains "lock immediately on idle" "${gnome_defaults}" "lock-delay=uint32 0"
+assert_file_contains "minimize and maximize titlebar buttons" "${gnome_defaults}" "button-layout='appmenu:minimize,maximize,close'"
+for uuid in \
+    'ubuntu-appindicators@ubuntu.com' \
+    'gsconnect@andyholmes.github.io' \
+    'caffeine@patapon.info' \
+    'clipboard-indicator@tudmotu.com' \
+    'dash-to-dock@micxgx.gmail.com' \
+    'batterytime@typeof.pw' \
+    'shotzy@SamkitJain660.github.io' \
+    'user-theme@gnome-shell-extensions.gcampax.github.com' \
+    'Vitals@CoreCoding.com'; do
+    assert_file_contains "enables ${uuid} by default" "${gnome_defaults}" "${uuid}"
+done
+assert_file_contains "Caffeine starts inactive" "${gnome_defaults}" "user-enabled=false"
+assert_file_contains "fullscreen apps do not bypass idle locking" "${gnome_defaults}" "enable-fullscreen=false"
+assert_file_contains "clipboard only persists favorites" "${gnome_defaults}" "cache-only-favorites=true"
+assert_file_contains "clipboard images are not persisted" "${gnome_defaults}" "cache-images=false"
+assert_file_contains "Vitals does not query public IP" "${gnome_defaults}" "include-public-ip=false"
 assert_contains "dconf db compiled" "$(cat "${MOCK_LOG}")" "dconf update"
 assert_file_contains "GDM autologin enabled" "${MNT}/etc/gdm3/daemon.conf" "AutomaticLoginEnable=True"
 assert_file_contains "GDM autologin user" "${MNT}/etc/gdm3/daemon.conf" "AutomaticLogin=alice"
@@ -89,7 +108,7 @@ t_section "configure_login: without autologin the lock defaults still apply"
 mock_setup
 rm -rf "${MNT}/etc/gdm3" "${MNT}/etc/sddm.conf.d"   # drop-ins from earlier sections
 configure_login gnome false alice
-assert_file_contains "idle lock defaults present" "${MNT}/etc/dconf/db/local.d/00-sensible-lock" "lock-enabled=true"
+assert_file_contains "idle lock defaults present" "${MNT}/etc/dconf/db/local.d/00-sensible-desktop" "lock-enabled=true"
 assert_file_not_exists "no GDM autologin" "${MNT}/etc/gdm3/daemon.conf"
 mock_teardown
 mock_setup

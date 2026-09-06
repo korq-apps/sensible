@@ -15,6 +15,7 @@
 #   /usr/local/share/fonts/jetbrains-mono-nerd   pinned JetBrainsMono Nerd Font
 #   /etc/gitconfig                 configs/gitconfig (system-wide defaults)
 #   /etc/keyd/default.conf         GNOME variant only
+#   /usr/share/gnome-shell/extensions   pinned GNOME-only extensions
 #   config/packages.chroot/localsend_amd64.deb   local APT input for both editions
 set -euo pipefail
 
@@ -27,6 +28,18 @@ source "${REPO_ROOT}/live/pins.env"
 CHROOT="${REPO_ROOT}/live/config/includes.chroot"
 CACHE="${REPO_ROOT}/live/local/pins"
 mkdir -p "${CACHE}"
+
+case "${SENSIBLE_VARIANT:-gnome}" in
+    gnome|kde) ;;
+    *) echo "Error: unknown SENSIBLE_VARIANT '${SENSIBLE_VARIANT}' (expected gnome or kde)." >&2; exit 1 ;;
+esac
+
+for required_tool in curl sha256sum tar unzip python3 dpkg-deb install grep; do
+    if ! command -v "${required_tool}" >/dev/null 2>&1; then
+        echo "Error: ${required_tool} is required to stage pinned image assets." >&2
+        exit 1
+    fi
+done
 
 fetch_verified() {
     local url="$1" dest="$2" want="$3" name="$4"
@@ -43,6 +56,88 @@ fetch_verified() {
         echo "       Update live/pins.env only after verifying the new artifact." >&2
         exit 1
     fi
+}
+
+GNOME_EXTENSION_ROOT="${CHROOT}/usr/share/gnome-shell/extensions"
+GNOME_EXTENSION_DOC="${CHROOT}/usr/share/doc/sensible-gnome-extensions"
+GNOME_EXTENSION_UUIDS=(
+    'Vitals@CoreCoding.com'
+    'clipboard-indicator@tudmotu.com'
+    'batterytime@typeof.pw'
+    'shotzy@SamkitJain660.github.io'
+)
+
+# includes.chroot is shared by edition builds. Remove generated GNOME content
+# before doing any downloads so a GNOME build can never leak into a later KDE
+# build, even when the later staging attempt fails part-way through.
+for uuid in "${GNOME_EXTENSION_UUIDS[@]}"; do
+    rm -rf "${GNOME_EXTENSION_ROOT:?}/${uuid}"
+done
+rm -rf "${GNOME_EXTENSION_DOC:?}"
+
+stage_gnome_extension() {
+    local label="$1" uuid="$2" version="$3" version_tag="$4" sha256="$5" license_file="$6" license_id="$7"
+    local archive="${CACHE}/${uuid}-${version_tag}.zip"
+    local destination="${GNOME_EXTENSION_ROOT}/${uuid}"
+
+    fetch_verified \
+        "https://extensions.gnome.org/download-extension/${uuid}.shell-extension.zip?version_tag=${version_tag}" \
+        "${archive}" "${sha256}" "${label} GNOME extension"
+    rm -rf "${destination:?}"
+    mkdir -p "${destination}"
+    if ! python3 - "${archive}" "${destination}" "${uuid}" "${version}" <<'PY'
+import json
+from pathlib import Path, PurePosixPath
+import stat
+import sys
+import zipfile
+
+archive, destination, expected_uuid, expected_version = sys.argv[1:]
+with zipfile.ZipFile(archive) as bundle:
+    names = set()
+    for member in bundle.infolist():
+        path = PurePosixPath(member.filename)
+        if path.is_absolute() or ".." in path.parts:
+            raise SystemExit(f"unsafe archive member: {member.filename}")
+        if stat.S_IFMT(member.external_attr >> 16) == stat.S_IFLNK:
+            raise SystemExit(f"archive symlink is not allowed: {member.filename}")
+        names.add(member.filename.rstrip("/"))
+    if "metadata.json" not in names or "extension.js" not in names:
+        raise SystemExit("metadata.json or extension.js is missing")
+    metadata = json.loads(bundle.read("metadata.json"))
+    if metadata.get("uuid") != expected_uuid:
+        raise SystemExit(f"UUID is {metadata.get('uuid')!r}, expected {expected_uuid!r}")
+    if str(metadata.get("version")) != expected_version:
+        raise SystemExit(
+            f"version is {metadata.get('version')!r}, expected {expected_version!r}"
+        )
+    if "50" not in [str(value) for value in metadata.get("shell-version", [])]:
+        raise SystemExit("GNOME Shell 50 is not declared compatible")
+    bundle.extractall(Path(destination))
+PY
+    then
+        rm -rf "${destination:?}"
+        echo "Error: ${label} archive identity or GNOME Shell compatibility does not match its pin." >&2
+        exit 1
+    fi
+
+    if [ "${license_file}" = SPDX-GPL-2.0-or-later ]; then
+        if ! grep -Fq 'SPDX-License-Identifier: GPL-2.0-or-later' "${destination}/extension.js"; then
+            echo "Error: ${label} archive lacks its expected GPL-2.0-or-later notice." >&2
+            exit 1
+        fi
+    elif [ ! -s "${destination}/${license_file}" ]; then
+        echo "Error: ${label} archive lacks its expected ${license_file}." >&2
+        exit 1
+    else
+        install -m 0644 "${destination}/${license_file}" \
+            "${GNOME_EXTENSION_DOC}/${label// /-}.LICENSE"
+    fi
+
+    printf '%s\tUUID=%s\tversion=%s\tversion_tag=%s\tsha256=%s\tlicense=%s\tsource=https://extensions.gnome.org/download-extension/%s.shell-extension.zip?version_tag=%s\n' \
+        "${label}" "${uuid}" "${version}" "${version_tag}" "${sha256}" "${license_id}" \
+        "${uuid}" "${version_tag}" \
+        >> "${GNOME_EXTENSION_DOC}/sources.txt"
 }
 
 # --- oh-my-bash: shared read-only install -----------------------------------
@@ -95,6 +190,25 @@ rm -rf "${LAZYVIM_DEST:?}"
 mkdir -p "${LAZYVIM_DEST}"
 tar -xzf "${LAZYVIM_TARBALL}" -C "${LAZYVIM_DEST}" --strip-components=1
 
+# --- GNOME Shell profile ----------------------------------------------------
+if [ "${SENSIBLE_VARIANT:-gnome}" = "gnome" ]; then
+    mkdir -p "${GNOME_EXTENSION_DOC}"
+    : > "${GNOME_EXTENSION_DOC}/sources.txt"
+    stage_gnome_extension "Vitals" 'Vitals@CoreCoding.com' \
+        "${VITALS_VERSION}" "${VITALS_VERSION_TAG}" "${VITALS_ZIP_SHA256}" LICENSE GPL-2.0
+    stage_gnome_extension "Clipboard Indicator" 'clipboard-indicator@tudmotu.com' \
+        "${CLIPBOARD_INDICATOR_VERSION}" "${CLIPBOARD_INDICATOR_VERSION_TAG}" \
+        "${CLIPBOARD_INDICATOR_ZIP_SHA256}" LICENSE.rst MIT
+    stage_gnome_extension "Battery Time" 'batterytime@typeof.pw' \
+        "${BATTERY_TIME_VERSION}" "${BATTERY_TIME_VERSION_TAG}" \
+        "${BATTERY_TIME_ZIP_SHA256}" SPDX-GPL-2.0-or-later GPL-2.0-or-later
+    stage_gnome_extension "Shotzy" 'shotzy@SamkitJain660.github.io' \
+        "${SHOTZY_VERSION}" "${SHOTZY_VERSION_TAG}" "${SHOTZY_ZIP_SHA256}" LICENSE GPL-3.0
+    cat <<'EOF' >> "${GNOME_EXTENSION_DOC}/sources.txt"
+Battery Time license: GPL-2.0-or-later; see its extension.js SPDX notice and /usr/share/common-licenses/GPL-2.
+EOF
+fi
+
 # --- Variant-owned keyd mapping ---------------------------------------------
 KEYD_DEST="${CHROOT}/etc/keyd"
 rm -rf "${KEYD_DEST}"
@@ -125,4 +239,4 @@ fetch_verified \
 install -Dm0644 "${LOCALSEND_LICENSE}" "${CHROOT}/usr/share/doc/localsend/copyright"
 install -Dm0644 "${REPO_ROOT}/live/pins.env" "${CHROOT}/etc/sensible/pins.env"
 
-echo "==> Pins staged: oh-my-bash, skel defaults, Nerd Font, git, keyd, LocalSend (${SENSIBLE_VARIANT:-gnome})"
+echo "==> Pins staged: oh-my-bash, skel defaults, Nerd Font, git, keyd, GNOME extensions, LocalSend (${SENSIBLE_VARIANT:-gnome})"

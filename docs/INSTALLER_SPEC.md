@@ -350,6 +350,11 @@ Always:
 If GNOME:
   gnome-core gdm3 gnome-software gnome-software-plugin-flatpak dconf-cli
   file-roller amberol simple-scan
+  gnome-shell-extension-manager gnome-tweaks
+  gnome-shell-extension-gsconnect gnome-shell-extension-appindicator
+  gnome-shell-extension-caffeine gnome-shell-extension-dashtodock
+  gnome-shell-extension-user-theme gir1.2-gtop-2.0 lm-sensors
+  tesseract-ocr tesseract-ocr-eng zbar-tools
   plymouth theme: spinner
 
 If KDE:
@@ -396,6 +401,7 @@ before user creation" ordering problem the network design had does not exist:
 #   configs/omb-bashrc                                 → /etc/skel/.bashrc
 #   LazyVim starter tarball (pinned commit + SHA256)    → /etc/skel/.config/nvim
 #   JetBrainsMono Nerd Font (pinned release, SHA256)   → /usr/local/share/fonts/jetbrains-mono-nerd
+#   GNOME-only extension zips (pinned EGO version tags) → /usr/share/gnome-shell/extensions
 #   configs/gitconfig                                  → /etc/gitconfig
 #   configs/keyd-default.conf (GNOME only)              → /etc/keyd/default.conf
 # Root keeps the stock Debian bashrc. Identity stays per-user (~/.gitconfig).
@@ -516,8 +522,12 @@ LUKS the prompt is never shown.
 Screen lock defaults are written for both desktops regardless of the choice:
 
 - GNOME: system dconf defaults — `idle-delay=300`, `lock-enabled=true`,
-  `lock-delay=0` (`/etc/dconf/profile/user` + `/etc/dconf/db/local.d/`), then
-  `dconf update` (hence `dconf-cli` in the GNOME package set).
+  `lock-delay=0`; Close/Minimize/Maximize titlebar buttons; the curated extension
+  list; Caffeine inactive without fullscreen/media auto-inhibition; Clipboard
+  Indicator persistence limited to favorites with image caching off; and Vitals
+  public-IP lookup off. These live in `/etc/dconf/profile/user` plus
+  `/etc/dconf/db/local.d/`, followed by `dconf update`; no dconf locks are added,
+  so later user choices win.
 - KDE: `/etc/xdg/kscreenlockerrc` — `Autolock=true`, `Timeout=5`,
   `LockOnResume=true` (covers resume from suspend).
 

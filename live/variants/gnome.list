@@ -23,9 +23,22 @@ shotwell
 gnome-shell-extension-manager
 gnome-tweaks
 
-# Phone/tray integration is packaged here; curated activation is a later slice.
+# Curated extensions available from Debian Testing.
 gnome-shell-extension-gsconnect
 gnome-shell-extension-appindicator
+gnome-shell-extension-caffeine
+gnome-shell-extension-dashtodock
+gnome-shell-extension-user-theme
+
+# Vitals runtime support. Vitals itself is pinned from extensions.gnome.org.
+gir1.2-gtop-2.0
+lm-sensors
+
+# Shotzy local OCR/QR support. Shotzy itself is pinned from extensions.gnome.org.
+tesseract-ocr
+tesseract-ocr-eng
+zbar-tools
+
 # Keep GSConnect's integration recommendations explicit and reviewable.
 sshfs
 python3-nautilus

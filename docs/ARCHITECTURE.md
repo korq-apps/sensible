@@ -216,7 +216,7 @@ Keep this list the single source of truth. README and the installer spec should 
 
 The default interactive shell uses Oh My Bash's `powerline-multiline` theme. Debian's `fonts-powerline` supplies separator glyphs; JetBrainsMono Nerd Font comes from a pinned nerd-fonts release for the prompt and LazyVim's broader icon set. The build verifies that the pinned Oh My Bash archive still contains the configured theme. UFW defaults to deny incoming / allow outgoing, with TCP/UDP 1714–1764 for GSConnect/KDE Connect and TCP/UDP 53317 for LocalSend on both editions. With Debian's IPv6-enabled UFW defaults these cover IPv4 and IPv6, across all interfaces/source addresses rather than only trusted networks. The manual documents that exposure. The Nerd Font is baked by `scripts/fetch-pins.sh` (pin + SHA256 in `live/pins.env`); the UFW hook writes rules while UFW is still disabled and flips `ENABLED=yes` in `/etc/ufw/ufw.conf` — never `ufw enable` in a chroot.
 
-The desktop-app slice adds Shotwell, Extension Manager, Tweaks and packaged GSConnect/AppIndicator support on GNOME; digiKam, KDE Connect and Plasma System Monitor on KDE. GNOME extension activation and profile defaults remain separate. Both editions gain LocalSend: its official amd64 `.deb` and license are pinned/verified during the build, then live-build's local package repository resolves dependencies. A chroot hook checks the installed version and assets. This adds no install-time download or external APT source. LocalSend updates require a reviewed upstream package; ordinary Debian updates do not update it. See [desktop profiles](DESKTOP_PROFILES.md) for provenance, maintenance and pending real-session acceptance.
+The desktop-app slice adds Shotwell, Extension Manager and Tweaks on GNOME; digiKam, KDE Connect and Plasma System Monitor on KDE. The GNOME image enables Debian's GSConnect, AppIndicator, Caffeine, Dash to Dock and User Themes extensions plus checksum-pinned Vitals, Clipboard Indicator, Battery Time and Shotzy. A system dconf database supplies user-overridable extension, titlebar and privacy defaults; it does not lock settings. A build hook validates packages/assets against the installed Shell major, compiles upstream schemas and bridges Shotzy's `/usr/share/tessdata` expectation to Debian's versioned Tesseract data. Both editions gain LocalSend: its official amd64 `.deb` and license are pinned/verified during the build, then live-build's local package repository resolves dependencies. This adds no install-time download or external APT source. Pinned artifact updates require review; ordinary Debian updates do not update them. See [desktop profiles](DESKTOP_PROFILES.md) for provenance, maintenance and pending real-session acceptance.
 
 ### Default apps
 
@@ -230,7 +230,7 @@ The desktop-app slice adds Shotwell, Extension Manager, Tweaks and packaged GSCo
 | Media | VLC |
 | Editor | Neovim + LazyVim starter copied to `/etc/skel/.config/nvim` |
 | Archives | `7zip`, `unzip`, `zip`; File Roller on GNOME, Ark on KDE |
-| GNOME utilities | The `gnome-core` PDF/image viewers, text editor, calculator, disks and calendar; plus Amberol |
+| GNOME utilities | The `gnome-core` PDF/image viewers, text editor, calculator, disks and calendar; plus Amberol, Shotwell, Tweaks and Extension Manager |
 | KDE utilities | Okular, Gwenview, Kate, KCalc, Spectacle, and Elisa |
 | CLI | `ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`, `jq` |
 
@@ -249,15 +249,14 @@ The local manual has a main setup/recovery guide and linked application and
 terminal-tool chapters. Every chapter is staged and required by the pre-wipe
 payload check; tests validate local links and documented default-package coverage.
 
-### Planned desktop profiles
+### Desktop profiles
 
-The next desktop milestone is specified in
-[DESKTOP_PROFILES.md](DESKTOP_PROFILES.md). It is **planned, not shipped**:
-additional photo/sharing applications, curated GNOME extensions and native
-Plasma equivalents, with user-overridable defaults. Approved upstream default
-artifacts may be pinned and verified at image-build time; installation and
-first-login setup must remain offline. The current software table above stays
-the record of implemented behavior until those changes land.
+[DESKTOP_PROFILES.md](DESKTOP_PROFILES.md) records the milestone and acceptance
+evidence. Application/dependency configuration and the GNOME profile are now
+implemented in the image sources with user-overridable defaults. Native Plasma
+configuration, optional appearance and backup choices remain planned. Full ISO
+builds and real offline sessions are still required before release claims can
+treat the configured behavior as proven.
 
 ### Shell (all users)
 

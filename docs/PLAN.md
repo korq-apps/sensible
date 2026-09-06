@@ -16,17 +16,17 @@ than asked, and third-party software leaves the install path entirely.
 | Phase 7.6 post-install app tool | planned |
 | Release gate | blocked on automated config input, real installed-disk tests, and physical-hardware evidence |
 | Phase 6 extras | re-scoped below: baked into the ISO, or moved to the post-install tool |
-| Desktop profiles | agreed scope, not implemented; see [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md) |
+| Desktop profiles | applications and GNOME image configuration implemented; real-session acceptance and native KDE profile pending; see [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md) |
 | Offline first-login manual | implemented from PR #2 on the current installer; real desktop first-login validation remains pending |
 
 **Next step:** exercise both release variants across Btrfs/Ext4 and LUKS on/off
 by installing to real QEMU disks, then boot those disks without the ISO attached.
 
-**Desktop roadmap:** build on the offline manual and deliver
-applications/dependencies, the GNOME profile, the KDE profile,
-and selected themes/backup workflow as focused changes. The agreed scope is
-recorded in [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md); it does not waive the
-release gate or claim these additions are already shipped.
+**Desktop roadmap:** application/dependency and GNOME-profile source changes are
+implemented. Next, validate them in real images/sessions, then deliver the native
+KDE profile and selected themes/backup workflow as focused changes. The agreed
+scope is recorded in [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md); source
+configuration does not waive the release gate or prove a published image.
 
 ---
 
@@ -120,7 +120,12 @@ below, not an optional follow-up.
         phone integration, management tools, explicit runtime deps and sharing rules.
   - [ ] Build both images; test offline app startup and actual discovery/transfer
         with UFW enabled. Record image size/build-time impact before release.
-  - [ ] Curated extension activation, remaining extensions and desktop defaults.
+  - [x] GNOME profile image configuration: curated extension activation,
+        build-validated pins/dependencies, titlebar buttons and privacy-conscious
+        fresh-user defaults. These are dconf defaults, not locks.
+  - [ ] Validate the GNOME extensions in a real offline session across login,
+        lock/reboot, laptop/desktop and multi-monitor cases; confirm user changes
+        survive. Implement and validate the native KDE profile separately.
 - [x] Offline HTML manual, permanent menu launcher, and per-user first-login
       autostart, shared by both build paths; unit and mocked installer tests.
 - [ ] Validate first-login opening and subsequent-login suppression on real

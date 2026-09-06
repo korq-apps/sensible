@@ -1,8 +1,8 @@
 # Desktop profiles: GNOME and KDE
 
-Status: **application/dependency slice implemented in image configuration;
-full-image and real-session acceptance pending**. Extension activation, further
-extensions, native profile defaults and appearance remain planned.
+Status: **application/dependency and GNOME-profile slices implemented in image
+configuration; full-image and real-session acceptance pending**. Native KDE
+profile defaults, optional appearance and backup choices remain planned.
 Recorded 2026-09-05, after installer PR #3 was merged. A configured package list
 is not evidence that an already published ISO contains these additions.
 
@@ -29,7 +29,7 @@ land, and review those costs explicitly.
 | Phone integration | GSConnect, including supporting dependencies | KDE Connect | Include; pairing remains a user action |
 | Keep awake | Caffeine | Native Plasma power-management controls | Available; keep-awake mode off by default |
 | Clipboard history | Clipboard Indicator | Native Plasma clipboard/Klipper | Include; review retention/privacy defaults |
-| Dock/panel | Dash to Dock | Plasma panel with Icons-only Task Manager | Configure a usable default; exact layout still to be chosen |
+| Dock/panel | Dash to Dock | Plasma panel with Icons-only Task Manager | GNOME enables the upstream dock default; detailed GNOME/KDE layouts remain user-configurable |
 | Window controls | Close, Minimize and Maximize titlebar buttons | Native Plasma titlebar controls | Apply as a fresh-user GNOME default; never overwrite later user changes |
 | Battery estimate | Battery Time | Native battery widget | Show useful laptop information; avoid empty desktop indicators |
 | Screenshot search, OCR and QR | Shotzy | Retain Spectacle; investigate an OCR/search companion | GNOME scope agreed; KDE feature parity still exploratory |
@@ -42,11 +42,11 @@ upstream URL, version and supported Shell versions when packaging it.
 
 ### Additional considerations
 
-- GNOME Tweaks is included by the application slice. The GNOME profile follow-up
-  uses a system dconf default to enable the Close, Minimize and Maximize
+- GNOME Tweaks is included by the application slice. The GNOME profile uses a
+  system dconf default to enable the Close, Minimize and Maximize
   titlebar buttons for fresh users; users remain free to change that layout.
-- GNOME AppIndicator support is packaged by the application slice. Enabling and
-  validating it belongs with the other curated extensions.
+- GNOME AppIndicator support is packaged and enabled with the curated set.
+  Actual tray behavior remains a real-session acceptance check.
 - Evaluate personal-file backups: Déjà Dup on GNOME and Kup on KDE. The need
   for a backup workflow is identified; the exact applications and default
   configuration need validation before being treated as committed packages.
@@ -63,9 +63,9 @@ backup jobs without a user-selected destination.
    selected application or extension with the required compatibility.
 2. When an agreed default is unavailable there, evaluate a pinned upstream
    release with a verified checksum and redistribution license. LocalSend's
-   official 1.18.2 amd64 `.deb` (control version `1.18.2+64`, Apache-2.0) is
-   pinned in `live/pins.env`; non-Debian GNOME extensions need the same
-   provenance and compatibility checks.
+   official 1.18.2 amd64 `.deb` (control version `1.18.2+64`, Apache-2.0) and
+   four non-Debian GNOME extension archives are pinned in `live/pins.env` with
+   provenance, license and compatibility checks.
 3. Fetch and stage approved artifacts **during the ISO build**, never during
    installation or first login. Build failure is preferable to silently
    shipping an incomplete profile. Include all runtime dependencies.
@@ -91,11 +91,33 @@ package checksum and license checksum together after reviewing a release; rerun
 dependency/runtime checks and both image builds. Existing installations need a
 reviewed upstream package update; Debian upgrades do not update this pin.
 
+The curated GNOME extension closure is explicit:
+
+| Extension | Source / reviewed version | UUID | License / Shell range |
+| :--- | :--- | :--- | :--- |
+| GSConnect | Debian `gnome-shell-extension-gsconnect` (72-1 reviewed) | `gsconnect@andyholmes.github.io` | Debian package; coupled to Testing's Shell |
+| AppIndicator | Debian `gnome-shell-extension-appindicator` (64-2 reviewed) | `ubuntu-appindicators@ubuntu.com` | Debian package; coupled to Testing's Shell |
+| Caffeine | Debian `gnome-shell-extension-caffeine` (60-1 reviewed) | `caffeine@patapon.info` | Debian package; coupled to Testing's Shell |
+| Dash to Dock | Debian `gnome-shell-extension-dashtodock` (106-1 reviewed) | `dash-to-dock@micxgx.gmail.com` | Debian package; coupled to Testing's Shell |
+| User Themes | Debian `gnome-shell-extension-user-theme` (50.2-2 reviewed) | `user-theme@gnome-shell-extensions.gcampax.github.com` | Debian package; coupled to Testing's Shell |
+| Vitals | extensions.gnome.org v85, version tag 74743 | `Vitals@CoreCoding.com` | GPL-2.0; Shell 45–51 |
+| Clipboard Indicator | extensions.gnome.org v71, version tag 70694 | `clipboard-indicator@tudmotu.com` | MIT; Shell 46–50 |
+| Battery Time | extensions.gnome.org v10, version tag 72194 | `batterytime@typeof.pw` | GPL-2.0-or-later SPDX notice; Shell 45–50 |
+| Shotzy | extensions.gnome.org v8, version tag 71980 | `shotzy@SamkitJain660.github.io` | GPL-3.0; Shell 49–50 |
+
+`scripts/fetch-pins.sh` checksum-checks and safely extracts the four upstream
+archives only for GNOME, verifies UUID/version/Shell 50 metadata and retains
+license/source records. `0260-gnome-profile.hook.chroot` then checks the actual
+installed Shell major and full runtime closure before the ISO is published.
+Debian-packaged extensions follow Debian updates; updating an upstream extension
+requires reviewing a new EGO version tag, version, archive checksum, license and
+Shell range together in `live/pins.env`.
+
 GSConnect recommendations are explicit rather than relying only on APT policy:
 SSHFS, Nautilus Python integration, the relevant GI bindings and Folks EDS backend.
 The live image currently enables recommends; the builder toolchain does not.
-GSConnect and AppIndicator are packaged, not added to the enabled-extension list
-in this slice. GNOME uses GSConnect; KDE uses KDE Connect. Both editions gain
+GSConnect and AppIndicator are also in GNOME's enabled-extension default. GNOME
+uses GSConnect; KDE uses KDE Connect. Both editions gain
 TCP/UDP 53317 and 1714–1764 UFW rules (IPv4/IPv6 with Debian defaults). These
 rules are not restricted to a trusted-network profile; the manual explains the
 exposure. Real-device discovery, pairing and transfer remain acceptance checks.
@@ -115,8 +137,10 @@ LocalSend currently documents TCP/UDP port 53317. GSConnect/KDE Connect rules
 must be reviewed for both editions, not only KDE. Pairing and incoming-transfer
 acceptance must remain explicit user choices.
 
-**Shotzy:** include Tesseract OCR, the selected language data and `zbar-tools`.
-Check Debian's language-data paths and actual discovery in Shotzy. Local OCR
+**Shotzy:** Tesseract OCR, English language data and `zbar-tools` are included.
+Debian stores `eng.traineddata` in `/usr/share/tesseract-ocr/5/tessdata`, while
+Shotzy v8 expects `/usr/share/tessdata`; the image hook validates the former and
+creates the latter as a relative compatibility link. Local OCR
 and QR decoding should work without internet; Google Lens is an online action.
 Document what is uploaded and to which service, and require an explicit user
 action before sending screenshot content. Do not claim Spectacle alone offers
@@ -159,8 +183,8 @@ Appearance-slice boundaries and acceptance:
 
 ## Configuration policy
 
-- Store maintainable, edition-specific defaults in the repository; choose the
-  concrete GNOME and Plasma configuration mechanisms during implementation.
+- Store maintainable, edition-specific defaults in the repository. GNOME uses
+  an unlocked system dconf database; choose the Plasma mechanism with its slice.
 - Apply defaults to a fresh user's session. Do not copy the live user's home,
   hardware identifiers, personal files, tokens, or paired devices.
 - Let subsequent user customization take precedence. Do not overwrite it on
@@ -188,7 +212,7 @@ each profile change is implemented and validated.
 | Change | Scope | Required evidence |
 | :--- | :--- | :--- |
 | 1. Applications and dependencies | Photo tools, LocalSend, phone integration, management tools and approved support packages | Both images build; applications start offline; network integrations work with the firewall |
-| 2. GNOME profile | Package/pin the selected extensions and apply fresh-user defaults, including titlebar buttons | Correct Shell compatibility, enabled state, dependency checks, user-overridable defaults, reboot/login/lock tests |
+| 2. GNOME profile | Image configuration complete: package/pin the selected extensions and apply fresh-user defaults, including titlebar buttons | Correct Shell compatibility, enabled state, dependency checks and user-overridable defaults are automated; reboot/login/lock tests remain |
 | 3. KDE profile | Native feature configuration, selected apps and evaluation of screenshot OCR/search | Equivalent task coverage, correct panel behavior, reboot/login/lock tests |
 | 4. Optional appearance and backups | User-selected themes; validated backup workflow | Readability/accessibility review; successful backup and restore before recommending defaults |
 
@@ -217,6 +241,23 @@ Do not advertise planned features as shipped while this checklist is open.
   phone pairing, IPv4/IPv6 transfers, and before/after image/resource costs remain
   unchecked release evidence. The tests do not mark the broader milestone done.
 
+### GNOME-profile configuration validation (2026-09-05)
+
+- Tiny, checksum-valid EGO fixture archives exercise the real staging script for
+  exact UUID/version/Shell compatibility, licenses, source manifests and
+  GNOME-to-KDE cleanup. Negative cases cover wrong metadata and missing notices.
+- The real image hook is exercised with external-command doubles for the Debian
+  package closure, installed Shell major, schema compilation, extension assets,
+  license records and Shotzy's Tesseract compatibility link. It rejects a Shell
+  version jump or missing dependency instead of publishing a partial profile.
+- Installer unit coverage checks all nine enabled UUIDs, titlebar buttons,
+  inactive Caffeine, memory-only non-favorite clipboard history, disabled image
+  caching and disabled Vitals public-IP lookup. These are dconf defaults without
+  locks, so they are designed to yield to per-user changes.
+- Full GNOME ISO build and a real offline Wayland session still need to prove
+  actual activation, panel layout, OCR/QR, login/lock/reboot behavior, battery and
+  no-battery behavior, multi-monitor behavior and user-setting persistence.
+
 ## Acceptance checklist
 
 - [ ] Exact sources, licenses, package names, extension UUIDs and versions recorded.
@@ -241,8 +282,9 @@ These checks supplement, not replace, the release blockers in
 The expanded asset set also belongs in
 [complete offline validation #9](https://github.com/korq-apps/sensible/issues/9).
 GNOME extension activation and fresh-user defaults, including the titlebar
-buttons, are tracked in
-[desktop-profile issue #13](https://github.com/korq-apps/sensible/issues/13).
+buttons, are implemented under
+[desktop-profile issue #13](https://github.com/korq-apps/sensible/issues/13);
+the issue remains the home for real-session acceptance evidence.
 
 ## Upstream references
 
@@ -251,8 +293,8 @@ time rather than treating these moving pages as a version lock.
 
 - [Debian Testing GNOME packages](https://packages.debian.org/forky/gnome/)
 - [GSConnect package dependencies](https://packages.debian.org/forky/gnome-shell-extension-gsconnect)
-- [Vitals](https://extensions.gnome.org/extension/1460/vitals/), [Clipboard Indicator](https://extensions.gnome.org/extension/779/clipboard-indicator/), [Battery Time](https://extensions.gnome.org/extension/5425/battery-time/)
+- [Vitals](https://extensions.gnome.org/extension/1460/vitals/), [Clipboard Indicator](https://extensions.gnome.org/extension/779/clipboard-indicator/), [Battery Time](https://extensions.gnome.org/extension/5425/battery-time/), and [Shotzy](https://extensions.gnome.org/extension/9707/shotzy/)
 - [LocalSend downloads](https://localsend.org/download) and [network requirements](https://github.com/localsend/localsend#setup)
-- [Shotzy and its dependencies](https://github.com/SamkitJain660/Shotzy)
+- [Shotzy source and dependency notes](https://github.com/SamkitJain660/Shotzy)
 - [digiKam](https://www.digikam.org/about/), [Plasma System Monitor](https://apps.kde.org/plasma-systemmonitor/), [Spectacle](https://apps.kde.org/spectacle/)
 - [Déjà Dup](https://apps.gnome.org/DejaDup/) and [Kup](https://apps.kde.org/kup/)

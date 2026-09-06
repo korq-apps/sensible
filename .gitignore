@@ -47,6 +47,8 @@ live/config/includes.chroot/etc/skel/.config/nvim/
 live/config/includes.chroot/etc/gitconfig
 live/config/includes.chroot/etc/sensible/
 live/config/includes.chroot/usr/share/oh-my-bash/
+live/config/includes.chroot/usr/share/gnome-shell/extensions/
+live/config/includes.chroot/usr/share/doc/sensible-gnome-extensions/
 live/config/includes.chroot/usr/local/share/fonts/
 # Pinned-artifact download cache (scripts/fetch-pins.sh)
 live/local/pins/
