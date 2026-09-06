@@ -18,6 +18,23 @@ No third-party Python packages are needed for the fixture tests.
 Theme fixture tests double `sassc`; real theme builds require the builder's
 `sassc` package as well as Python.
 
+Office fixture tests exercise the real pin-staging flow and `0255-office` hook:
+checksum/metadata/status failures, stale staged-package removal, missing editor,
+converter/template/icon/license files, missing runtime fonts/libraries, failed
+desktop registration, exclusion of LibreOffice/Microsoft font downloader, and
+office-only MIME defaults. The tiny fixtures do not launch the real application.
+ONLYOFFICE is explicitly exempted from the Debian package-name lookup; its free
+font dependencies are still checked against Testing.
+
+For release acceptance, install the pinned `.deb` and cached Testing dependencies
+in a disposable container with networking disabled, run the production hook,
+then test ordinary-user launches and create/save/reopen/export/print in both
+real desktop sessions. Do not disable the Chromium sandbox to make a test pass.
+The upstream package's undeclared NSS/NSPR and PulseAudio client libraries are
+explicit dependencies; the hook rejects unresolved links even if APT succeeds.
+The chroot-only APT preference must leave `ttf-mscorefonts-installer` without an
+install candidate during the build and must not persist in the finished image.
+
 ### Optional real theme/icon loading check
 
 After staging the GNOME assets into a **disposable Debian image/container**,

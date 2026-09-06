@@ -38,6 +38,7 @@ sh_files=(
     live/config/hooks/live/0200-sb-efi-prefix.hook.binary
     live/config/hooks/live/0300-ufw.hook.chroot
     live/config/hooks/live/0250-desktop-apps.hook.chroot
+    live/config/hooks/live/0255-office.hook.chroot
     live/config/hooks/live/0260-gnome-profile.hook.chroot
     live/config/hooks/live/0270-desktop-sources-and-themes.hook.chroot
     tests/unit/desktop_apps_test.sh
@@ -302,6 +303,7 @@ for var in \
     OH_MY_BASH_COMMIT OH_MY_BASH_TARBALL_SHA256 \
     NERD_FONTS_TAG NERD_FONTS_JETBRAINS_MONO_ZIP_SHA256 \
     LAZYVIM_STARTER_COMMIT LAZYVIM_STARTER_TARBALL_SHA256 \
+    ONLYOFFICE_VERSION ONLYOFFICE_DEB_VERSION ONLYOFFICE_DEB_SHA256 \
     VITALS_VERSION VITALS_VERSION_TAG VITALS_ZIP_SHA256 \
     CLIPBOARD_INDICATOR_VERSION CLIPBOARD_INDICATOR_VERSION_TAG CLIPBOARD_INDICATOR_ZIP_SHA256 \
     BATTERY_TIME_VERSION BATTERY_TIME_VERSION_TAG BATTERY_TIME_ZIP_SHA256 \
@@ -338,8 +340,12 @@ for pkg in fprintd libpam-fprintd ufw ipp-usb sane-airscan; do
 done
 assert_file_contains "GNOME variant bakes simple-scan" "${REPO_ROOT}/live/variants/gnome.list" "simple-scan"
 assert_file_contains "KDE variant bakes skanlite" "${REPO_ROOT}/live/variants/kde.list" "skanlite"
-for pkg in chromium libreoffice-writer libreoffice-calc libreoffice-impress thunderbird keepassxc 7zip unzip zip; do
+for pkg in chromium onlyoffice-desktopeditors fonts-dejavu fonts-crosextra-carlito xwayland desktop-file-utils thunderbird keepassxc 7zip unzip zip; do
     assert_file_contains "common closure bakes ${pkg}" \
+        "${REPO_ROOT}/live/config/package-lists/sensible-target.list.chroot" "${pkg}"
+done
+for pkg in libreoffice-writer libreoffice-calc libreoffice-impress; do
+    assert_file_not_contains "common closure no longer bakes ${pkg}" \
         "${REPO_ROOT}/live/config/package-lists/sensible-target.list.chroot" "${pkg}"
 done
 for pkg in file-roller amberol; do

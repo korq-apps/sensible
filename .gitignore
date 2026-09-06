@@ -71,6 +71,8 @@ live/config/includes.chroot/usr/local/share/fonts/
 live/local/pins/
 live/config/packages.chroot/localsend_amd64.deb
 live/config/includes.chroot/usr/share/doc/localsend/
+live/config/packages.chroot/onlyoffice-desktopeditors_amd64.deb
+live/config/includes.chroot/usr/share/doc/sensible-office/
 
 # Temporary files
 *~

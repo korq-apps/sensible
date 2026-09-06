@@ -224,7 +224,7 @@ The desktop-app slice adds Shotwell, Extension Manager and Tweaks on GNOME; digi
 | :--- | :--- |
 | Browser | Firefox ESR (`firefox-esr`) |
 | Alternate browser | Chromium (`chromium`) |
-| Office | LibreOffice Writer, Calc, and Impress |
+| Office | ONLYOFFICE Desktop Editors (pinned official amd64 `.deb`); LibreOffice is an optional post-install alternative |
 | Mail | Thunderbird |
 | Passwords | KeePassXC |
 | Media | VLC |
@@ -233,6 +233,33 @@ The desktop-app slice adds Shotwell, Extension Manager and Tweaks on GNOME; digi
 | GNOME utilities | The `gnome-core` PDF/image viewers, text editor, calculator, disks and calendar; plus Amberol, Shotwell, Tweaks and Extension Manager |
 | KDE utilities | Okular, Gwenview, Kate, KCalc, Spectacle, and Elisa |
 | CLI | `ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`, `jq` |
+
+### Offline office suite
+
+Both images replace the default LibreOffice Writer/Calc/Impress packages with
+the unmodified official `onlyoffice-desktopeditors` amd64 `.deb`. The release
+version, Debian control version and SHA256 are pinned in `live/pins.env`.
+`fetch-pins.sh` rejects checksum/metadata mismatches before staging the package
+under a fixed local-repository filename; it retains the entire upstream payload,
+including editor resources, converter, templates, icons, branding and licenses.
+Provenance is recorded in `/usr/share/doc/sensible-office/sources.txt`.
+
+live-build resolves the dependencies at build time. Free DejaVu, Carlito and
+Liberation fonts are included; a build-only APT preference excludes the
+recommended `ttf-mscorefonts-installer` network downloader without disabling
+Recommends for the rest of the image. XWayland is explicit for the upstream
+X11/Qt interface, as are NSS/NSPR and PulseAudio client libraries omitted from
+upstream's dependency metadata. The office hook verifies installed identity,
+payload, fonts, linked libraries and desktop entry; it also rejects an accidental
+second office suite or Microsoft font downloader in the image.
+
+`/etc/xdg/mimeapps.list` supplies user-overridable office-document defaults only;
+it does not change PDF or plain-text handlers. There is no account enrollment,
+installer download or extra ONLYOFFICE APT repository. Debian upgrades do not
+update the pinned editor: maintainers review newer artifacts for future images,
+and the manual describes verified local-package updates and optional LibreOffice.
+Full ISO, actual GNOME/KDE sessions, document fidelity, printing and release
+corresponding-source availability remain acceptance checks in [PLAN.md](PLAN.md).
 
 ### Offline manual
 

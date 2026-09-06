@@ -31,7 +31,7 @@
       <header><h1>Everyday applications</h1><p>What each app adds, and something useful to try first. Open graphical apps by searching for their names in the desktop application menu.</p></header>
       <section id="selection">
         <h2>Why this selection?</h2>
-        <p>The baseline covers browsing, documents, mail, passwords, media and files without an immediate trip to an app store. Most tools use Debian's update path; LocalSend, four GNOME extensions and the optional theme collection are checksum-pinned upstream artifacts with a separate update policy. Native GNOME or KDE utilities handle smaller everyday tasks; the shared apps give both editions a familiar core.</p>
+        <p>The baseline covers browsing, documents, mail, passwords, media and files without an immediate trip to an app store. Most tools use Debian's update path; ONLYOFFICE, LocalSend, four GNOME extensions and the optional theme collection are checksum-pinned upstream artifacts with a separate update policy. Native GNOME or KDE utilities handle smaller everyday tasks; the shared apps give both editions a familiar core.</p>
         <p>These are reasons to provide the tools, not a claim that each is the only good choice. Use the ones that fit your workflow. Installation and this guide work offline; websites, mail delivery, account setup, software downloads and some editor plugins require a connection.</p>
         <p>This chapter describes the image configuration, not the entire desktop wishlist. Photo tools, LocalSend, phone integration, the curated GNOME profile and selectable GNOME themes are included. Native KDE profile tuning and backup tools remain later work. Brave Origin below is an optional online installation, not a preinstalled browser.</p>
       </section>
@@ -64,17 +64,28 @@
       </section>
       <section id="productivity">
         <h2>Documents &amp; passwords · both editions</h2>
-        <article id="writer" data-packages="libreoffice-writer"><h3>LibreOffice Writer</h3>
-          <p><strong>Why included:</strong> letters, reports and other formatted documents without a cloud account.</p>
-          <p><strong>Start here:</strong> create a document, apply heading styles instead of manually enlarging headings, and save an editable <code>.odt</code> copy. Export a PDF when the recipient only needs to read or print it. Review layout after exchanging Microsoft Office files.</p>
-        </article>
-        <article id="calc" data-packages="libreoffice-calc"><h3>LibreOffice Calc</h3>
-          <p><strong>Why included:</strong> budgets, lists, calculations and small data tables.</p>
-          <p><strong>Start here:</strong> enter numbers in cells A1 through A5, then enter <code>=SUM(A1:A5)</code> in A6. Save as <code>.ods</code> to retain formulas and formatting; CSV is a plain table format, not a full workbook.</p>
-        </article>
-        <article id="impress" data-packages="libreoffice-impress"><h3>LibreOffice Impress</h3>
-          <p><strong>Why included:</strong> preparing and presenting slide decks offline.</p>
-          <p><strong>Start here:</strong> choose a slide layout, add a title and a few points, then start the slideshow with <kbd>F5</kbd>. Keep the editable <code>.odp</code> file and export a PDF handout. Test imported presentations and external displays before presenting.</p>
+        <article id="onlyoffice" data-packages="onlyoffice-desktopeditors"><h3>ONLYOFFICE Desktop Editors</h3>
+          <p><strong>Why included:</strong> one offline suite for documents, spreadsheets, presentations and PDF editing, with an Office Open XML-focused workflow for exchanging <code>.docx</code>, <code>.xlsx</code> and <code>.pptx</code> files. It replaces the preinstalled LibreOffice applications on both editions. Local editing needs no cloud connection; optional cloud, AI and online plugin features have their own network/account requirements.</p>
+          <p><strong>Open it:</strong> choose ONLYOFFICE in the application menu, or run <code>desktopeditors</code>. Create a new file or open a local one from the start screen. Office documents open with ONLYOFFICE by default; your desktop's Open With controls can change that. PDF readers and plain-text editor defaults are not changed.</p>
+          <h4 id="writer">Documents</h4>
+          <p>Create a document, apply heading styles instead of manually enlarging headings, and save an editable <code>.docx</code> copy. Export a PDF when the recipient only needs to read or print it.</p>
+          <h4 id="calc">Spreadsheets</h4>
+          <p>Enter numbers in cells A1 through A5, then enter <code>=SUM(A1:A5)</code> in A6. Save as <code>.xlsx</code> to retain formulas and formatting; CSV is a plain table format, not a full workbook.</p>
+          <h4 id="impress">Presentations</h4>
+          <p>Choose a slide layout, add a title and a few points, then use the slideshow controls to rehearse. Keep the editable <code>.pptx</code> file and export a PDF handout. Test imported presentations and external displays before presenting.</p>
+          <p><strong>Compatibility:</strong> keep an untouched original when exchanging files. Check fonts, layout, formulas and slide effects after saving and reopening. OpenDocument files are supported through conversion, not a promise of lossless round trips. Existing macros are not automatically portable: ONLYOFFICE uses JavaScript macros, not Microsoft VBA. <a href="https://helpcenter.onlyoffice.com/docs/userguides/document_editor/supportedformats.aspx">File formats</a> · <a href="https://api.onlyoffice.com/docs/plugins/more-information/faq/">Macro compatibility</a>.</p>
+          <p data-packages="fonts-dejavu fonts-crosextra-carlito xwayland desktop-file-utils libnss3 libnspr4 libpulse0"><strong>Supporting packages:</strong> DejaVu, Carlito and Liberation provide free office fonts; matching fonts still matter when exchanging documents. The Microsoft font downloader is not included. XWayland supports the upstream editor's X11 interface in a Wayland session; desktop-file utilities register its application launcher. NSS/NSPR security libraries and the PulseAudio client library supply runtime components omitted from upstream's dependency list; this does not replace Sensible's PipeWire audio server.</p>
+          <p><strong>Updates:</strong> the image includes upstream <code>9.4.0-129</code>, verified at build time. Ordinary Debian updates do not update this package, and no ONLYOFFICE APT repository is enabled. Sensible reviews new pins for future images. On an existing installation, download a newer amd64 <code>.deb</code> from the <a href="https://github.com/ONLYOFFICE/DesktopEditors/releases">official releases</a>, compare its SHA-256 with the release asset's published digest, then install the verified local file:</p>
+          <pre><code># Online download first; compare this output with the official release digest
+sha256sum ~/Downloads/onlyoffice-desktopeditors_amd64.deb
+# Only after verification; do not pull the optional Microsoft font downloader
+sudo apt install --no-install-recommends ~/Downloads/onlyoffice-desktopeditors_amd64.deb</code></pre>
+          <p>The upstream package, branding and license notices are retained intact. Package/source references are in <code>/usr/share/doc/sensible-office/sources.txt</code>. When uninstalling, prefer <code>sudo apt remove onlyoffice-desktopeditors</code>: upstream's <code>purge</code> script also deletes ONLYOFFICE configuration and local application data across users' home directories. Back those up before considering purge.</p>
+          <h4>Prefer LibreOffice?</h4>
+          <p>It remains an optional Debian-supported alternative, especially if your workflow centers on OpenDocument files. Installation requires a connection and can coexist with ONLYOFFICE:</p>
+          <pre><code>sudo apt update
+sudo apt install libreoffice-writer libreoffice-calc libreoffice-impress</code></pre>
+          <p>Use Open With to choose your preferred application; installing an alternative does not require deleting or converting existing documents.</p>
         </article>
         <article id="keepassxc" data-packages="keepassxc"><h3>KeePassXC</h3>
           <p><strong>Why included:</strong> a local encrypted password database that does not require a hosted service.</p>

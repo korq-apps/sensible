@@ -49,9 +49,18 @@ vlc
 neovim
 
 # Everyday productivity
-libreoffice-writer
-libreoffice-calc
-libreoffice-impress
+# Official pinned .deb staged through live-build's local APT repository.
+onlyoffice-desktopeditors
+# Explicit free office fonts; no ttf-mscorefonts-installer network downloader.
+fonts-dejavu
+fonts-crosextra-carlito
+# ONLYOFFICE's Qt/X11 interface runs through XWayland in both Wayland editions.
+xwayland
+desktop-file-utils
+# Upstream's .deb omits these dynamically linked runtime dependencies.
+libnss3
+libnspr4
+libpulse0
 thunderbird
 keepassxc
 

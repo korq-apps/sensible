@@ -44,7 +44,8 @@ class DesktopApps(unittest.TestCase):
         cache.mkdir(parents=True, exist_ok=True)
         pins = {"OH_MY_BASH_COMMIT": "omb", "NERD_FONTS_TAG": "font",
                 "LAZYVIM_STARTER_COMMIT": "vim", "LOCALSEND_VERSION": "1.18.2",
-                "LOCALSEND_DEB_VERSION": "1.18.2+64"}
+                "LOCALSEND_DEB_VERSION": "1.18.2+64",
+                "ONLYOFFICE_VERSION": "9.4.0", "ONLYOFFICE_DEB_VERSION": "9.4.0-129"}
         self.theme_archives = seed_themes(REPO, self.root, pins, self.bin, theme_problem)
         for filename, key in (("oh-my-bash-omb.tar.gz", "OH_MY_BASH_TARBALL_SHA256"),
                               ("lazyvim-starter-vim.tar.gz", "LAZYVIM_STARTER_TARBALL_SHA256")):
@@ -90,8 +91,10 @@ class DesktopApps(unittest.TestCase):
                     bundle.writestr(license_file, f"{uuid} license fixture\n")
             pins[f"{key}_ZIP_SHA256"] = hashlib.sha256(archive.read_bytes()).hexdigest()
         self.deb = cache / "LocalSend-1.18.2-linux-x86-64.deb"
+        self.office_deb = cache / "onlyoffice-desktopeditors-9.4.0_amd64.deb"
         self.license = cache / "LocalSend-1.18.2-LICENSE"
         for path, key in ((self.deb, "LOCALSEND_DEB_SHA256"),
+                          (self.office_deb, "ONLYOFFICE_DEB_SHA256"),
                           (self.license, "LOCALSEND_LICENSE_SHA256")):
             write(path, "verified fixture " + key)
             pins[key] = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -102,6 +105,16 @@ class DesktopApps(unittest.TestCase):
         # returns untrusted bytes so the real checksum failure path runs.
         write(self.bin / "curl", '#!/bin/sh\nwhile [ "$1" != -o ]; do shift; done\nprintf corrupt > "$2"\n', True)
         write(self.bin / "dpkg-deb", '''#!/bin/sh
+case "$2" in
+ *onlyoffice*)
+  if [ "${MOCK_OFFICE_QUERY_FAIL:-}" = "$3" ]; then exit 2; fi
+  if [ "${MOCK_OFFICE_FIELD:-}" = "$3" ]; then echo wrong; exit 0; fi
+  case "$3" in
+   Package) echo onlyoffice-desktopeditors;; Version) echo 9.4.0-129;; Architecture) echo amd64;;
+   *) exit 88;;
+  esac
+  exit 0;;
+esac
 if [ "$3" = "$MOCK_FIELD" ]; then echo wrong; exit 0; fi
 case "$3" in
  Package) echo localsend;; Version) echo 1.18.2+64;; Architecture) echo amd64;;
@@ -109,6 +122,7 @@ case "$3" in
 esac
 ''', True)
         self.staged = self.root / "live/config/packages.chroot/localsend_amd64.deb"
+        self.office_staged = self.staged.with_name("onlyoffice-desktopeditors_amd64.deb")
         return script
 
     def test_pinned_staging_and_cached_rebuild(self):
@@ -124,7 +138,13 @@ esac
                 result = self.run_script(script)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(self.staged.read_bytes(), self.deb.read_bytes())
+                self.assertEqual(self.office_staged.read_bytes(), self.office_deb.read_bytes())
+                self.assertEqual(sorted(path.name for path in self.staged.parent.glob("*.deb")),
+                                 ["localsend_amd64.deb", "onlyoffice-desktopeditors_amd64.deb"])
                 chroot = self.root / "live/config/includes.chroot"
+                office_provenance = (chroot / "usr/share/doc/sensible-office/sources.txt").read_text()
+                self.assertIn("version=9.4.0-129", office_provenance)
+                self.assertIn("/DesktopEditors/tree/v9.4.0", office_provenance)
                 themes = chroot / "usr/share/themes"
                 self.assertEqual(len(list(themes.iterdir())), 23 if variant == "gnome" else 0)
                 icons = chroot / "usr/share/icons"
@@ -164,7 +184,6 @@ esac
                                  self.license.read_bytes())
                 self.assertEqual((chroot / "etc/sensible/pins.env").read_bytes(),
                                  (self.root / "live/pins.env").read_bytes())
-                self.assertEqual(len(list(self.staged.parent.glob("*.deb"))), 1)
                 extension_root = chroot / "usr/share/gnome-shell/extensions"
                 docs = chroot / "usr/share/doc/sensible-gnome-extensions"
                 if variant == "gnome":
@@ -220,6 +239,31 @@ esac
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("LocalSend license does not match", result.stderr)
 
+    def test_office_identity_and_metadata_errors_reject_stale_staging(self):
+        script = self.seed_pins()
+        self.env["SENSIBLE_VARIANT"] = "kde"
+        for mode in ("MOCK_OFFICE_FIELD", "MOCK_OFFICE_QUERY_FAIL"):
+            for field in ("Package", "Version", "Architecture"):
+                with self.subTest(mode=mode, field=field):
+                    write(self.office_staged, "previous version")
+                    self.env[mode] = field
+                    result = self.run_script(script)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("ONLYOFFICE package", result.stderr)
+                    self.assertFalse(self.office_staged.exists())
+                    del self.env[mode]
+
+    def test_corrupt_office_package_rejects_stale_staging(self):
+        script = self.seed_pins()
+        self.env["SENSIBLE_VARIANT"] = "kde"
+        write(self.office_staged, "previous version")
+        write(self.office_deb, "corrupt bytes")
+        result = self.run_script(script)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ONLYOFFICE Desktop Editors does not match the pinned SHA256", result.stderr)
+        self.assertFalse(self.office_staged.exists())
+        self.assertFalse(self.office_deb.exists())
+
     def test_extension_identity_and_license_fail_closed(self):
         for problem in ("SHOTZY-version", "SHOTZY-shell", "VITALS-license",
                         "BATTERY_TIME-notice"):
@@ -238,7 +282,7 @@ esac
     def hook(self, name):
         # Only redirect filesystem roots; run the actual production control flow.
         source = (REPO / "live/config/hooks/live" / name).read_text()
-        for prefix in ("/etc/", "/usr/"):
+        for prefix in ("/etc/", "/usr/", "/opt/"):
             source = source.replace(prefix, str(self.root) + prefix)
         script = self.root / name
         write(script, source)
@@ -269,6 +313,126 @@ esac
                 path.unlink()
                 self.assertNotEqual(self.run_script(script).returncode, 0)
                 write(path, "fixture", executable=True)
+
+    def seed_office_hook(self):
+        script = self.hook("0255-office.hook.chroot")
+        write(self.root / "etc/sensible/pins.env", "ONLYOFFICE_DEB_VERSION=9.4.0-129\n")
+        write(self.bin / "dpkg-query", '''#!/bin/sh
+if [ "$3" = "${MOCK_OFFICE_MISSING:-}" ]; then exit 1; fi
+case "$3" in
+ libreoffice-*|ttf-mscorefonts-installer)
+  [ "$3" = "${MOCK_OFFICE_UNEXPECTED:-}" ] || exit 1;;
+esac
+case "$2" in
+ *Status*) echo "${MOCK_OFFICE_STATUS:-install ok installed}";;
+ *Version*) echo "${MOCK_OFFICE_VERSION:-9.4.0-129}";;
+ *Architecture*) echo "${MOCK_OFFICE_ARCH:-amd64}";;
+ *) exit 88;;
+esac
+[ "$2" != "${MOCK_OFFICE_QUERY_FAIL:-}" ]
+''', True)
+        write(self.bin / "desktop-file-validate", '#!/bin/sh\nexit "${MOCK_DESKTOP_INVALID:-0}"\n', True)
+        write(self.bin / "update-desktop-database", '#!/bin/sh\nexit "${MOCK_DESKTOP_UPDATE_FAIL:-0}"\n', True)
+        write(self.bin / "ldd", '''#!/bin/sh
+if [ "${MOCK_LDD_MISSING:-0}" = 1 ]; then echo 'libnss3.so => not found'; fi
+exit "${MOCK_LDD_FAIL:-0}"
+''', True)
+        self.office_executables = [
+            "usr/bin/desktopeditors", "usr/bin/onlyoffice-desktopeditors",
+            "opt/onlyoffice/desktopeditors/DesktopEditors",
+            "opt/onlyoffice/desktopeditors/converter/x2t",
+        ]
+        self.office_assets = [
+            "usr/share/applications/onlyoffice-desktopeditors.desktop",
+            "usr/share/icons/hicolor/128x128/apps/onlyoffice-desktopeditors.png",
+            "usr/share/doc/onlyoffice-desktopeditors/copyright",
+            "usr/share/doc/sensible-office/sources.txt",
+        ] + ["opt/onlyoffice/desktopeditors/" + path for path in (
+            "LICENSE.txt", "libcef.so", "index.html",
+            "editors/web-apps/apps/documenteditor/main/index.html",
+            "editors/web-apps/apps/spreadsheeteditor/main/index.html",
+            "editors/web-apps/apps/presentationeditor/main/index.html",
+            "editors/web-apps/apps/pdfeditor/main/index.html",
+            "converter/empty/en-US/new.docx", "converter/empty/en-US/new.xlsx",
+            "converter/empty/en-US/new.pptx",
+        )]
+        for path in self.office_executables + self.office_assets:
+            write(self.root / path, "fixture", executable=path in self.office_executables)
+        return script
+
+    def test_office_hook_identity_and_query_errors_fail_closed(self):
+        script = self.seed_office_hook()
+        self.assertEqual(self.run_script(script).returncode, 0)
+        for key, value in (
+            ("MOCK_OFFICE_MISSING", "onlyoffice-desktopeditors"),
+            ("MOCK_OFFICE_STATUS", "deinstall ok config-files"),
+            ("MOCK_OFFICE_VERSION", "9.3.0-1"), ("MOCK_OFFICE_ARCH", "arm64"),
+            ("MOCK_OFFICE_QUERY_FAIL", "-f=${Status}"),
+            ("MOCK_OFFICE_QUERY_FAIL", "-f=${Version}"),
+            ("MOCK_OFFICE_QUERY_FAIL", "-f=${Architecture}"),
+        ):
+            with self.subTest(key=key, value=value):
+                self.env[key] = value
+                result = self.run_script(script)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("ONLYOFFICE is missing or differs", result.stderr)
+                del self.env[key]
+
+    def test_office_hook_requires_complete_payload_and_executable_modes(self):
+        script = self.seed_office_hook()
+        for path in self.office_executables + self.office_assets:
+            with self.subTest(path=path):
+                asset = self.root / path
+                asset.unlink()
+                result = self.run_script(script)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("is missing:", result.stderr)
+                write(asset, "fixture", executable=path in self.office_executables)
+        for path in self.office_executables:
+            asset = self.root / path
+            asset.chmod(0o644)
+            self.assertNotEqual(self.run_script(script).returncode, 0)
+            asset.chmod(0o755)
+        write(self.root / self.office_assets[-1], "")
+        self.assertNotEqual(self.run_script(script).returncode, 0)
+
+    def test_office_hook_runtime_font_and_desktop_failures(self):
+        script = self.seed_office_hook()
+        for package in ("fonts-dejavu", "fonts-crosextra-carlito", "fonts-liberation", "xwayland",
+                        "libnss3", "libnspr4", "libpulse0"):
+            self.env["MOCK_OFFICE_MISSING"] = package
+            result = self.run_script(script)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"runtime package is missing: {package}", result.stderr)
+        del self.env["MOCK_OFFICE_MISSING"]
+        for package in ("libreoffice-writer", "libreoffice-calc", "libreoffice-impress", "ttf-mscorefonts-installer"):
+            self.env["MOCK_OFFICE_UNEXPECTED"] = package
+            result = self.run_script(script)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"unexpected office package in the image: {package}", result.stderr)
+        del self.env["MOCK_OFFICE_UNEXPECTED"]
+        for key in ("MOCK_DESKTOP_INVALID", "MOCK_DESKTOP_UPDATE_FAIL", "MOCK_LDD_MISSING", "MOCK_LDD_FAIL"):
+            self.env[key] = "1"
+            self.assertNotEqual(self.run_script(script).returncode, 0)
+            del self.env[key]
+
+    def test_office_font_policy_and_scoped_file_defaults(self):
+        import configparser
+        preference = (REPO / "live/config/archives/sensible-office.pref.chroot").read_text()
+        self.assertIn("Package: ttf-mscorefonts-installer\nPin: version *\nPin-Priority: -1", preference)
+        defaults = configparser.ConfigParser()
+        defaults.read(REPO / "live/config/includes.chroot/etc/xdg/mimeapps.list")
+        self.assertEqual(set(defaults.sections()), {"Default Applications"})
+        expected = {
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "application/vnd.oasis.opendocument.text", "application/vnd.oasis.opendocument.spreadsheet",
+            "application/vnd.oasis.opendocument.presentation", "application/msword",
+            "application/vnd.ms-excel", "application/vnd.ms-powerpoint",
+        }
+        self.assertEqual(set(defaults["Default Applications"]), expected)
+        self.assertEqual(set(defaults["Default Applications"].values()), {"onlyoffice-desktopeditors.desktop;"})
 
     def seed_gnome_profile_hook(self):
         script = self.hook("0260-gnome-profile.hook.chroot")

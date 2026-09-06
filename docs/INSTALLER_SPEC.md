@@ -57,7 +57,7 @@ suite (`tests/`) can run the full flow unprivileged against a temp directory.
 | Full name | empty | Optional GECOS + git `user.name` |
 | Email | empty | Optional git `user.email`, written only to the user's `~/.gitconfig` |
 
-Firefox ESR, Chromium, LibreOffice Writer/Calc/Impress, Thunderbird, KeePassXC,
+Firefox ESR, Chromium, ONLYOFFICE Desktop Editors, Thunderbird, KeePassXC,
 VLC, Neovim, Flatpak, firmware, archive support, the CLI set, and the
 variant-native utilities are always installed — not checkboxes.
 
@@ -347,7 +347,8 @@ Always:
   power-profiles-daemon fwupd
   flatpak
   firefox-esr chromium vlc neovim
-  libreoffice-writer libreoffice-calc libreoffice-impress
+  onlyoffice-desktopeditors (pinned local .deb, not a Debian archive package)
+  fonts-dejavu fonts-crosextra-carlito xwayland desktop-file-utils libnss3 libnspr4 libpulse0
   thunderbird keepassxc
   7zip unzip zip
   ripgrep fd-find fzf bat eza zoxide btop fastfetch jq
@@ -377,6 +378,17 @@ GNOME variant:
 ```
 
 Enable: `NetworkManager`, `bluetooth`, `power-profiles-daemon`, `fwupd`, `gdm3` or `sddm`, and `keyd` when selected.
+
+ONLYOFFICE uses the complete upstream package, version/architecture/SHA256-pinned
+in `live/pins.env` and staged through live-build's local APT repository. Its
+package name is a documented exception to the Debian package-name gate, not a
+host-repository lookup. `0255-office.hook.chroot` checks the installed identity,
+full editor/converter/launcher/license payload, linked libraries and free fonts.
+A build-only APT preference blocks the recommended Microsoft font downloader;
+NSS/NSPR and PulseAudio client libraries missing from upstream metadata are
+explicit in the shared closure. Office MIME defaults are user-overridable and
+leave PDF/plain-text defaults alone. No ONLYOFFICE repository is enabled, so
+upgrades require a reviewed upstream `.deb`; LibreOffice is optional post-install.
 
 ### Phase 6 additions — baked at build time (implemented)
 

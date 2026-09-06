@@ -255,7 +255,27 @@ below, not an optional follow-up.
 - [x] Plymouth theme: spinner / breeze
 - [x] Optional autologin (LUKS only, default on) + enforced idle screen lock on both DEs
 - [x] `keyd` + `configs/keyd-default.conf` when Mac clipboard is on
-- [x] Complete desktop defaults: Firefox ESR + Chromium, LibreOffice Writer/Calc/Impress, Thunderbird, KeePassXC, VLC, Neovim + pinned LazyVim skel, archive support, CLI set, Flatpak, and native GNOME/KDE utilities
+- [x] Desktop app configuration: Firefox ESR + Chromium, ONLYOFFICE Desktop Editors, Thunderbird, KeePassXC, VLC, Neovim + pinned LazyVim skel, archive support, CLI set, Flatpak, and native GNOME/KDE utilities
+- [x] Office replacement source: complete upstream ONLYOFFICE `9.4.0-129`
+      amd64 `.deb`, pinned SHA256/identity, free office fonts, XWayland, scoped
+      user-overridable office file defaults, build-time payload guard and manual.
+      LibreOffice remains an optional post-install Debian alternative. No extra
+      APT source; updates to the upstream package require a reviewed new pin.
+- [ ] Office acceptance: build both ISOs and test fresh offline GNOME/KDE
+      sessions, create/save/reopen DOCX/XLSX/PPTX and representative ODF files,
+      PDF export/printing, fonts/scaling, file defaults and user overrides.
+      Measure image footprint and runtime memory; audit corresponding-source
+      availability/notices for release redistribution. Fixture/container checks
+      do not establish visual fidelity or replace this release gate.
+
+Office preparation evidence (2026-09-06): the downloaded upstream `.deb` matches
+the release asset's SHA256. Real cached staging and installation into a fresh
+Debian Testing container succeeded with networking disabled, including the
+production payload/linker hook and office MIME lookups. An ordinary-user Xvfb
+launch and normal window close passed without sandbox-disabling flags. An earlier
+test's forced SIGTERM cleanup produced SIGSEGV; the host recorded no core, so
+the mechanism is unresolved and shutdown still needs checking in real sessions.
+
 - [x] Flathub is preconfigured system-wide with its signing key via a static
       `.flatpakrepo`; the build hook initializes/verifies it without downloading
       app metadata. No installer/first-login network setup or preinstalled Flatpaks.

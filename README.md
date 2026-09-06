@@ -52,7 +52,15 @@ The live ISO does **not** ship both desktops. Choose the GNOME or KDE release as
 
 **Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak, fonts, `fwupd`, Secure Boot chain on the installed system (shim + Debian-signed GRUB). Flathub is preconfigured system-wide with its signing key; app browsing/downloads require a connection, but installation does not.
 
-**Default apps:** Firefox ESR and Chromium; LibreOffice Writer, Calc, and Impress; Thunderbird; KeePassXC; VLC; Neovim (LazyVim starter in `/etc/skel`); archive support; and modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`). GNOME adds File Roller and Amberol; KDE adds Okular, Ark, Gwenview, Kate, KCalc, Spectacle, and Elisa. Flatpak and the desktop store integration are ready for use after installation.
+**Default apps:** Firefox ESR and Chromium; ONLYOFFICE Desktop Editors; Thunderbird; KeePassXC; VLC; Neovim (LazyVim starter in `/etc/skel`); archive support; and modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`). GNOME adds File Roller and Amberol; KDE adds Okular, Ark, Gwenview, Kate, KCalc, Spectacle, and Elisa. Flatpak and the desktop store integration are ready for use after installation.
+
+ONLYOFFICE's complete official amd64 `.deb` is checksum-pinned and installed
+with its dependencies at image-build time; local document editing works offline.
+Free office fonts are included instead of the recommended Microsoft font
+downloader. There is no extra ONLYOFFICE APT source: updates require a reviewed
+new package, not an ordinary Debian upgrade. The [manual](manual/applications.html#onlyoffice)
+covers usage, compatibility, updates and optional LibreOffice installation.
+Full ISO and real GNOME/KDE office-session acceptance remain pending.
 
 **Desktop profile additions (image configuration):** Shotwell, Extension Manager,
 Tweaks and a curated GNOME extension set; digiKam, KDE Connect and Plasma System

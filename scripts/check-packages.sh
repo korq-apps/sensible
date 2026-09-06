@@ -33,6 +33,7 @@ esac
 #   brave-browser  installed from Brave's own origin, never from Debian
 declare -A KNOWN_ABSENT=(
     [brave-browser]="installed from Brave's own apt origin, not packaged by Debian"
+    [onlyoffice-desktopeditors]="checksum-pinned upstream .deb staged by fetch-pins.sh; checked by the office build hook"
 )
 
 collect_names() {

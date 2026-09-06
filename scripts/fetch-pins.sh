@@ -19,6 +19,7 @@
 #   /usr/share/themes                  optional GNOME-only theme collection
 #   /usr/share/icons                   matching GNOME-only palette icon sets
 #   config/packages.chroot/localsend_amd64.deb   local APT input for both editions
+#   config/packages.chroot/onlyoffice-desktopeditors_amd64.deb   office suite
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -244,6 +245,34 @@ fetch_verified \
     "https://raw.githubusercontent.com/localsend/localsend/v${LOCALSEND_VERSION}/LICENSE" \
     "${LOCALSEND_LICENSE}" "${LOCALSEND_LICENSE_SHA256}" "LocalSend license"
 install -Dm0644 "${LOCALSEND_LICENSE}" "${CHROOT}/usr/share/doc/localsend/copyright"
+
+# --- ONLYOFFICE: keep the entire upstream package, not selected binaries -----
+# Its editors, converter, templates, fonts, icons and license notices must stay
+# together. Dependencies are resolved by live-build before the offline install.
+ONLYOFFICE_STAGED="${REPO_ROOT}/live/config/packages.chroot/onlyoffice-desktopeditors_amd64.deb"
+rm -f "${ONLYOFFICE_STAGED}"
+ONLYOFFICE_DEB="${CACHE}/onlyoffice-desktopeditors-${ONLYOFFICE_VERSION}_amd64.deb"
+fetch_verified \
+    "https://github.com/ONLYOFFICE/DesktopEditors/releases/download/v${ONLYOFFICE_VERSION}/onlyoffice-desktopeditors_amd64.deb" \
+    "${ONLYOFFICE_DEB}" "${ONLYOFFICE_DEB_SHA256}" "ONLYOFFICE Desktop Editors"
+if ! office_package=$(dpkg-deb -f "${ONLYOFFICE_DEB}" Package) \
+    || ! office_version=$(dpkg-deb -f "${ONLYOFFICE_DEB}" Version) \
+    || ! office_arch=$(dpkg-deb -f "${ONLYOFFICE_DEB}" Architecture); then
+    echo "Error: cannot read ONLYOFFICE package metadata." >&2
+    exit 1
+fi
+if [ "${office_package}" != onlyoffice-desktopeditors ] \
+    || [ "${office_version}" != "${ONLYOFFICE_DEB_VERSION}" ] \
+    || [ "${office_arch}" != amd64 ]; then
+    echo "Error: ONLYOFFICE package identity does not match its pin." >&2
+    exit 1
+fi
+install -Dm0644 "${ONLYOFFICE_DEB}" "${ONLYOFFICE_STAGED}"
+OFFICE_DOC="${CHROOT}/usr/share/doc/sensible-office"
+mkdir -p "${OFFICE_DOC}"
+printf 'ONLYOFFICE Desktop Editors\nversion=%s\nsha256=%s\npackage=https://github.com/ONLYOFFICE/DesktopEditors/releases/download/v%s/onlyoffice-desktopeditors_amd64.deb\nsource=https://github.com/ONLYOFFICE/DesktopEditors/tree/v%s (including the recorded submodules)\nlicense=/usr/share/doc/onlyoffice-desktopeditors/copyright\n' \
+    "${ONLYOFFICE_DEB_VERSION}" "${ONLYOFFICE_DEB_SHA256}" "${ONLYOFFICE_VERSION}" "${ONLYOFFICE_VERSION}" \
+    > "${OFFICE_DOC}/sources.txt"
 install -Dm0644 "${REPO_ROOT}/live/pins.env" "${CHROOT}/etc/sensible/pins.env"
 
-echo "==> Pins staged: oh-my-bash, skel defaults, Nerd Font, git, keyd, GNOME extensions/themes, LocalSend (${SENSIBLE_VARIANT:-gnome})"
+echo "==> Pins staged: oh-my-bash, skel defaults, Nerd Font, git, keyd, GNOME extensions/themes, LocalSend, ONLYOFFICE (${SENSIBLE_VARIANT:-gnome})"

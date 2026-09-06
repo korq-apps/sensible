@@ -1,0 +1,5 @@
+# ONLYOFFICE recommends this network downloader; free fonts are baked instead.
+# Build-only policy: live-build removes *.pref.chroot from the finished image.
+Package: ttf-mscorefonts-installer
+Pin: version *
+Pin-Priority: -1
