@@ -4,6 +4,12 @@ Read-only. Run upstream install.sh only in a disposable container, then pass
 its destination and the staged image's usr/share/themes as the two arguments.
 GTK 3 CSS is compiled/adapted by Sensible; all other GNOME files must match.
 """
+if not __debug__:
+    raise SystemExit(
+        "Error: theme validation requires Python assertions; "
+        "unset PYTHONOPTIMIZE and run without -O or -OO."
+    )
+
 from pathlib import Path
 import argparse
 

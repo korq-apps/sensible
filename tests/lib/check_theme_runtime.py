@@ -4,6 +4,13 @@ Requires the production assets installed under /usr/share, python3-gi,
 GTK introspection and the image's icon/SVG dependencies. Does not change settings.
 Not part of the dependency-free fixture runner; see tests/README.md.
 """
+# Fail before importing GTK or touching a display if validation would be skipped.
+if not __debug__:
+    raise SystemExit(
+        "Error: theme validation requires Python assertions; "
+        "unset PYTHONOPTIMIZE and run without -O or -OO."
+    )
+
 from pathlib import Path
 import argparse
 import gi

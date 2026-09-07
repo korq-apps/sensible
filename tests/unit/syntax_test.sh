@@ -340,7 +340,7 @@ for pkg in fprintd libpam-fprintd ufw ipp-usb sane-airscan; do
 done
 assert_file_contains "GNOME variant bakes simple-scan" "${REPO_ROOT}/live/variants/gnome.list" "simple-scan"
 assert_file_contains "KDE variant bakes skanlite" "${REPO_ROOT}/live/variants/kde.list" "skanlite"
-for pkg in chromium onlyoffice-desktopeditors fonts-dejavu fonts-crosextra-carlito xwayland desktop-file-utils thunderbird keepassxc 7zip unzip zip; do
+for pkg in chromium onlyoffice-desktopeditors fonts-dejavu fonts-crosextra-carlito fonts-liberation libnss3 libnspr4 libpulse0 xwayland desktop-file-utils thunderbird keepassxc 7zip unzip zip; do
     assert_file_contains "common closure bakes ${pkg}" \
         "${REPO_ROOT}/live/config/package-lists/sensible-target.list.chroot" "${pkg}"
 done

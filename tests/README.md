@@ -37,6 +37,11 @@ install candidate during the build and must not persist in the finished image.
 
 ### Optional real theme/icon loading check
 
+Both optional theme checkers require Python assertions. They fail immediately
+under `-O`, `-OO` or an assertion-disabling `PYTHONOPTIMIZE` setting, before GTK
+imports or validation can be skipped. The rootless fixture suite tests all four
+invocation forms and normal help output without requiring GTK or a display.
+
 After staging the GNOME assets into a **disposable Debian image/container**,
 install its icon/SVG dependencies (`papirus-icon-theme`, `librsvg2-common`,
 `gtk-update-icon-cache`) and test-only `python3-gi`, `gir1.2-gtk-3.0`, `gir1.2-gtk-4.0`, `xvfb`

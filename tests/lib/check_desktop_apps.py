@@ -36,6 +36,41 @@ class DesktopApps(unittest.TestCase):
         return subprocess.run(["bash", str(script)], env=self.env,
                               text=True, capture_output=True)
 
+    def test_optional_theme_checks_reject_optimized_python(self):
+        # Keep this regression rootless and independent of GTK/display access.
+        # The guard must run before the runtime check imports its optional deps.
+        import_root = self.root / "imports"
+        write(import_root / "gi.py", 'raise RuntimeError("GTK imported before optimization guard")\n')
+        env = dict(self.env, PYTHONPATH=str(import_root))
+        env.pop("PYTHONOPTIMIZE", None)
+        for name in ("check_theme_runtime.py", "check_theme_upstream.py"):
+            script = REPO / "tests/lib" / name
+            for flags, optimize in ((("-O",), None), (("-OO",), None),
+                                    ((), "1"), ((), "2")):
+                with self.subTest(script=name, flags=flags, optimize=optimize):
+                    mode_env = dict(env)
+                    if optimize is not None:
+                        mode_env["PYTHONOPTIMIZE"] = optimize
+                    result = subprocess.run(
+                        [sys.executable, "-B", "-S", *flags, str(script), "--help"],
+                        env=mode_env, text=True, capture_output=True,
+                    )
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertIn("theme validation requires Python assertions", result.stderr)
+                    self.assertIn("PYTHONOPTIMIZE", result.stderr)
+                    self.assertNotIn("GTK imported", result.stderr)
+                    self.assertEqual(result.stdout, "")
+            # Ordinary invocations remain usable. --help exits before any GTK
+            # calls, so an empty import double is enough for this positive case.
+            write(import_root / "gi.py", "")
+            result = subprocess.run(
+                [sys.executable, "-B", "-S", str(script), "--help"],
+                env=env, text=True, capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("usage:", result.stdout)
+            write(import_root / "gi.py", 'raise RuntimeError("GTK imported before optimization guard")\n')
+
     def seed_pins(self, include_omb_theme=True, extension_problem=None, theme_problem=None):
         script = self.root / "scripts/fetch-pins.sh"
         script.parent.mkdir(parents=True, exist_ok=True)
