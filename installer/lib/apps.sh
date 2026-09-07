@@ -10,9 +10,7 @@ install_default_apps() {
         chromium
         vlc
         neovim
-        libreoffice-writer
-        libreoffice-calc
-        libreoffice-impress
+        onlyoffice-desktopeditors
         thunderbird
         keepassxc
         7zip

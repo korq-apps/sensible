@@ -72,6 +72,9 @@ assert_file_contains "idle lock after 300s" "${gnome_defaults}" "idle-delay=uint
 assert_file_contains "lock enabled" "${gnome_defaults}" "lock-enabled=true"
 assert_file_contains "lock immediately on idle" "${gnome_defaults}" "lock-delay=uint32 0"
 assert_file_contains "minimize and maximize titlebar buttons" "${gnome_defaults}" "button-layout='appmenu:minimize,maximize,close'"
+assert_file_contains "Paper icons are the GNOME default" "${gnome_defaults}" "icon-theme='Paper'"
+assert_file_contains "Orchis is the GTK default" "${gnome_defaults}" "gtk-theme='Orchis'"
+assert_file_not_exists "appearance defaults are not dconf locks" "${MNT}/etc/dconf/db/local.d/locks/00-sensible-desktop"
 for uuid in \
     'ubuntu-appindicators@ubuntu.com' \
     'gsconnect@andyholmes.github.io' \

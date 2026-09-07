@@ -27,10 +27,11 @@ t_section "Default apps: canonical package list (Architecture §7)"
 mock_setup
 install_default_apps "alice"
 apt_line="$(mock_last_call 'apt-get install -y --no-install-recommends')"
-for pkg in firefox-esr chromium vlc neovim libreoffice-writer libreoffice-calc libreoffice-impress thunderbird keepassxc 7zip unzip zip ripgrep fd-find fzf bat eza zoxide btop fastfetch jq sudo curl git ca-certificates flatpak fonts-noto-core fonts-noto-color-emoji fonts-liberation fonts-powerline; do
+for pkg in firefox-esr chromium vlc neovim onlyoffice-desktopeditors thunderbird keepassxc 7zip unzip zip ripgrep fd-find fzf bat eza zoxide btop fastfetch jq sudo curl git ca-certificates flatpak fonts-noto-core fonts-noto-color-emoji fonts-liberation fonts-powerline; do
     if [[ " ${apt_line} " == *" ${pkg} "* ]]; then t_ok; else t_fail "package ${pkg} in apt install call" "line: ${apt_line}"; fi
 done
 calls="$(cat "${MOCK_LOG}")"
+assert_not_contains "LibreOffice is optional, not a default install" "${calls}" "libreoffice-"
 assert_not_contains "Flathub setup stays out of the installer" "${calls}" "flatpak remote-add"
 assert_not_contains "LazyVim starter is not cloned during install" "${calls}" "git clone"
 assert_file_exists "skel nvim config" "${MNT}/etc/skel/.config/nvim/init.lua"

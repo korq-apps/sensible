@@ -1,0 +1,72 @@
+#!/bin/sh
+# Validate the complete offline office payload without launching it as root.
+set -eu
+. /etc/sensible/pins.env
+if ! office_status=$(dpkg-query -W -f='${Status}' onlyoffice-desktopeditors 2>/dev/null) \
+    || ! office_version=$(dpkg-query -W -f='${Version}' onlyoffice-desktopeditors 2>/dev/null) \
+    || ! office_arch=$(dpkg-query -W -f='${Architecture}' onlyoffice-desktopeditors 2>/dev/null) \
+    || [ "$office_status" != 'install ok installed' ] \
+    || [ "$office_version" != "$ONLYOFFICE_DEB_VERSION" ] \
+    || [ "$office_arch" != amd64 ]; then
+    echo "Error: ONLYOFFICE is missing or differs from the pinned package identity." >&2
+    exit 1
+fi
+
+office_root=/opt/onlyoffice/desktopeditors
+for executable in /usr/bin/desktopeditors /usr/bin/onlyoffice-desktopeditors \
+    "$office_root/DesktopEditors" "$office_root/converter/x2t"; do
+    if [ ! -x "$executable" ]; then
+        echo "Error: ONLYOFFICE executable is missing: $executable" >&2
+        exit 1
+    fi
+done
+for asset in /usr/share/applications/onlyoffice-desktopeditors.desktop \
+    /usr/share/icons/hicolor/128x128/apps/onlyoffice-desktopeditors.png \
+    /usr/share/doc/onlyoffice-desktopeditors/copyright \
+    /usr/share/doc/sensible-office/sources.txt \
+    "$office_root/LICENSE.txt" "$office_root/libcef.so" "$office_root/index.html" \
+    "$office_root/editors/web-apps/apps/documenteditor/main/index.html" \
+    "$office_root/editors/web-apps/apps/spreadsheeteditor/main/index.html" \
+    "$office_root/editors/web-apps/apps/presentationeditor/main/index.html" \
+    "$office_root/editors/web-apps/apps/pdfeditor/main/index.html" \
+    "$office_root/converter/empty/en-US/new.docx" \
+    "$office_root/converter/empty/en-US/new.xlsx" \
+    "$office_root/converter/empty/en-US/new.pptx"; do
+    if [ ! -s "$asset" ]; then
+        echo "Error: ONLYOFFICE offline asset is missing: $asset" >&2
+        exit 1
+    fi
+done
+
+for package in fonts-dejavu fonts-crosextra-carlito fonts-liberation xwayland libnss3 libnspr4 libpulse0; do
+    if ! status=$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null) \
+        || [ "$status" != 'install ok installed' ]; then
+        echo "Error: ONLYOFFICE runtime package is missing: $package" >&2
+        exit 1
+    fi
+done
+# No second office suite or network font downloader may leak in via Recommends.
+for package in libreoffice-writer libreoffice-calc libreoffice-impress ttf-mscorefonts-installer; do
+    if status=$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null) \
+        && [ "$status" = 'install ok installed' ]; then
+        echo "Error: unexpected office package in the image: $package" >&2
+        exit 1
+    fi
+done
+# APT cannot catch libraries omitted from upstream's dependency metadata.
+for binary in "$office_root/DesktopEditors" "$office_root/converter/x2t"; do
+    if ! linked=$(LC_ALL=C LD_LIBRARY_PATH="$office_root" ldd "$binary" 2>&1); then
+        echo "Error: cannot inspect ONLYOFFICE runtime libraries: $binary" >&2
+        printf '%s\n' "$linked" >&2
+        exit 1
+    fi
+    case "$linked" in
+        *'not found'*)
+            echo "Error: ONLYOFFICE runtime libraries are missing: $binary" >&2
+            printf '%s\n' "$linked" >&2
+            exit 1
+            ;;
+    esac
+done
+desktop-file-validate /usr/share/applications/onlyoffice-desktopeditors.desktop
+update-desktop-database /usr/share/applications

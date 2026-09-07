@@ -224,7 +224,7 @@ The desktop-app slice adds Shotwell, Extension Manager and Tweaks on GNOME; digi
 | :--- | :--- |
 | Browser | Firefox ESR (`firefox-esr`) |
 | Alternate browser | Chromium (`chromium`) |
-| Office | LibreOffice Writer, Calc, and Impress |
+| Office | ONLYOFFICE Desktop Editors (pinned official amd64 `.deb`); LibreOffice is an optional post-install alternative |
 | Mail | Thunderbird |
 | Passwords | KeePassXC |
 | Media | VLC |
@@ -233,6 +233,33 @@ The desktop-app slice adds Shotwell, Extension Manager and Tweaks on GNOME; digi
 | GNOME utilities | The `gnome-core` PDF/image viewers, text editor, calculator, disks and calendar; plus Amberol, Shotwell, Tweaks and Extension Manager |
 | KDE utilities | Okular, Gwenview, Kate, KCalc, Spectacle, and Elisa |
 | CLI | `ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`, `jq` |
+
+### Offline office suite
+
+Both images replace the default LibreOffice Writer/Calc/Impress packages with
+the unmodified official `onlyoffice-desktopeditors` amd64 `.deb`. The release
+version, Debian control version and SHA256 are pinned in `live/pins.env`.
+`fetch-pins.sh` rejects checksum/metadata mismatches before staging the package
+under a fixed local-repository filename; it retains the entire upstream payload,
+including editor resources, converter, templates, icons, branding and licenses.
+Provenance is recorded in `/usr/share/doc/sensible-office/sources.txt`.
+
+live-build resolves the dependencies at build time. Free DejaVu, Carlito and
+Liberation fonts are included; a build-only APT preference excludes the
+recommended `ttf-mscorefonts-installer` network downloader without disabling
+Recommends for the rest of the image. XWayland is explicit for the upstream
+X11/Qt interface, as are NSS/NSPR and PulseAudio client libraries omitted from
+upstream's dependency metadata. The office hook verifies installed identity,
+payload, fonts, linked libraries and desktop entry; it also rejects an accidental
+second office suite or Microsoft font downloader in the image.
+
+`/etc/xdg/mimeapps.list` supplies user-overridable office-document defaults only;
+it does not change PDF or plain-text handlers. There is no account enrollment,
+installer download or extra ONLYOFFICE APT repository. Debian upgrades do not
+update the pinned editor: maintainers review newer artifacts for future images,
+and the manual describes verified local-package updates and optional LibreOffice.
+Full ISO, actual GNOME/KDE sessions, document fidelity, printing and release
+corresponding-source availability remain acceptance checks in [PLAN.md](PLAN.md).
 
 ### Offline manual
 
@@ -279,19 +306,44 @@ No credential helper is configured: Debian ships no packaged libsecret helper (`
 
 **Not currently offered by the offline installer:** Brave Origin and Audacious. Brave Origin (`brave-origin`, distinct from regular Brave) is a curated optional online app; the manual links its official installer and explains the added APT source/key. It is not a local package input or a preinstalled browser.
 
-GNOME's optional theme collection is image data, not a new default: Marble
-(six accents, light/dark), Good-Old-Shell 50 (session CSS/images only) and Graphite
-(grey GTK 3 Light/Dark only). `fetch-pins.sh` verifies the four source/release
-inputs, then `stage-themes.sh` and `build-theme-assets.py` build/stage assets in
-temporary directories. The builder never runs upstream installers that change
-host settings, GDM or libadwaita. Both build paths include Python and `sassc`;
-KDE staging removes only this collection's named outputs. The image hook checks
-Shell 50 and required assets. Sources, licenses and build adapters accompany the
+GNOME's unlocked system dconf defaults select Paper icons and the Orchis GTK 3
+theme. Paper, Papirus and Orchis come from Debian packages, with no Shell/GDM or
+personal CSS override. The optional image collection contains Marble (six accents,
+light/dark), Graphite (grey Light/Dark), and Qogir, Matcha (sea accent)
+and Fluent (standard/light/dark), plus complete Qogir icon variants. All four
+application-theme families include GTK 3, GTK 4 and GNOME Shell components
+under `/usr/share/themes/`; Shell selection follows upstream's >=48 layout on
+GNOME 50. Installing globally does not force libadwaita to use a custom theme.
+`fetch-pins.sh` verifies six source archives; the adapters compile Sass and
+install CSS, image assets and theme indexes in temporary directories. Upstream
+installers are not run against the host or user settings. Both build paths
+include Python and `sassc`; Qogir's target runtime includes the SVG loader and
+icon-cache tool. KDE staging removes only named generated outputs.
+
+The replacements omit GTK 2 and non-GNOME desktop components. Qogir/Matcha's
+missing document-thumbnail image is replaced with a solid border, and Qogir's
+legacy Kooha image-only button rules are omitted. Qogir GTK 4's checkmark URLs
+use the actual shipped paths, and Graphite Shell includes its referenced background.
+Matcha's GTK 4 and Shell CSS are retained as in the upstream installer; an exact
+reviewed set of missing GTK 4 image references is reported in
+`known-upstream-assets.txt`, not treated as proof the theme is unusable. New
+missing files and unsafe paths still fail validation. Qogir source icons and alias trees are merged with HiDPI links and
+upstream light/dark recoloring. Indexed directories and aliases must resolve
+inside each set; fallback icons use shipped Papirus/Adwaita/hicolor. Licenses
+and author credits are retained. Testing no longer carries Murrine; Stable is
+not added to recover GTK 2. Everforest/Tokyonight/Osaka/Catppuccin and
+Good-Old-Shell are retired and cleared from reused staging roots.
+The image hook checks Shell 50, appearance packages and required assets, then
+builds the added icon caches. Sources, licenses and build adapters accompany the
 image in `/usr/share/doc/sensible-themes/`. These pinned assets are not updated
 by Debian APT. Selection/reset instructions and limitations are in the manual;
 full-image and real-session validation remains pending.
 
-**Later, not implemented:** AI CLIs may be added as an optional module with pinned artifacts. They are not current installer checkboxes.
+**Later, not implemented:** the [AI tools plan](AI_TOOLS.md) evaluates a small
+open-source CLI core versus all-opt-in delivery, with proprietary clients kept
+optional. No AI tools or installer checkboxes are currently added. Approved
+image artifacts would be pinned and verified at build time; optional online
+recipes and desktop-client support require separate validation.
 
 **Planned (post-install tool):** BioPass face login (pinned `.deb`, see §5); Developer tools — `docker.io`, `docker-compose` (the v2 rewrite in Testing), `lazygit`, `gh`. Developer tools deliberately do **not** add the user to the `docker` group — membership is root-equivalent, so the default is `sudo docker` (a user can opt in later, knowing the tradeoff).
 

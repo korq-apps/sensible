@@ -23,6 +23,14 @@ shotwell
 gnome-shell-extension-manager
 gnome-tweaks
 
+# User-overridable appearance defaults: Paper icons and Orchis GTK 3.
+# gtk2-engines-murrine was removed from Testing; do not mix in Stable's GTK 2.
+paper-icon-theme
+papirus-icon-theme
+orchis-gtk-theme
+gtk-update-icon-cache
+librsvg2-common
+
 # Curated extensions available from Debian Testing.
 gnome-shell-extension-gsconnect
 gnome-shell-extension-appindicator

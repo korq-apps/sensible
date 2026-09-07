@@ -37,6 +37,9 @@ assert_file_contains "host config and hooks excluded" "${WORK}/apt.conf" '/etc";
 assert_file_contains "partial update failures are fatal" "${WORK}/apt.conf" 'APT::Update::Error-Mode "any";'
 assert_file_contains "target architecture is explicit" "${WORK}/apt.conf" 'APT::Architecture "amd64";'
 assert_eq "refresh happens before lookup" 'update -qq' "$(head -n 1 "${WORK}/calls")"
+assert_file_contains "office local package exception is explicit" "${WORK}/output" 'skipping onlyoffice-desktopeditors (checksum-pinned upstream .deb'
+assert_file_not_contains "local office package is not queried in Debian" "${WORK}/calls" 'show onlyoffice-desktopeditors'
+assert_file_contains "free office font dependency is checked in Debian" "${WORK}/calls" 'show fonts-crosextra-carlito'
 if [ -e "$(<"${WORK}/index-path")" ]; then t_fail "temporary APT state leaked"; else t_ok; fi
 
 t_section "missing Testing package fails even if the host supplies it"

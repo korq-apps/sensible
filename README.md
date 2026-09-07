@@ -52,7 +52,15 @@ The live ISO does **not** ship both desktops. Choose the GNOME or KDE release as
 
 **Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak, fonts, `fwupd`, Secure Boot chain on the installed system (shim + Debian-signed GRUB). Flathub is preconfigured system-wide with its signing key; app browsing/downloads require a connection, but installation does not.
 
-**Default apps:** Firefox ESR and Chromium; LibreOffice Writer, Calc, and Impress; Thunderbird; KeePassXC; VLC; Neovim (LazyVim starter in `/etc/skel`); archive support; and modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`). GNOME adds File Roller and Amberol; KDE adds Okular, Ark, Gwenview, Kate, KCalc, Spectacle, and Elisa. Flatpak and the desktop store integration are ready for use after installation.
+**Default apps:** Firefox ESR and Chromium; ONLYOFFICE Desktop Editors; Thunderbird; KeePassXC; VLC; Neovim (LazyVim starter in `/etc/skel`); archive support; and modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`). GNOME adds File Roller and Amberol; KDE adds Okular, Ark, Gwenview, Kate, KCalc, Spectacle, and Elisa. Flatpak and the desktop store integration are ready for use after installation.
+
+ONLYOFFICE's complete official amd64 `.deb` is checksum-pinned and installed
+with its dependencies at image-build time; local document editing works offline.
+Free office fonts are included instead of the recommended Microsoft font
+downloader. There is no extra ONLYOFFICE APT source: updates require a reviewed
+new package, not an ordinary Debian upgrade. The [manual](manual/applications.html#onlyoffice)
+covers usage, compatibility, updates and optional LibreOffice installation.
+Full ISO and real GNOME/KDE office-session acceptance remain pending.
 
 **Desktop profile additions (image configuration):** Shotwell, Extension Manager,
 Tweaks and a curated GNOME extension set; digiKam, KDE Connect and Plasma System
@@ -63,8 +71,11 @@ caching is limited to favorites, Vitals public-IP lookup is off, and users can
 override every default. LocalSend and the four non-Debian GNOME extensions are
 checksum-pinned at image-build time, not downloaded by the installer. Sharing-port
 exceptions are configured on both editions; see the [manual](manual/applications.html)
-for usage and privacy details. GNOME also includes selectable Marble, Good-Old-Shell
-50 and Graphite GTK 3 themes without changing the default appearance. Native KDE
+for usage and privacy details. GNOME uses user-overridable Paper icons and Orchis
+GTK 3 styling, with Papirus, the full Qogir icon family and Qogir/Matcha/Fluent
+GTK 3/4 and Shell alternatives installed globally in `/usr/share/themes/`.
+Marble and Graphite remain selectable; Shell/login-screen and libadwaita
+styling are not forcibly overridden. Native KDE
 profile configuration and deferred themes remain in the
 [desktop profile plan](docs/DESKTOP_PROFILES.md). Full-image and real-session
 acceptance is still pending.
@@ -79,11 +90,19 @@ distinction between finding filenames, searching contents and filtering lists.
 
 **Curated optional online app:** [Brave Origin](manual/applications.html#brave-origin), the separate `brave-origin` package, with its official one-line installer documented in the manual. It is not preinstalled. Audacious also remains optional/post-install; Flathub is already enabled for adding further apps.
 
-**Not currently offered:** AI CLIs. If added later, they will be optional and use pinned artifacts rather than `curl | sh` from the ISO.
+**Not currently offered:** AI CLIs. The [AI tools follow-up plan](docs/AI_TOOLS.md)
+evaluates a small open-source core versus opt-in installation, with proprietary
+clients optional and a dedicated manual chapter. Any approved image artifacts
+will be pinned and verified at build time, never fetched during installation
+or first login.
 
 **Included, no question asked:** fingerprint login (`fprintd`, dormant without a reader), oh-my-bash for all users with a two-line Powerline prompt, system-wide git defaults, Powerline symbols and JetBrainsMono Nerd Font, `ufw` firewall (deny incoming / allow outgoing, KDE Connect-aware), and printing/scanning (CUPS driverless + `sane-airscan`) — all baked into the image at build time.
 
-**Planned ([Phase 6](docs/PLAN.md#phase-6--sensible-extras-re-scoped-for-offline), post-install tool):** BioPass face login (pinned `.deb`), developer-tools checkbox (Docker + Compose, `lazygit`, `gh`), and unattended `--config` installs.
+**Planned ([shared priority queue](docs/PLAN.md#reconciled-priorities-2026-09-06)):**
+validated unattended `--config` input comes next to enable real installed-disk
+tests. A later post-install catalog will cover approved optional apps and
+developer tools (Docker + Compose, `lazygit`, `gh`); BioPass needs separate
+authentication/removal validation. These are not additional installer checkboxes.
 
 Slack, WhatsApp, Zoom, Discord, and the rest belong on **Flathub**, not in the base image.
 

@@ -38,30 +38,137 @@ class GnomeShellThemeBuilder:
                 "src/assets/gtk/thumbnail-Dark.png": "png",
                 "src/main/gtk-3.0/gtk-Light.scss": "/* fixture */",
                 "src/main/gtk-3.0/gtk-Dark.scss": "/* fixture */"}
-    old = {f"gnome-shell/{name}": "fixture" for name in
-           ("gnome-shell.css", "overview-wallpaper.png", "login-dialog-frame.png", "gdm-wallpaper.png")}
-    old["extension/good-old-shell@mx-2/extension.js"] = "must not ship"
-    old["utils/install-gdm-ext.py"] = "must not run"
+    for mode in ("Light", "Dark"):
+        graphite[f"src/main/gtk-4.0/gtk-{mode}.scss"] = 'window { background: url("assets/asset.svg"); }'
+        graphite[f"src/main/gnome-shell/gnome-shell-{mode}.scss"] = 'stage { background: url("assets/test.svg"); }'
+        graphite[f"src/assets/gnome-shell/background-{mode}.png"] = "png"
+    graphite["src/assets/gnome-shell/scalable/test.svg"] = "svg"
+    graphite["src/main/gnome-shell/pad-osd.css"] = "/* fixture */"
+    graphite["src/sass/gnome-shell/_common.scss"] = "/* widgets/40-0 */\n/* extensions/40-0 */"
+    for path in ("common-assets/test.svg", "common-assets/no-events.svg", "common-assets/process-working.svg",
+                 "common-assets/no-notifications.svg", "assets/test.svg", "assets-Dark/test.svg", "theme/test.svg"):
+        graphite[f"src/assets/gnome-shell/{path}"] = "svg"
     if problem == "license":
         del graphite["LICENSE"]
-    if problem == "asset":
-        del old["gnome-shell/overview-wallpaper.png"]
     if problem == "traversal":
-        old["../escaped"] = "unsafe"
+        graphite["../escaped"] = "unsafe"
     if problem == "css-asset":
-        old["gnome-shell/gnome-shell.css"] = 'stage { background-image: url("missing.png"); }'
+        graphite["src/main/gtk-3.0/gtk-Light.scss"] = 'stage { background: url("missing.png"); }'
     pins.update(MARBLE_COMMIT="marble", GRAPHITE_COMMIT="graphite",
-                GOOD_OLD_SHELL_VERSION="50.0", GOOD_OLD_SHELL_COMMIT="old")
-    bundles = (("marble-marble.tar.gz", "MARBLE_TARBALL_SHA256", marble),
-               ("graphite-graphite.tar.gz", "GRAPHITE_TARBALL_SHA256", graphite),
-               ("good-old-shell-50.0.tar.gz", "GOOD_OLD_SHELL_TARBALL_SHA256", old),
-               ("good-old-shell-source-old.tar.gz", "GOOD_OLD_SHELL_SOURCE_SHA256",
-                {"COPYING": "Good-Old-Shell license"}))
+                QOGIR_COMMIT="qogir", QOGIR_ICONS_COMMIT="icons",
+                MATCHA_COMMIT="matcha", FLUENT_COMMIT="fluent")
+    bundles = [("marble-marble.tar.gz", "MARBLE_TARBALL_SHA256", marble),
+               ("graphite-graphite.tar.gz", "GRAPHITE_TARBALL_SHA256", graphite)]
+    qogir = {"COPYING": "Qogir license", "src/_sass/_tweaks.scss": "/* fixture */",
+             "src/gtk/assets/assets/asset.png": "png",
+             "src/gtk/assets/assets-common/extra.png": "png",
+             "src/gtk/assets/assets-common/check-symbolic.svg": "svg",
+             "src/gtk/assets/assets-common/check-symbolic@2.svg": "svg",
+             "src/gtk/assets/logos/logo-.svg": "svg", "src/gtk/assets/logos/logo@2-.svg": "svg"}
+    matcha = {"LICENSE": "Matcha license", "src/gtk/assets-sea/asset.png": "png"}
+    fluent = {"COPYING": "Fluent license", "src/_sass/_tweaks.scss": "/* fixture */",
+              "src/gtk/assets/asset.png": "png",
+              "src/gtk/scalable/asset.svg": "svg"}
+    for mode in ("", "-Light", "-Dark"):
+        css = 'window { background-image: url("assets/asset.png"); }\n'
+        qogir[f"src/gtk/theme-3.0/gtk{mode}.scss"] = css + (
+            '.content-view.document-page { border-image: url("assets/thumbnail-frame.png") 3 3 6 4; }\n'
+            'headerbar:not(.titlebar).flat button.titlebutton.close { '
+            'background-image: -gtk-scaled(url("assets/titlebutton-close.png"), '
+            'url("assets/titlebutton-close@2.png")); }')
+        matcha[f"src/gtk/gtk-3.0/gtk{mode.lower()}-sea.scss"] = css
+        fluent[f"src/gtk/3.0/gtk{mode}.scss"] = css
+        qogir[f"src/gtk/theme-4.0/gtk{mode}.scss"] = css + (
+            'check { background: url("assets/scalable/check-symbolic.svg"); }')
+        matcha[f"src/gtk/gtk-4.0/gtk{mode.lower()}-sea.css"] = css + (
+            'cursor-handle { background: url("assets/text-select-start.png"); }')
+        fluent[f"src/gtk/4.0/gtk{mode}.scss"] = css
+        suffix = "-Dark" if mode == "-Dark" else ""
+        qogir[f"src/gtk/assets/thumbnail{suffix}.png"] = "png"
+        matcha[f"src/gtk/thumbnail{suffix.lower()}-sea.png"] = "png"
+        fluent[f"src/gtk/thumbnail{suffix}.png"] = "png"
+    for bundle in (qogir, matcha, fluent):
+        for path in ("pad-osd.css", "icons/test.svg", "common-assets/test.svg", "common-assets/no-events.svg",
+                     "common-assets/process-working.svg", "common-assets/no-notifications.svg"):
+            bundle[f"src/gnome-shell/{path}"] = "/* fixture */" if path.endswith(".css") else "svg"
+    shell_css = 'stage { background: url("assets/test.svg"); }'
+    for dark in ("", "-Dark"):
+        qogir[f"src/gnome-shell/theme-48-0/gnome-shell{dark}.css"] = shell_css
+        qogir[f"src/gnome-shell/assets/assets{dark}/test.svg"] = "svg"
+        matcha[f"src/gnome-shell/48/gnome-shell{dark.lower()}-sea.css"] = shell_css
+        matcha[f"src/gnome-shell/assets{dark.lower()}/test.svg"] = "svg"
+        matcha[f"src/gnome-shell/theme-assets/toggle-on-sea{dark.lower()}.svg"] = "svg"
+        for kind in ("", "buttons/", "default/", "activities/"):
+            filename = "activities-default.svg" if kind == "activities/" else "test.svg"
+            fluent[f"src/gnome-shell/assets{dark}/{kind}{filename}"] = "svg"
+    for mode in ("", "-Light", "-Dark"):
+        fluent[f"src/gnome-shell/shell-48-0/gnome-shell{mode}.css"] = shell_css
+    fluent["src/gnome-shell/theme/test.svg"] = "svg"
+    for path in ("assets/background.jpg", "assets/calendar-today.svg", "logos/logo-qogir.svg"):
+        qogir[f"src/gnome-shell/{path}"] = "svg"
+    for path in ("test.svg", "theme-assets/checkbox-sea.svg", "theme-assets/more-results-sea.svg"):
+        matcha[f"src/gnome-shell/{path}"] = "svg"
+    icons = {"COPYING": "Icon license", "AUTHORS": "upstream credits",
+             "src/index.theme": "[Icon Theme]\nName=Qogir\nInherits=hicolor,breeze\n"
+             "Directories=scalable/places,16/actions\n\n"
+             "[scalable/places]\nSize=64\nType=Scalable\nMinSize=16\nMaxSize=256\n"
+             "[16/actions]\nSize=16\nType=Fixed\n"}
+    for size in ("16", "22", "24", "32", "48", "96", "128", "scalable", "symbolic"):
+        icons[f"src/{size}/actions/test.svg"] = '<svg fill="#5d656b"/>'
+        icons[f"src/{size}/actions/alias.svg"] = '<svg fill="red"/>'
+        icons[f"src/{size}/panel/test.svg"] = '<svg fill="#d3dae3"/>'
+        icons[f"links/{size}/actions/alias.svg"] = ("symlink", "test.svg")
+    icons["src/scalable/places/folder.svg"] = "svg"
+    icons["src/symbolic/status/audio-input-microphone-muted-symbolic.svg"] = "svg"
+    icons["links/symbolic/status/microphone-sensitivity-muted-symbolic.svg"] = (
+        "symlink", "audio-input-microphone-symbolic.svg")
+    icons["links/symbolic/status/microphone-sensitivity-none-symbolic.svg"] = (
+        "symlink", "microphone-sensitivity-muted-symbolic.svg")
+    if problem == "replacement-license":
+        del qogir["COPYING"]
+    if problem == "replacement-asset":
+        del qogir["src/gtk/assets/logos/logo-.svg"]
+    if problem == "replacement-css":
+        qogir["src/gtk/theme-3.0/gtk.scss"] += 'entry { background: url("absent.svg"); }'
+    if problem == "gtk4-source":
+        del fluent["src/gtk/4.0/gtk-Dark.scss"]
+    if problem == "gtk4-asset":
+        fluent["src/gtk/4.0/gtk.scss"] += 'entry { background: url("absent-gtk4.svg"); }'
+    if problem == "matcha-gtk4-source":
+        del matcha["src/gtk/gtk-4.0/gtk-dark-sea.css"]
+    if problem == "matcha-gtk4-unknown-asset":
+        matcha["src/gtk/gtk-4.0/gtk-sea.css"] += 'entry { background: url("unknown.svg"); }'
+    if problem == "matcha-gtk4-escaping-known":
+        matcha["src/gtk/assets-sea/text-select-start.png"] = ("symlink", "../../../LICENSE")
+    if problem == "shell-source":
+        del matcha["src/gnome-shell/48/gnome-shell-dark-sea.css"]
+    if problem == "shell-asset":
+        del qogir["src/gnome-shell/assets/calendar-today.svg"]
+    if problem == "icon-index":
+        del icons["src/index.theme"]
+    if problem == "icon-index-invalid":
+        icons["src/index.theme"] = "[Icon Theme]\nName=Qogir\nInherits=hicolor\n"
+    if problem == "icon-directory":
+        icons["src/index.theme"] = icons["src/index.theme"].replace("16/actions", "missing")
+    if problem == "icon-link":
+        icons["links/16/actions/alias.svg"] = ("symlink", "../../../../COPYING")
+    if problem == "icon-dangling":
+        icons["links/16/actions/alias.svg"] = ("symlink", "missing.svg")
+    bundles += [("Qogir-theme-qogir.tar.gz", "QOGIR_TARBALL_SHA256", qogir),
+                ("Qogir-icon-theme-icons.tar.gz", "QOGIR_ICONS_TARBALL_SHA256", icons),
+                ("Matcha-gtk-theme-matcha.tar.gz", "MATCHA_TARBALL_SHA256", matcha),
+                ("Fluent-gtk-theme-fluent.tar.gz", "FLUENT_TARBALL_SHA256", fluent)]
     archives = []
     for filename, key, members in bundles:
         archive = root / "live/local/pins" / filename
         with tarfile.open(archive, "w:gz") as bundle:
             for name, content in members.items():
+                if isinstance(content, tuple):
+                    info = tarfile.TarInfo("root/" + name)
+                    info.type = tarfile.SYMTYPE
+                    info.linkname = content[1]
+                    bundle.addfile(info)
+                    continue
                 data = content.encode()
                 info = tarfile.TarInfo("root/" + name)
                 info.size = len(data)

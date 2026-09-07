@@ -53,12 +53,26 @@ live/config/includes.chroot/usr/share/themes/Marble-*/
 live/config/includes.chroot/usr/share/themes/Graphite-Light/
 live/config/includes.chroot/usr/share/themes/Graphite-Dark/
 live/config/includes.chroot/usr/share/themes/good-old-shell/
+live/config/includes.chroot/usr/share/themes/Everforest-*/
+live/config/includes.chroot/usr/share/themes/Tokyonight-*/
+live/config/includes.chroot/usr/share/themes/Osaka-*/
+live/config/includes.chroot/usr/share/themes/Catppuccin-*/
+live/config/includes.chroot/usr/share/icons/Everforest-*/
+live/config/includes.chroot/usr/share/icons/Tokyonight-*/
+live/config/includes.chroot/usr/share/icons/Osaka_*/
+live/config/includes.chroot/usr/share/icons/Catppuccin-*/
+live/config/includes.chroot/usr/share/themes/Qogir*/
+live/config/includes.chroot/usr/share/themes/Matcha*/
+live/config/includes.chroot/usr/share/themes/Fluent*/
+live/config/includes.chroot/usr/share/icons/Qogir*/
 live/config/includes.chroot/usr/share/doc/sensible-themes/
 live/config/includes.chroot/usr/local/share/fonts/
 # Pinned-artifact download cache (scripts/fetch-pins.sh)
 live/local/pins/
 live/config/packages.chroot/localsend_amd64.deb
 live/config/includes.chroot/usr/share/doc/localsend/
+live/config/packages.chroot/onlyoffice-desktopeditors_amd64.deb
+live/config/includes.chroot/usr/share/doc/sensible-office/
 
 # Temporary files
 *~

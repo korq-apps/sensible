@@ -6,6 +6,14 @@ pending**. Native KDE profile/appearance defaults and backup choices remain plan
 Recorded 2026-09-05, after installer PR #3 was merged. A configured package list
 is not evidence that an already published ISO contains these additions.
 
+Reconciled 2026-09-06: PR #15 has merged the GNOME profile, optional themes and
+Flathub setup into `main`. Issue #13 remains open for real-session acceptance;
+do not re-plan the implemented GNOME work or close it on source changes alone.
+The [shared priority queue](PLAN.md#reconciled-priorities-2026-09-06) puts validated
+installer input and installed-system evidence ahead of further profile expansion.
+The explicitly requested Paper/Orchis and replacement GTK/icon additions below
+are a follow-up appearance slice; they do not close that acceptance work.
+
 ## Intent
 
 Ship a useful, configured desktop on the first offline boot. Both editions
@@ -35,7 +43,7 @@ land, and review those costs explicitly.
 | Window controls | Close, Minimize and Maximize titlebar buttons | Native Plasma titlebar controls | Apply as a fresh-user GNOME default; never overwrite later user changes |
 | Battery estimate | Battery Time | Native battery widget | Show useful laptop information; avoid empty desktop indicators |
 | Screenshot search, OCR and QR | Shotzy | Retain Spectacle; investigate an OCR/search companion | GNOME scope agreed; KDE feature parity still exploratory |
-| Themes | User Themes; Marble, Good-Old-Shell 50 and Graphite GTK 3 | Native Plasma appearance settings; theme shortlist still pending | Selectable offline GNOME options; no new default selected; session acceptance pending |
+| Themes | Paper icons and Orchis GTK 3 defaults; Papirus; Qogir/Matcha/Fluent GTK 3/4 + Shell and Qogir icons; existing Marble/Graphite choices | Native Plasma appearance settings; theme shortlist still pending | Offline GNOME assets and overridable defaults; no forced Shell/GDM/personal CSS override; session acceptance pending |
 
 The requested GNOME extensions are Vitals, GSConnect, Caffeine, Clipboard
 Indicator, Dash to Dock, Battery Time, Shotzy and User Themes. Do not silently
@@ -54,6 +62,11 @@ upstream URL, version and supported Shell versions when packaging it.
   configuration need validation before being treated as committed packages.
 - Do not add a second clipboard, battery, dock or keep-awake implementation
   to Plasma merely to mirror the GNOME extension list.
+- Confirmed editor follow-up: include both Vim and Neovim in both editions,
+  leave Debian's editor selection/user preferences intact, and make LazyVim
+  configuration opt-in. Remove Sensible's forced `EDITOR`/`VISUAL` values rather
+  than replacing them with Vim. This is not yet implemented; current sources
+  still include the Neovim/LazyVim default.
 
 These are desktop defaults, not a request to preinstall commercial clients,
 enable remote control without pairing, configure cloud accounts, or start
@@ -149,67 +162,150 @@ Document what is uploaded and to which service, and require an explicit user
 action before sending screenshot content. Do not claim Spectacle alone offers
 the same OCR/search workflow on KDE.
 
-## Optional GNOME themes and remaining shortlist
+## GNOME appearance defaults and installed alternatives
 
-Recorded from the user-supplied candidates on 2026-09-05, packaging reviewed on
-2026-09-06. Three candidates now have selectable image assets. The default
-appearance remains unchanged. All five sources and the exact Good-Old-Shell
-branch are retained below; compilation and asset checks do not replace actual
-Shell/GTK session validation.
+The user's revised selection removes Everforest, Tokyonight, Osaka, Catppuccin
+and Good-Old-Shell from the image. Keep cleanup entries for those named outputs
+so a reused build cannot accidentally retain them. Paper/Orchis defaults and
+Marble/Graphite remain; Qogir, Qogir icons, Matcha and Fluent replace the withdrawn
+collections. The user reported incomplete icons after applying the earlier
+themes; a working selection command alone is not acceptance evidence.
 
-| Candidate / source | Scope | Packaging and compatibility notes |
+### Debian packages and defaults
+
+GNOME includes `paper-icon-theme`, `papirus-icon-theme`, `orchis-gtk-theme`,
+`gtk-update-icon-cache` and `librsvg2-common`. The installed user's unlocked
+dconf defaults select Paper icons and Orchis GTK 3 styling; personal overrides
+take precedence. The cache tool indexes Qogir and the SVG loader renders its
+vector icons. Paper, Papirus and Orchis update through Debian APT.
+
+Testing no longer provides `gtk2-engines-murrine`
+([removal notice](https://tracker.debian.org/news/1703411/gtk2-engines-murrine-removed-from-testing/)).
+The selected GTK 3/4 and Shell components do not need it. We do not mix Stable repositories
+into the target, ship unusable GTK 2 components, force libadwaita configuration
+links or change GDM. Debian's Orchis Shell component is not selected or validated
+as part of this profile.
+
+### Installed upstream assets
+
+| Source | Installed choices | Pin and scope |
 | :--- | :--- | :--- |
-| [Flat Remix GNOME](https://drasite.com/flat-remix-gnome) | GNOME Shell | Upstream provides version-specific downloads and currently lists through Shell 49. Check the actual build's Shell version before selecting an artifact; do not assume Shell 50 support. The project states CC BY-SA 4.0. |
-| [Marble](https://github.com/imarkoff/Marble-shell-theme) | GNOME Shell | Included: six accents (red/yellow/green/blue/purple/gray), light and dark, generated for Shell 50 through upstream's Python build API. Pin `df788bc3d9d2147bcdeaedb907b90ced64f0ad48`; GPL-3.0-or-later. The upstream installer and its settings-changing post-install step are not run. |
-| [Transparent Shell Theme](https://github.com/mrbrownstone07/Transparent-Shell-Theme) | GNOME Shell | README requires User Themes but does not state a supported Shell range. Redistribution licensing is not established by the reviewed README/top-level listing; verify licensing and compatibility before bundling. Test contrast over varied wallpapers. |
-| [Good-Old-Shell — `good-old-shell-50`](https://github.com/mx-2/gnome-shell-sass/tree/good-old-shell-50) | GNOME Shell 50 | Included: session CSS/PNG assets from verified release 50.0, whose tag matches requested-branch commit `4809458e1f78eaa28a5d0c181ee3e705f80887c0`. Its source archive lacks the overview wallpaper, so retain both the source and release inputs. No GDM extension/helper is installed. Full-color icons depend on a separate icon theme. GPL-2.0-or-later. |
-| [Graphite GTK](https://github.com/vinceliuice/Graphite-gtk-theme) | GTK 3 application theme only | Included: grey Light/Dark variants compiled with `sassc` from pin `364173f47407164948788e4abb5e2eb46600f71a`; GPL-3.0. Do not ship its older Shell styles, GTK 2 engine-dependent assets, GTK 4/libadwaita overrides, application launcher or other-desktop components. |
+| [Qogir GTK](https://github.com/vinceliuice/Qogir-theme) | Qogir, Qogir-Light, Qogir-Dark | `e7b3146860e5e981a075b4b56facf8e1c2ae5abb`; default blue, standard/light/dark GTK 3/4 + Shell |
+| [Qogir icons](https://github.com/vinceliuice/Qogir-icon-theme) | Qogir, Qogir-Light, Qogir-Dark | `c633057ba0d27a504b3255144071c9691ed0264a`; full app/device/folder/symbolic icon collection, light/dark recolorings and HiDPI aliases; no cursor selection |
+| [Matcha](https://github.com/vinceliuice/Matcha-gtk-theme) | Matcha-sea, Matcha-light-sea, Matcha-dark-sea | `923789ae6a8a4d239aa5935ad4c3b56219e74568`; sea-green accent, standard/light/dark GTK 3/4 + Shell |
+| [Fluent](https://github.com/vinceliuice/Fluent-gtk-theme) | Fluent, Fluent-Light, Fluent-Dark | `7a49a464b0188c340101c52965c18190b1c694cf`; default blue, standard/light/dark GTK 3/4 + Shell; separate Fluent icons not bundled |
+| [Marble](https://github.com/imarkoff/Marble-shell-theme) | Six accents, light/dark | Existing `df788bc3d9d2147bcdeaedb907b90ced64f0ad48` pin, generated for Shell 50; GPL-3.0-or-later |
+| [Graphite](https://github.com/vinceliuice/Graphite-gtk-theme) | Graphite-Light, Graphite-Dark | Existing `364173f47407164948788e4abb5e2eb46600f71a` pin, grey GTK 3/4 + Shell; GPL-3.0 |
 
-Flat Remix remains blocked on a reviewed Shell 50 artifact. Transparent Shell
-remains blocked on explicit redistribution licensing and a supported Shell
-range. Neither is bundled just because its source is publicly downloadable.
+All four replacement repositories carry GPL-3.0 licenses; retain their license
+files and author credits. Full SHA256 values and revisions are in `live/pins.env`.
+Their upstream activity varies (Matcha's reviewed tip is from August 2025);
+selection does not imply a promise about future maintenance or Shell 50 support.
+Flat Remix and Transparent Shell are not included: the earlier compatibility/
+redistribution gates remain unresolved.
 
-`scripts/fetch-pins.sh` sources `scripts/stage-themes.sh`: verify all four theme
-archives against `live/pins.env`, build in temporary directories with
-`scripts/build-theme-assets.py`, then stage under `/usr/share/themes` for GNOME
-only. Both native/container builders include `sassc` and Python. A KDE rebuild
-removes only the named generated themes/docs, not unrelated themes. Exact source
-archives, licenses, pins and the build adapter accompany the image under
-`/usr/share/doc/sensible-themes/`. The chroot hook checks required assets and
-rejects Shell major-version drift. These assets are not updated by Debian APT;
-future image pins and session acceptance must be refreshed for major upgrades.
+### Installation and dependency handling
 
-Use Tweaks > Appearance > Shell for Marble/Good-Old-Shell and Legacy Applications
-for Graphite. Return Shell to Default (or disable User Themes), and restore the
-previous application theme. See the [manual](../manual/applications.html#themes)
-for usage, limitations and reset instructions.
+Both builders use `scripts/stage-themes.sh` and
+`scripts/build-theme-assets.py`. Download six verified archives at build time,
+install GTK 3, GTK 4 and GNOME Shell components plus assets and `index.theme`
+under `/usr/share/themes`, and Qogir icons under `/usr/share/icons`. Compile
+Sass where appropriate; retain Matcha's GTK 4 CSS and Qogir/Matcha/Fluent's
+Shell CSS exactly as their manual installers do. Shell layout selection follows
+upstream's >=48 branch on GNOME 50. No upstream installer runs against the host
+or user's home: their default flows can also alter other desktops and editor
+styles outside the requested theme destination. Target installation and first
+login need no network or build tools.
 
-Validation recorded on 2026-09-06: the complete GNOME pin-staging path built
-all 15 theme variants in a Debian Testing builder with networking disabled,
-using verified cached archives; a subsequent KDE pass removed the collection.
-Staged footprint was about 3.7 MiB of themes plus 23 MiB of source/license inputs,
-not a measured ISO-size delta. The unit suite exercises missing/corrupt inputs,
-licenses/assets, unsafe archive paths, compiler failure and Shell-version drift.
-Real ISO boot, session behavior and visual/accessibility acceptance remain open.
+The earlier GTK-3-only payload was incomplete for the requested GNOME themes.
+It omitted GTK 4 and Shell directories that the user demonstrated in a manual
+Matcha installation. Do not repeat that omission based on an asset audit or
+because upstream's latest Shell directory is named 48 rather than 50.
 
-Appearance-slice boundaries and acceptance:
+Two narrowly scoped corrections avoid upstream missing assets: Qogir/Matcha's
+legacy document-thumbnail PNG becomes a solid border, and Qogir's old Kooha
+image-only window-button overrides are dropped so ordinary GTK controls render.
+Qogir's GTK 4 checkmark URLs are corrected to their actual shipped paths;
+Graphite Shell also receives its referenced background and scalable assets.
+Matcha's GTK 4 styles retain an exact reviewed set of upstream missing-image
+references, reported in `known-upstream-assets.txt`. Missing references alone
+are not evidence that the entire theme fails to render. New missing files and
+unsafe paths remain fatal; GTK 4 and Shell are not discarded.
 
-- Aim for selectable, offline-installed options; do not silently pick a new
-  default, accent color or light/dark variant from this list.
-- Record exact revisions/checksums, licenses, notices and build dependencies
-  for accepted artifacts. Resolve unclear redistribution terms before bundling;
-  retain any blocked candidate here with the reason rather than substituting it.
-- Use the existing User Themes/management-tool plan for ordinary Shell theme
-  selection. GDM resource replacement, extra login/lock-screen extensions and
-  bootloader theming are outside this shortlist's implementation scope.
-- Do not automatically apply Graphite's libadwaita configuration links or
-  Flatpak overrides. Review those separately, preserve user settings and test
-  GTK3, GTK4/libadwaita and Flatpak applications before claiming consistency.
-- Test Shell menus, notifications, overview, Dash to Dock, scaling, light/dark
-  appearance and transparent-surface contrast on the actual target version.
-  Verify login/lock behavior still works and document a return to stock styling.
-- These GNOME/GTK selections do not constitute a Plasma theme shortlist.
-  Keep KDE appearance selection open rather than inventing equivalents.
+Qogir needs both its source icon directories and its separate alias tree.
+Merge them with aliases replacing the corresponding source entries, reproduce
+the upstream light/dark recolorings, and retain all sizes and symbolic icons.
+Each installed variant is self-contained. Validate indexed directories and links,
+repair the pinned muted/none microphone aliases to the shipped muted icon,
+and replace the unshipped Breeze fallback with Papirus/Adwaita/hicolor. The chroot
+hook checks installed packages/assets and builds the caches. Do not infer complete
+icon coverage from a folder SVG alone.
+
+The full archives, licenses, pins, author credits and build adapter accompany
+the image under `/usr/share/doc/sensible-themes/`. Pinned assets update through
+reviewed image changes, not ordinary APT upgrades. A KDE rebuild removes only
+the named generated GNOME outputs, including retired assets; unrelated themes
+and icons remain untouched.
+
+### Selection and acceptance
+
+The manual leads with the globally installed themes and application/Shell/icon
+selection commands. Tweaks supplies Shell and icon selectors. Matcha and Fluent
+do not install an icon theme of the same name. Marble is Shell-only; the other
+four theme families provide application and Shell choices. Global installation
+does not force libadwaita styling; a reversible, non-overwriting personal CSS
+import is documented separately as opt-in. `gsettings set` selects installed
+assets; it does not download a missing theme. The [manual](../manual/applications.html#themes) includes exact
+installed names, dependency notes, troubleshooting, and separate reset paths
+for Sensible's Orchis/Paper defaults and stock Adwaita.
+
+The replacement slice must pass real Sass compilation, complete asset/link
+checks (with recorded upstream exceptions), icon-cache generation and GTK 3/4 theme/icon loading, in addition to fixture
+tests and the Testing package gate.
+Full ISO build/boot, visual contrast/scaling, application coverage, user override
+persistence and login/lock acceptance remain open; headless loading is not a
+substitute for that review. Uniform libadwaita/Flatpak styling is not promised.
+
+### Initial replacement-theme validation (2026-09-06, before GTK 4/Shell correction)
+
+- All 14 local suites pass, including checksum, compiler, missing-asset,
+  icon-alias/fallback, dependency and retired-output cleanup regressions.
+- The current GNOME package-name gate passes against an isolated Debian Testing
+  index (155 collected names, with Brave's documented third-party exception).
+  This checks archive availability, not a full image dependency solve.
+- Actual pinned archives compile and stage successfully through `fetch-pins.sh`
+  with network disabled: 23 theme directories (including Marble/Graphite) and
+  three complete Qogir icon variants. Retired themes/icons are absent from the
+  regenerated payload.
+- In a disposable Debian Testing container, GTK 3 discovers all nine replacement
+  themes by name and loads both their normal and dark CSS without non-deprecation
+  parse errors. All three icon caches build and validate. GTK renders 117 sampled
+  application/folder/symbolic icons across normal/HiDPI sizes, plus an inherited
+  fallback for each variant. This is real loading evidence, not a GNOME session
+  or exhaustive visual review. The repeatable check is
+  `tests/lib/check_theme_runtime.py`.
+- Staged themes/icons/source records occupy approximately 16/160/41 MiB;
+  the previous icon payload alone occupied 697 MiB. These are uncompressed
+  workspace measurements, not a measured ISO-size reduction.
+
+### GTK 4 and Shell packaging correction (2026-09-06)
+
+- The user's comparison showed the earlier image had only `gtk-3.0/` and an
+  index, while a manual Matcha install contained GTK 4 and Shell components.
+  Those omissions are corrected for Matcha, Qogir, Fluent and Graphite.
+- Actual pinned archives compile/stage with all three GNOME component directories.
+  A separate run of the pinned Matcha `install.sh -d ... -t sea` produces the
+  same 251 GNOME component paths per variant (standard/light/dark). GTK 4 and
+  Shell file bytes and symlink targets match; GTK 3 CSS keeps the documented
+  compilation/adaptations. `tests/lib/check_theme_upstream.py` repeats the check.
+- GTK 4.22.4 and GTK 3.24.52 both discover all eleven application-theme variants
+  by name and load normal/dark CSS without non-deprecation parsing errors. The
+  Qogir cache and 117 sampled-icon rendering checks plus inherited fallbacks
+  pass again. Matcha is included in both toolkit runs, not skipped.
+- Shell assets follow each upstream installer's selection for GNOME 50;
+  this is packaging/parity evidence, not proof of Shell visual compatibility.
+  Full ISO, real-session rendering, libadwaita behavior, accessibility and
+  login/lock checks remain pending.
 
 ## Configuration policy
 
@@ -219,6 +315,11 @@ Appearance-slice boundaries and acceptance:
   hardware identifiers, personal files, tokens, or paired devices.
 - Let subsequent user customization take precedence. Do not overwrite it on
   every login or ordinary package update. Provide a documented reset path.
+- Follow the planned component-level opt-outs in PLAN.md: keep appearance and
+  extension defaults separate from security/privacy settings. Removing a theme
+  or dock opinion must not remove idle/resume lock configuration. Git and GNOME
+  already use system defaults; the shell's skel copy is the main shared-include
+  migration candidate. Test existing-user behavior, not just new home directories.
 - Enable GNOME's Close, Minimize and Maximize titlebar buttons through a
   fresh-user dconf default. Preserve the normal right-side order unless the
   broader profile explicitly changes it.
@@ -227,9 +328,9 @@ Appearance-slice boundaries and acceptance:
   disable those protections.
 - Review clipboard history limits, persistence and clearing behavior. Do not
   promise that a clipboard manager can reliably recognize every secret.
-- Keep the default theme stock until a replacement is explicitly selected and
-  validated. The shortlist above is now supplied; evaluation includes
-  readability, contrast, GTK/Qt consistency and update compatibility.
+- Paper/Orchis are explicitly selected GNOME defaults in the implementation;
+  release acceptance still requires readability, contrast, GTK/Qt behavior and
+  update compatibility checks. Keep Shell/GDM stock and offer clear reset paths.
 - Record package/extension versions in build artifacts so a broken Testing
   upgrade can be reproduced and diagnosed.
 
@@ -248,6 +349,10 @@ each profile change is implemented and validated.
 
 Each change updates the manual and the actual-current-state documentation.
 Do not advertise planned features as shipped while this checklist is open.
+
+The separate [AI tools and CLI follow-up plan](AI_TOOLS.md) covers cross-edition
+tool selection and optional desktop-client guidance. It does not add AI clients
+to this profile or replace the outstanding session acceptance checks above.
 
 ### Application-slice validation (2026-09-05)
 

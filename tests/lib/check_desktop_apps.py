@@ -36,6 +36,41 @@ class DesktopApps(unittest.TestCase):
         return subprocess.run(["bash", str(script)], env=self.env,
                               text=True, capture_output=True)
 
+    def test_optional_theme_checks_reject_optimized_python(self):
+        # Keep this regression rootless and independent of GTK/display access.
+        # The guard must run before the runtime check imports its optional deps.
+        import_root = self.root / "imports"
+        write(import_root / "gi.py", 'raise RuntimeError("GTK imported before optimization guard")\n')
+        env = dict(self.env, PYTHONPATH=str(import_root))
+        env.pop("PYTHONOPTIMIZE", None)
+        for name in ("check_theme_runtime.py", "check_theme_upstream.py"):
+            script = REPO / "tests/lib" / name
+            for flags, optimize in ((("-O",), None), (("-OO",), None),
+                                    ((), "1"), ((), "2")):
+                with self.subTest(script=name, flags=flags, optimize=optimize):
+                    mode_env = dict(env)
+                    if optimize is not None:
+                        mode_env["PYTHONOPTIMIZE"] = optimize
+                    result = subprocess.run(
+                        [sys.executable, "-B", "-S", *flags, str(script), "--help"],
+                        env=mode_env, text=True, capture_output=True,
+                    )
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertIn("theme validation requires Python assertions", result.stderr)
+                    self.assertIn("PYTHONOPTIMIZE", result.stderr)
+                    self.assertNotIn("GTK imported", result.stderr)
+                    self.assertEqual(result.stdout, "")
+            # Ordinary invocations remain usable. --help exits before any GTK
+            # calls, so an empty import double is enough for this positive case.
+            write(import_root / "gi.py", "")
+            result = subprocess.run(
+                [sys.executable, "-B", "-S", str(script), "--help"],
+                env=env, text=True, capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("usage:", result.stdout)
+            write(import_root / "gi.py", 'raise RuntimeError("GTK imported before optimization guard")\n')
+
     def seed_pins(self, include_omb_theme=True, extension_problem=None, theme_problem=None):
         script = self.root / "scripts/fetch-pins.sh"
         script.parent.mkdir(parents=True, exist_ok=True)
@@ -44,7 +79,8 @@ class DesktopApps(unittest.TestCase):
         cache.mkdir(parents=True, exist_ok=True)
         pins = {"OH_MY_BASH_COMMIT": "omb", "NERD_FONTS_TAG": "font",
                 "LAZYVIM_STARTER_COMMIT": "vim", "LOCALSEND_VERSION": "1.18.2",
-                "LOCALSEND_DEB_VERSION": "1.18.2+64"}
+                "LOCALSEND_DEB_VERSION": "1.18.2+64",
+                "ONLYOFFICE_VERSION": "9.4.0", "ONLYOFFICE_DEB_VERSION": "9.4.0-129"}
         self.theme_archives = seed_themes(REPO, self.root, pins, self.bin, theme_problem)
         for filename, key in (("oh-my-bash-omb.tar.gz", "OH_MY_BASH_TARBALL_SHA256"),
                               ("lazyvim-starter-vim.tar.gz", "LAZYVIM_STARTER_TARBALL_SHA256")):
@@ -90,8 +126,10 @@ class DesktopApps(unittest.TestCase):
                     bundle.writestr(license_file, f"{uuid} license fixture\n")
             pins[f"{key}_ZIP_SHA256"] = hashlib.sha256(archive.read_bytes()).hexdigest()
         self.deb = cache / "LocalSend-1.18.2-linux-x86-64.deb"
+        self.office_deb = cache / "onlyoffice-desktopeditors-9.4.0_amd64.deb"
         self.license = cache / "LocalSend-1.18.2-LICENSE"
         for path, key in ((self.deb, "LOCALSEND_DEB_SHA256"),
+                          (self.office_deb, "ONLYOFFICE_DEB_SHA256"),
                           (self.license, "LOCALSEND_LICENSE_SHA256")):
             write(path, "verified fixture " + key)
             pins[key] = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -102,6 +140,16 @@ class DesktopApps(unittest.TestCase):
         # returns untrusted bytes so the real checksum failure path runs.
         write(self.bin / "curl", '#!/bin/sh\nwhile [ "$1" != -o ]; do shift; done\nprintf corrupt > "$2"\n', True)
         write(self.bin / "dpkg-deb", '''#!/bin/sh
+case "$2" in
+ *onlyoffice*)
+  if [ "${MOCK_OFFICE_QUERY_FAIL:-}" = "$3" ]; then exit 2; fi
+  if [ "${MOCK_OFFICE_FIELD:-}" = "$3" ]; then echo wrong; exit 0; fi
+  case "$3" in
+   Package) echo onlyoffice-desktopeditors;; Version) echo 9.4.0-129;; Architecture) echo amd64;;
+   *) exit 88;;
+  esac
+  exit 0;;
+esac
 if [ "$3" = "$MOCK_FIELD" ]; then echo wrong; exit 0; fi
 case "$3" in
  Package) echo localsend;; Version) echo 1.18.2+64;; Architecture) echo amd64;;
@@ -109,6 +157,7 @@ case "$3" in
 esac
 ''', True)
         self.staged = self.root / "live/config/packages.chroot/localsend_amd64.deb"
+        self.office_staged = self.staged.with_name("onlyoffice-desktopeditors_amd64.deb")
         return script
 
     def test_pinned_staging_and_cached_rebuild(self):
@@ -124,17 +173,52 @@ esac
                 result = self.run_script(script)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(self.staged.read_bytes(), self.deb.read_bytes())
+                self.assertEqual(self.office_staged.read_bytes(), self.office_deb.read_bytes())
+                self.assertEqual(sorted(path.name for path in self.staged.parent.glob("*.deb")),
+                                 ["localsend_amd64.deb", "onlyoffice-desktopeditors_amd64.deb"])
                 chroot = self.root / "live/config/includes.chroot"
+                office_provenance = (chroot / "usr/share/doc/sensible-office/sources.txt").read_text()
+                self.assertIn("version=9.4.0-129", office_provenance)
+                self.assertIn("/DesktopEditors/tree/v9.4.0", office_provenance)
                 themes = chroot / "usr/share/themes"
-                self.assertEqual(len(list(themes.iterdir())), 15 if variant == "gnome" else 0)
-                self.assertFalse((themes / "Graphite-Light/gnome-shell").exists())
-                self.assertFalse((themes / "Graphite-Light/gtk-4.0").exists())
-                self.assertFalse((themes / "good-old-shell/extension").exists())
+                self.assertEqual(len(list(themes.iterdir())), 23 if variant == "gnome" else 0)
+                icons = chroot / "usr/share/icons"
+                self.assertEqual(len(list(icons.iterdir())), 3 if variant == "gnome" else 0)
+                if variant == "gnome":
+                    for name in ("Qogir", "Qogir-Light", "Qogir-Dark", "Matcha-sea", "Matcha-light-sea",
+                                 "Matcha-dark-sea", "Fluent", "Fluent-Light", "Fluent-Dark"):
+                        palette = themes / name
+                        self.assertIn("assets/test.svg", (palette / "gnome-shell/gnome-shell.css").read_text())
+                        self.assertTrue((palette / "gnome-shell/assets/test.svg").is_file())
+                        self.assertFalse((palette / "gtk-2.0").exists())
+                        self.assertIn("assets/asset.png", (palette / "gtk-4.0/gtk.css").read_text())
+                        self.assertTrue((palette / "gtk-4.0/gtk-dark.css").is_file())
+                        self.assertTrue((palette / "gtk-4.0/assets/asset.png").is_file())
+                        self.assertTrue((palette / "gtk-4.0/thumbnail.png").is_file())
+                        self.assertIn("assets/asset.png", (palette / "gtk-3.0/gtk.css").read_text())
+                    self.assertIn('text-select-start.png', (themes / 'Matcha-sea/gtk-4.0/gtk.css').read_text())
+                    self.assertIn('text-select-start.png', (chroot / 'usr/share/doc/sensible-themes/known-upstream-assets.txt').read_text())
+                    self.assertIn('assets/check-symbolic.svg', (themes / 'Qogir/gtk-4.0/gtk.css').read_text())
+                    self.assertNotIn('assets/scalable/check-symbolic.svg', (themes / 'Qogir/gtk-4.0/gtk.css').read_text())
+                    self.assertNotIn("thumbnail-frame.png", (themes / "Qogir/gtk-3.0/gtk.css").read_text())
+                    self.assertNotIn("titlebutton-close.png", (themes / "Qogir/gtk-3.0/gtk.css").read_text())
+                    index = (icons / "Qogir/index.theme").read_text()
+                    self.assertIn("upstream credits", (icons / "Qogir/AUTHORS").read_text())
+                    self.assertIn("Name=Qogir", index)
+                    self.assertIn("Inherits=Papirus,Adwaita,hicolor", index)
+                    self.assertIn('#d3dae3', (icons / 'Qogir-Dark/16/actions/alias.svg').read_text())
+                    self.assertIn('#5d656b', (icons / 'Qogir-Light/16/panel/test.svg').read_text())
+                    self.assertTrue((icons / 'Qogir/16@2x/actions/alias.svg').is_file())
+                    self.assertTrue((icons / 'Qogir/symbolic/status/microphone-sensitivity-none-symbolic.svg').is_file())
+                    for retired in ("Everforest-Light", "Tokyonight-Light", "Osaka-Light", "Catppuccin-Light", "good-old-shell"):
+                        self.assertFalse((themes / retired).exists())
+                self.assertEqual((themes / "Graphite-Light/gnome-shell/gnome-shell.css").is_file(), variant == "gnome")
+                self.assertEqual((themes / "Graphite-Light/gtk-4.0/gtk.css").is_file(), variant == "gnome")
+                self.assertFalse((themes / "good-old-shell").exists())
                 self.assertEqual((chroot / "usr/share/doc/localsend/copyright").read_bytes(),
                                  self.license.read_bytes())
                 self.assertEqual((chroot / "etc/sensible/pins.env").read_bytes(),
                                  (self.root / "live/pins.env").read_bytes())
-                self.assertEqual(len(list(self.staged.parent.glob("*.deb"))), 1)
                 extension_root = chroot / "usr/share/gnome-shell/extensions"
                 docs = chroot / "usr/share/doc/sensible-gnome-extensions"
                 if variant == "gnome":
@@ -190,6 +274,31 @@ esac
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("LocalSend license does not match", result.stderr)
 
+    def test_office_identity_and_metadata_errors_reject_stale_staging(self):
+        script = self.seed_pins()
+        self.env["SENSIBLE_VARIANT"] = "kde"
+        for mode in ("MOCK_OFFICE_FIELD", "MOCK_OFFICE_QUERY_FAIL"):
+            for field in ("Package", "Version", "Architecture"):
+                with self.subTest(mode=mode, field=field):
+                    write(self.office_staged, "previous version")
+                    self.env[mode] = field
+                    result = self.run_script(script)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("ONLYOFFICE package", result.stderr)
+                    self.assertFalse(self.office_staged.exists())
+                    del self.env[mode]
+
+    def test_corrupt_office_package_rejects_stale_staging(self):
+        script = self.seed_pins()
+        self.env["SENSIBLE_VARIANT"] = "kde"
+        write(self.office_staged, "previous version")
+        write(self.office_deb, "corrupt bytes")
+        result = self.run_script(script)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ONLYOFFICE Desktop Editors does not match the pinned SHA256", result.stderr)
+        self.assertFalse(self.office_staged.exists())
+        self.assertFalse(self.office_deb.exists())
+
     def test_extension_identity_and_license_fail_closed(self):
         for problem in ("SHOTZY-version", "SHOTZY-shell", "VITALS-license",
                         "BATTERY_TIME-notice"):
@@ -208,7 +317,7 @@ esac
     def hook(self, name):
         # Only redirect filesystem roots; run the actual production control flow.
         source = (REPO / "live/config/hooks/live" / name).read_text()
-        for prefix in ("/etc/", "/usr/"):
+        for prefix in ("/etc/", "/usr/", "/opt/"):
             source = source.replace(prefix, str(self.root) + prefix)
         script = self.root / name
         write(script, source)
@@ -239,6 +348,126 @@ esac
                 path.unlink()
                 self.assertNotEqual(self.run_script(script).returncode, 0)
                 write(path, "fixture", executable=True)
+
+    def seed_office_hook(self):
+        script = self.hook("0255-office.hook.chroot")
+        write(self.root / "etc/sensible/pins.env", "ONLYOFFICE_DEB_VERSION=9.4.0-129\n")
+        write(self.bin / "dpkg-query", '''#!/bin/sh
+if [ "$3" = "${MOCK_OFFICE_MISSING:-}" ]; then exit 1; fi
+case "$3" in
+ libreoffice-*|ttf-mscorefonts-installer)
+  [ "$3" = "${MOCK_OFFICE_UNEXPECTED:-}" ] || exit 1;;
+esac
+case "$2" in
+ *Status*) echo "${MOCK_OFFICE_STATUS:-install ok installed}";;
+ *Version*) echo "${MOCK_OFFICE_VERSION:-9.4.0-129}";;
+ *Architecture*) echo "${MOCK_OFFICE_ARCH:-amd64}";;
+ *) exit 88;;
+esac
+[ "$2" != "${MOCK_OFFICE_QUERY_FAIL:-}" ]
+''', True)
+        write(self.bin / "desktop-file-validate", '#!/bin/sh\nexit "${MOCK_DESKTOP_INVALID:-0}"\n', True)
+        write(self.bin / "update-desktop-database", '#!/bin/sh\nexit "${MOCK_DESKTOP_UPDATE_FAIL:-0}"\n', True)
+        write(self.bin / "ldd", '''#!/bin/sh
+if [ "${MOCK_LDD_MISSING:-0}" = 1 ]; then echo 'libnss3.so => not found'; fi
+exit "${MOCK_LDD_FAIL:-0}"
+''', True)
+        self.office_executables = [
+            "usr/bin/desktopeditors", "usr/bin/onlyoffice-desktopeditors",
+            "opt/onlyoffice/desktopeditors/DesktopEditors",
+            "opt/onlyoffice/desktopeditors/converter/x2t",
+        ]
+        self.office_assets = [
+            "usr/share/applications/onlyoffice-desktopeditors.desktop",
+            "usr/share/icons/hicolor/128x128/apps/onlyoffice-desktopeditors.png",
+            "usr/share/doc/onlyoffice-desktopeditors/copyright",
+            "usr/share/doc/sensible-office/sources.txt",
+        ] + ["opt/onlyoffice/desktopeditors/" + path for path in (
+            "LICENSE.txt", "libcef.so", "index.html",
+            "editors/web-apps/apps/documenteditor/main/index.html",
+            "editors/web-apps/apps/spreadsheeteditor/main/index.html",
+            "editors/web-apps/apps/presentationeditor/main/index.html",
+            "editors/web-apps/apps/pdfeditor/main/index.html",
+            "converter/empty/en-US/new.docx", "converter/empty/en-US/new.xlsx",
+            "converter/empty/en-US/new.pptx",
+        )]
+        for path in self.office_executables + self.office_assets:
+            write(self.root / path, "fixture", executable=path in self.office_executables)
+        return script
+
+    def test_office_hook_identity_and_query_errors_fail_closed(self):
+        script = self.seed_office_hook()
+        self.assertEqual(self.run_script(script).returncode, 0)
+        for key, value in (
+            ("MOCK_OFFICE_MISSING", "onlyoffice-desktopeditors"),
+            ("MOCK_OFFICE_STATUS", "deinstall ok config-files"),
+            ("MOCK_OFFICE_VERSION", "9.3.0-1"), ("MOCK_OFFICE_ARCH", "arm64"),
+            ("MOCK_OFFICE_QUERY_FAIL", "-f=${Status}"),
+            ("MOCK_OFFICE_QUERY_FAIL", "-f=${Version}"),
+            ("MOCK_OFFICE_QUERY_FAIL", "-f=${Architecture}"),
+        ):
+            with self.subTest(key=key, value=value):
+                self.env[key] = value
+                result = self.run_script(script)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("ONLYOFFICE is missing or differs", result.stderr)
+                del self.env[key]
+
+    def test_office_hook_requires_complete_payload_and_executable_modes(self):
+        script = self.seed_office_hook()
+        for path in self.office_executables + self.office_assets:
+            with self.subTest(path=path):
+                asset = self.root / path
+                asset.unlink()
+                result = self.run_script(script)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("is missing:", result.stderr)
+                write(asset, "fixture", executable=path in self.office_executables)
+        for path in self.office_executables:
+            asset = self.root / path
+            asset.chmod(0o644)
+            self.assertNotEqual(self.run_script(script).returncode, 0)
+            asset.chmod(0o755)
+        write(self.root / self.office_assets[-1], "")
+        self.assertNotEqual(self.run_script(script).returncode, 0)
+
+    def test_office_hook_runtime_font_and_desktop_failures(self):
+        script = self.seed_office_hook()
+        for package in ("fonts-dejavu", "fonts-crosextra-carlito", "fonts-liberation", "xwayland",
+                        "libnss3", "libnspr4", "libpulse0"):
+            self.env["MOCK_OFFICE_MISSING"] = package
+            result = self.run_script(script)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"runtime package is missing: {package}", result.stderr)
+        del self.env["MOCK_OFFICE_MISSING"]
+        for package in ("libreoffice-writer", "libreoffice-calc", "libreoffice-impress", "ttf-mscorefonts-installer"):
+            self.env["MOCK_OFFICE_UNEXPECTED"] = package
+            result = self.run_script(script)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"unexpected office package in the image: {package}", result.stderr)
+        del self.env["MOCK_OFFICE_UNEXPECTED"]
+        for key in ("MOCK_DESKTOP_INVALID", "MOCK_DESKTOP_UPDATE_FAIL", "MOCK_LDD_MISSING", "MOCK_LDD_FAIL"):
+            self.env[key] = "1"
+            self.assertNotEqual(self.run_script(script).returncode, 0)
+            del self.env[key]
+
+    def test_office_font_policy_and_scoped_file_defaults(self):
+        import configparser
+        preference = (REPO / "live/config/archives/sensible-office.pref.chroot").read_text()
+        self.assertIn("Package: ttf-mscorefonts-installer\nPin: version *\nPin-Priority: -1", preference)
+        defaults = configparser.ConfigParser()
+        defaults.read(REPO / "live/config/includes.chroot/etc/xdg/mimeapps.list")
+        self.assertEqual(set(defaults.sections()), {"Default Applications"})
+        expected = {
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "application/vnd.oasis.opendocument.text", "application/vnd.oasis.opendocument.spreadsheet",
+            "application/vnd.oasis.opendocument.presentation", "application/msword",
+            "application/vnd.ms-excel", "application/vnd.ms-powerpoint",
+        }
+        self.assertEqual(set(defaults["Default Applications"]), expected)
+        self.assertEqual(set(defaults["Default Applications"].values()), {"onlyoffice-desktopeditors.desktop;"})
 
     def seed_gnome_profile_hook(self):
         script = self.hook("0260-gnome-profile.hook.chroot")
@@ -321,9 +550,23 @@ esac
 
     def test_theme_inputs_fail_closed(self):
         for problem, diagnostic in (("license", "theme license is missing"),
-                                    ("asset", "Good-Old-Shell asset is missing"),
                                     ("traversal", "unsafe theme archive member"),
-                                    ("css-asset", "theme CSS asset is missing")):
+                                    ("css-asset", "theme CSS asset is missing"),
+                                    ("replacement-license", "theme license is missing"),
+                                    ("replacement-asset", "logo-.svg"),
+                                    ("replacement-css", "theme CSS asset is missing"),
+                                    ("gtk4-source", "gtk-Dark.scss"),
+                                    ("gtk4-asset", "theme CSS asset is missing"),
+                                    ("matcha-gtk4-source", "gtk-dark-sea.css"),
+                                    ("matcha-gtk4-unknown-asset", "theme CSS asset is missing"),
+                                    ("matcha-gtk4-escaping-known", "theme CSS asset escapes"),
+                                    ("shell-source", "gnome-shell-dark-sea.css"),
+                                    ("shell-asset", "calendar-today.svg"),
+                                    ("icon-index", "icon theme index is missing"),
+                                    ("icon-index-invalid", "icon theme index is invalid"),
+                                    ("icon-directory", "icon theme directory is missing"),
+                                    ("icon-link", "icon theme asset is missing or escapes"),
+                                    ("icon-dangling", "icon theme asset is missing or escapes")):
             with self.subTest(problem=problem):
                 script = self.seed_pins(theme_problem=problem)
                 result = self.run_script(script)
@@ -342,13 +585,32 @@ esac
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("could not stage the pinned theme collection", result.stderr)
 
+    def test_replacement_checksums_fail_closed(self):
+        for index, name in enumerate(("Qogir-theme", "Qogir-icon-theme", "Matcha-gtk-theme", "Fluent-gtk-theme"), 2):
+            with self.subTest(name=name):
+                script = self.seed_pins()
+                self.theme_archives[index].write_text("corrupt")
+                result = self.run_script(script)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"{name} does not match the pinned SHA256", result.stderr)
+
     def test_sources_and_themes_hook(self):
         result = self.run_script(self.seed_pins())
         self.assertEqual(result.returncode, 0, result.stderr)
         shutil.copytree(self.root / "live/config/includes.chroot/usr", self.root / "usr")
         script = self.hook("0270-desktop-sources-and-themes.hook.chroot")
         write(self.bin / "flatpak", '#!/bin/sh\nprintf "%s\\n" "$MOCK_REMOTES"\nexit "${MOCK_FLATPAK_FAIL:-0}"\n', True)
-        write(self.bin / "dpkg-query", '#!/bin/sh\necho "${MOCK_SHELL_VERSION:-50.2-1}"\n', True)
+        write(self.bin / "dpkg-query", '''#!/bin/sh
+if [ "$3" = "${MOCK_MISSING_PACKAGE:-}" ]; then exit 1; fi
+case "$2" in
+ *Status*) echo 'install ok installed';;
+ *) echo "${MOCK_SHELL_VERSION:-50.2-1}";;
+esac
+''', True)
+        write(self.bin / "gtk-update-icon-cache", '#!/bin/sh\nexit "${MOCK_ICON_CACHE_FAIL:-0}"\n', True)
+        for asset in ("themes/Orchis/gtk-3.0/gtk.css", "themes/Orchis/index.theme",
+                      *(f"icons/{name}/index.theme" for name in ("Paper", "Papirus", "Papirus-Light", "Papirus-Dark"))):
+            write(self.root / "usr/share" / asset, "fixture")
         self.env["MOCK_REMOTES"] = "flathub\thttps://dl.flathub.org/repo/\t"
         for variant in ("gnome", "kde"):
             write(self.root / "etc/sensible/variant", variant)
@@ -369,6 +631,15 @@ esac
         self.assertIn("could not initialize the preconfigured Flatpak remotes", result.stderr)
         del self.env["MOCK_FLATPAK_FAIL"]
         write(self.root / "etc/sensible/variant", "gnome")
+        for package in ("orchis-gtk-theme", "librsvg2-common"):
+            self.env["MOCK_MISSING_PACKAGE"] = package
+            result = self.run_script(script)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"required GNOME appearance package is not installed: {package}", result.stderr)
+        del self.env["MOCK_MISSING_PACKAGE"]
+        self.env["MOCK_ICON_CACHE_FAIL"] = "1"
+        self.assertIn("could not build icon cache", self.run_script(script).stderr)
+        del self.env["MOCK_ICON_CACHE_FAIL"]
         self.env["MOCK_SHELL_VERSION"] = "51.0-1"
         result = self.run_script(script)
         self.assertIn("pinned themes require GNOME Shell 50", result.stderr)
@@ -398,12 +669,24 @@ esac
         script = self.seed_pins()
         themes = self.root / "live/config/includes.chroot/usr/share/themes"
         write(themes / "Custom/gnome-shell/gnome-shell.css", "keep")
-        write(themes / "Marble-blue-dark/gnome-shell/gnome-shell.css", "remove")
+        removed_themes = ("Marble-blue-dark", "good-old-shell", "Everforest-Light", "Tokyonight-Dark",
+                          "Osaka-Light", "Catppuccin-Dark", "Qogir", "Matcha-sea", "Fluent")
+        for name in removed_themes:
+            write(themes / name / "index.theme", "remove")
+        icons = self.root / "live/config/includes.chroot/usr/share/icons"
+        write(icons / "Custom/index.theme", "keep")
+        removed_icons = ("Everforest-Light", "Tokyonight-Dark", "Osaka_Light", "Catppuccin-Mocha", "Qogir")
+        for name in removed_icons:
+            write(icons / name / "index.theme", "remove")
         self.env["SENSIBLE_VARIANT"] = "kde"
         result = self.run_script(script)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((themes / "Custom/gnome-shell/gnome-shell.css").read_text(), "keep")
-        self.assertFalse((themes / "Marble-blue-dark").exists())
+        for name in removed_themes:
+            self.assertFalse((themes / name).exists(), name)
+        self.assertEqual((icons / "Custom/index.theme").read_text(), "keep")
+        for name in removed_icons:
+            self.assertFalse((icons / name).exists(), name)
 
     def test_manual_describes_optional_origin_and_theme_selection(self):
         manual = (REPO / "manual/applications.html").read_text()
@@ -412,6 +695,20 @@ esac
         self.assertIn("not a preinstalled browser", manual)
         self.assertIn('id="themes"', manual)
         self.assertIn("gsettings reset org.gnome.desktop.interface gtk-theme", manual)
+        self.assertIn("gsettings reset org.gnome.desktop.interface icon-theme", manual)
+        self.assertIn("gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita'", manual)
+        self.assertIn("gsettings set org.gnome.desktop.interface icon-theme 'Adwaita'", manual)
+        for name in ("Qogir-theme", "Qogir-icon-theme", "Matcha-gtk-theme", "Fluent-gtk-theme"):
+            self.assertIn(f"https://github.com/vinceliuice/{name}", manual)
+        for name in ("Qogir-Light", "Qogir-Dark", "Matcha-light-sea", "Matcha-dark-sea", "Fluent-Light", "Fluent-Dark"):
+            self.assertIn(name, manual)
+        self.assertIn("GTK 3, GTK 4 and GNOME Shell components", manual)
+        self.assertIn("gsettings set org.gnome.shell.extensions.user-theme name 'Matcha-dark-sea'", manual)
+        self.assertIn("sudo cp -a --no-clobber ~/Downloads/MyTheme /usr/share/themes/", manual)
+        self.assertIn("~/.local/share/themes/", manual)
+        self.assertNotIn("Legacy Applications", manual)
+        self.assertNotIn("Fausto-Korpsvart", manual)
+        self.assertNotIn("good-old-shell", manual)
 
     def test_firewall_both_editions_and_failure(self):
         script = self.hook("0300-ufw.hook.chroot")
@@ -454,6 +751,10 @@ printf 'ufw %s\n' "$*" >> "$MOCK_LOG"
                          "gnome-shell-extension-dashtodock", "gnome-shell-extension-user-theme",
                          "gir1.2-gtop-2.0", "lm-sensors", "tesseract-ocr",
                          "tesseract-ocr-eng", "zbar-tools", "sshfs", "python3-nautilus"} <= gnome)
+        appearance = {"paper-icon-theme", "papirus-icon-theme", "orchis-gtk-theme", "gtk-update-icon-cache", "librsvg2-common"}
+        self.assertTrue(appearance <= gnome)
+        self.assertFalse(appearance & kde)
+        self.assertNotIn("gtk2-engines-murrine", gnome | kde)
         self.assertTrue({"digikam", "gwenview", "kdeconnect", "plasma-systemmonitor"} <= kde)
         self.assertNotIn("kdeconnect", gnome)
         self.assertNotIn("gnome-shell-extension-gsconnect", kde)

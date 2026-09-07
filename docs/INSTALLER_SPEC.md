@@ -22,7 +22,7 @@ Blueprint for `installer/sensible-install.sh`. On the live ISO the command is `s
 Pre-flight (UEFI, unused target mountpoint)
     → Branded welcome; select and apply live keyboard
     → Disks, RAM, size/state check; remaining regional settings
-    → Remaining prompts (--config answers file: planned — Phase 6)
+    → Remaining prompts (--config answers file: planned — release-test infrastructure)
     → Explicit destructive confirmation (no device-path retyping)
     → Recheck selected disk identity/state
     → Partition, format, mount
@@ -57,20 +57,28 @@ suite (`tests/`) can run the full flow unprivileged against a temp directory.
 | Full name | empty | Optional GECOS + git `user.name` |
 | Email | empty | Optional git `user.email`, written only to the user's `~/.gitconfig` |
 
-Firefox ESR, Chromium, LibreOffice Writer/Calc/Impress, Thunderbird, KeePassXC,
+Firefox ESR, Chromium, ONLYOFFICE Desktop Editors, Thunderbird, KeePassXC,
 VLC, Neovim, Flatpak, firmware, archive support, the CLI set, and the
 variant-native utilities are always installed — not checkboxes.
 
-**Planned prompts (Phase 6, not implemented):**
+**Planned post-install choices (not installer prompts):**
 
 | Field | Default | Notes |
 | :--- | :--- | :--- |
 | BioPass face login | Off | Pinned `.deb` + SHA256; IR camera recommended. Fingerprint (`fprintd`) is not a prompt — always installed |
 | Developer tools | Off | `docker.io` + `docker-compose`, `lazygit`, `gh`; user **not** added to the docker group |
 
-### Unattended mode (planned — Phase 6)
+### Unattended mode (planned — release-test infrastructure)
 
 `sensible-install --config answers.toml` reads every prompt from a file and asks nothing. Same validation as interactive mode; any missing or invalid key aborts **before** partitioning. `confirm_wipe = true` is still required as explicit destructive authorization, without making interactive users retype a device they selected and confirmed. Primary consumer is CI: running LUKS on/off for each desktop release image end-to-end in QEMU.
+
+This is #4 and precedes the installed-disk matrix, not a later desktop extra.
+The following is a proposed schema example, not a supported command today.
+Parse it as data and reject unsupported keys; optional applications belong to
+`sensible-apps`, not this file. Finalize safe secret input, the interactive/shared
+password contract and deterministic completion behavior with the implementation.
+Any later saved interactive profile must omit secrets and disk selection and
+set `confirm_wipe = false`; reusing preferences never reuses wipe authorization.
 
 ```toml
 disk            = "/dev/vda"
@@ -79,13 +87,11 @@ filesystem      = "btrfs"            # btrfs or ext4
 luks            = true
 luks_passphrase = "correct-horse"
 autologin       = true              # only honored when luks = true
-biopass         = false
 hostname        = "debian"
-username        = "user"
+username        = "alice"
 full_name       = ""                # optional: GECOS + git user.name
 email           = ""                # optional: git user.email
 user_password   = "hunter2hunter2"
-dev_tools       = false
 timezone        = "UTC"
 locale          = "en_US.UTF-8"
 keyboard        = "us"
@@ -341,7 +347,8 @@ Always:
   power-profiles-daemon fwupd
   flatpak
   firefox-esr chromium vlc neovim
-  libreoffice-writer libreoffice-calc libreoffice-impress
+  onlyoffice-desktopeditors (pinned local .deb, not a Debian archive package)
+  fonts-dejavu fonts-crosextra-carlito xwayland desktop-file-utils libnss3 libnspr4 libpulse0
   thunderbird keepassxc
   7zip unzip zip
   ripgrep fd-find fzf bat eza zoxide btop fastfetch jq
@@ -351,6 +358,7 @@ If GNOME:
   gnome-core gdm3 gnome-software gnome-software-plugin-flatpak dconf-cli
   file-roller amberol simple-scan
   gnome-shell-extension-manager gnome-tweaks
+  paper-icon-theme papirus-icon-theme orchis-gtk-theme gtk-update-icon-cache librsvg2-common
   gnome-shell-extension-gsconnect gnome-shell-extension-appindicator
   gnome-shell-extension-caffeine gnome-shell-extension-dashtodock
   gnome-shell-extension-user-theme gir1.2-gtop-2.0 lm-sensors
@@ -370,6 +378,17 @@ GNOME variant:
 ```
 
 Enable: `NetworkManager`, `bluetooth`, `power-profiles-daemon`, `fwupd`, `gdm3` or `sddm`, and `keyd` when selected.
+
+ONLYOFFICE uses the complete upstream package, version/architecture/SHA256-pinned
+in `live/pins.env` and staged through live-build's local APT repository. Its
+package name is a documented exception to the Debian package-name gate, not a
+host-repository lookup. `0255-office.hook.chroot` checks the installed identity,
+full editor/converter/launcher/license payload, linked libraries and free fonts.
+A build-only APT preference blocks the recommended Microsoft font downloader;
+NSS/NSPR and PulseAudio client libraries missing from upstream metadata are
+explicit in the shared closure. Office MIME defaults are user-overridable and
+leave PDF/plain-text defaults alone. No ONLYOFFICE repository is enabled, so
+upgrades require a reviewed upstream `.deb`; LibreOffice is optional post-install.
 
 ### Phase 6 additions — baked at build time (implemented)
 
@@ -528,13 +547,22 @@ Screen lock defaults are written for both desktops regardless of the choice:
 
 - GNOME: system dconf defaults — `idle-delay=300`, `lock-enabled=true`,
   `lock-delay=0`; Close/Minimize/Maximize titlebar buttons; the curated extension
-  list; Caffeine inactive without fullscreen/media auto-inhibition; Clipboard
+  list; Paper icons and Orchis GTK 3 theme; Caffeine inactive without fullscreen/media auto-inhibition; Clipboard
   Indicator persistence limited to favorites with image caching off; and Vitals
   public-IP lookup off. These live in `/etc/dconf/profile/user` plus
   `/etc/dconf/db/local.d/`, followed by `dconf update`; no dconf locks are added,
   so later user choices win.
 - KDE: `/etc/xdg/kscreenlockerrc` — `Autolock=true`, `Timeout=5`,
   `LockOnResume=true` (covers resume from suspend).
+
+GNOME appearance assets: the Debian packages above plus pinned Qogir, Matcha
+(sea accent) and Fluent standard/light/dark variants and the full Qogir
+icon collection; existing Marble/Graphite options remain. Qogir/Matcha/Fluent/
+Graphite include GTK 3, GTK 4 and GNOME Shell components, installed globally
+under `/usr/share/themes/`. No forced Shell, GDM or personal libadwaita CSS
+override. The new collections omit GTK 2 components because
+`gtk2-engines-murrine` is no longer available in Testing. See the
+[desktop profile](DESKTOP_PROFILES.md) for provenance and acceptance status.
 
 ```bash
 # GNOME (gdm3), /etc/gdm3/daemon.conf:
