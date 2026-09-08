@@ -4,14 +4,14 @@
 tests/run-tests.sh    # no root, no container, no network
 ```
 
-Requires Bash, the usual command-line utilities, `tar`, `unzip`, and **Python
-3.9+ with `tarfile.data_filter` available** (standard library only). The Python
-version alone is insufficient: extraction filters were also
-[backported to older Python releases](https://docs.python.org/3.9/library/tarfile.html#extraction-filters).
+Requires Bash, `rsync`, the usual command-line utilities, `tar`, `unzip`, and
+**Python 3.11+ with `tarfile.data_filter` available** (standard library only).
+The unattended-input tests use `tomllib`, introduced in Python 3.11; theme tests
+also require the tar extraction filter backport on Python 3.11.
 Check the interpreter's capability, as the theme builder does:
 
 ```bash
-python3 -c 'import sys, tarfile; sys.exit(0 if sys.version_info >= (3, 9) and hasattr(tarfile, "data_filter") else "Python 3.9+ with tarfile.data_filter is required")'
+python3 -c 'import sys, tarfile, tomllib; sys.exit(0 if sys.version_info >= (3, 11) and hasattr(tarfile, "data_filter") else "Python 3.11+ with tarfile.data_filter is required")'
 ```
 
 No third-party Python packages are needed for the fixture tests.
@@ -85,6 +85,7 @@ and path confinement even for a known reference.
 | Suite | Covers |
 | :--- | :--- |
 | `common_test.sh` | MNT override, UI tool detection (whiptail/dialog/text), logging and warning collection, text-mode widgets, network preflight, hostname/username validation, keyboard layout detection/validation/application, `check_root`/`check_uefi` |
+| `config_test.sh` | Real protected TOML reader, strict schema/types, redacted diagnostics, permissions/ownership, symlinks/hardlinks/FIFO rejection, bounded secret input, checked-descriptor reads, semantic validation, parser exit propagation, attached-TTY error handling, literal rsync exclusions and CLI errors |
 | `disk_test.sh` | Partition naming, swap/minimum math, GPT layouts, LUKS2, Btrfs subvolumes and swapfile resume offset, Ext4, candidate filtering, stable disk-identity revalidation, mounted-disk rejection, and installer-owned cleanup |
 | `fstab_test.sh` | All four engine combinations (Btrfs/Ext4 x LUKS on/off): crypttab root by LUKS header UUID, swapfile lines inside root, `@swap` subvolume mounts, tmpfs, and blkid-empty abort guards |
 | `desktop_test.sh` | GNOME/KDE package sets, Plymouth spinner/breeze, gdm3/sddm enablement, keyd conf deployed from `configs/` (never generated — spec §11), hard-fail on missing conf, and GNOME's unlocked dconf extension/titlebar/privacy and Paper/Orchis defaults |
@@ -120,6 +121,16 @@ locale, keyboard, grub `resume=` rules, keyd, brave origin), call sequences
 stable disk identity, group creation, sudo membership, offline closure checks, theme,
 bootloader, owned teardown, and preserved failure logs), plus success/abort exit
 codes.
+
+The same integration suite drives `main --config` using private caller-owned
+fixtures through all eight GNOME/KDE × Btrfs/Ext4 × LUKS on/off combinations.
+The root check alone is mocked; the real config parser and shared validators
+run. The parser requires ownership by its effective UID, which is root in the
+installer and the test user in this unprivileged suite. Prompt functions fail
+if called. Tests cover unsafe/malformed input, live/mounted/read-only/undersized
+and changed disks, missing live closure, post-wipe failure, teardown failure,
+exact account/LUKS secret delivery on stdin, log redaction and exit-only success.
+All disk commands remain mocks: these are not real installed-disk boot results.
 
 ## Testing hooks in production code (behavior-preserving)
 

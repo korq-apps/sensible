@@ -433,6 +433,7 @@ format_and_mount() {
     local disk="$1"
     local fs_type="$2"
     local enable_luks="$3"
+    export -n passphrase
     local passphrase="$4"
     local swap_mb="$5"
 

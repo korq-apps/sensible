@@ -219,3 +219,57 @@ UEFI/Secure Boot settings, release edition and encryption choice, the exact
 error, and the last relevant output. Review logs before posting and remove
 usernames, network names, serial numbers, and other private data. Never post
 passwords or encryption passphrases.
+
+## Unattended installation for testing
+
+This advanced mode is implemented in the current sources for installer testing;
+use an ISO built with this feature. The real installed-disk boot matrix is still
+pending. Interactive installation remains the default.
+
+`sensible-install --config FILE` uses the same whole-disk installation path and
+safety checks, without questions, repair shells or a completion menu. It does
+not select a different desktop: the ISO edition determines that.
+
+In the **live environment's root Bash shell**, prepare protected temporary input:
+
+```bash
+set +ax
+umask 077
+install -d -m 0700 /run/sensible-secrets
+install -m 0600 /opt/sensible/configs/answers.example.toml /run/sensible-secrets/answers.toml
+read -r -s -p 'Account and disk password (at least 8 characters): ' sensible_password
+printf '\n'
+printf '%s\n' "$sensible_password" > /run/sensible-secrets/password
+unset sensible_password
+nano /run/sensible-secrets/answers.toml
+```
+
+The variable `sensible_password` holds the hidden input briefly in this shell;
+it is not exported to child processes, and `unset` removes the variable after
+writing the protected file. Do not type a literal password into a command or
+commit either input file. `/run` is temporary storage, not encrypted storage.
+
+Review the disk with `lsblk`, fill in the user, locale, keyboard, filesystem and
+encryption settings, and **only then set `confirm_wipe = true`**. The template's
+`false` value intentionally refuses installation. Account and root recovery
+use the supplied password, as does LUKS when enabled; autologin requires LUKS.
+Configure the live keyboard before typing a password if it differs from the
+layout you want to use after installation.
+
+When you are certain the selected disk may be erased:
+
+```bash
+sensible-install --config /run/sensible-secrets/answers.toml
+```
+
+Both files must be root-owned regular files with mode `0600` or `0400`; symlinks,
+hard links and special files are rejected. The password file contains one UTF-8
+line; the optional final newline is removed, but other whitespace is preserved.
+Full field and size constraints are in the [configuration contract](INSTALLER_SPEC.md#unattended-mode).
+
+Exit status `0` means verification, log finalization and teardown succeeded.
+Nonzero means failure; check the stage diagnostic and `/var/log/sensible-install.log`.
+After success the machine stays in the live session. The operator or VM harness
+must detach installation media and initiate the installed-disk boot separately.
+Input files are excluded from the target copy and left in place for their owner
+to remove; they are not automatically deleted or included in diagnostic output.

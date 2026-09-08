@@ -17,6 +17,8 @@ sleep()       { :; }
 wait_for_device() { mlog "wait_for_device $*"; [ "$1" != "${MOCK_MISSING_PARTITION:-}" ]; }
 
 WORK="$(mktemp -d /tmp/sensible-flow-test.XXXXXX)"
+SENSIBLE_SUPPORTED_LOCALES_FILE="${WORK}/SUPPORTED"
+printf 'en_US.UTF-8 UTF-8\n' > "$SENSIBLE_SUPPORTED_LOCALES_FILE"
 bash "${REPO_ROOT}/scripts/stage-manual.sh" "$WORK"
 mkdir -p "${WORK}/boot"
 printf 'mock kernel\n' > "${WORK}/boot/vmlinuz-7.1.0-amd64"
@@ -39,8 +41,25 @@ declare -A MOCK_MOUNTS=()
 
 free()         { printf '              total        used        free\nMem:           8192        1024        7168\n'; }
 
-lsblk() {
+base_lsblk() {
     mlog "lsblk $*"
+    if [ "${MOCK_UNSAFE_DISK:-}" = readonly ] && [[ "$*" = *NAME,SIZE,TYPE,RO* ]]; then
+        echo '/dev/sda 500G disk 1'
+        return 0
+    fi
+    if [ "${MOCK_UNSAFE_DISK:-}" = changed ] && [[ "$*" = *SERIAL* ]] \
+        && grep -qF 'lsblk -dno TYPE /dev/sda' "$MOCK_LOG"; then
+        echo CHANGED-SERIAL
+        return 0
+    fi
+    if [ "${MOCK_UNSAFE_DISK:-}" = mounted ] && [[ "$*" = *MOUNTPOINTS* ]]; then
+        echo /host-mounted
+        return 0
+    fi
+    if [ "${MOCK_UNSAFE_DISK:-}" = undersized ] && [[ "$*" = *SIZE* && "$*" != *NAME* ]]; then
+        echo 1048576
+        return 0
+    fi
     case "$*" in
         *"NAME,SIZE,TYPE,RO"*) echo "/dev/sda 500G disk 0" ;;
         *MOUNTPOINTS*) : ;;
@@ -53,6 +72,7 @@ lsblk() {
         *"-dno MODEL"*) echo "TestDisk" ;;
     esac
 }
+lsblk() { base_lsblk "$@"; }
 
 sgdisk()      { mlog "sgdisk $*"; }
 rsync()       {
@@ -110,7 +130,16 @@ mkfs.vfat()   { mlog "mkfs.vfat $*"; }
 mkfs.ext4()   { mlog "mkfs.ext4 $*"; }
 mkfs.btrfs()  { mlog "mkfs.btrfs $*"; }
 mkswap()      { mlog "mkswap $*"; }
-cryptsetup()  { mlog "cryptsetup $*"; }
+cryptsetup()  {
+    mlog "cryptsetup $*"
+    if [ "${SENSIBLE_UNATTENDED:-false}" = true ] && [[ "$1" = luksFormat || "$1" = open ]]; then
+        local supplied
+        supplied=$(cat)
+        if env | grep -qF 'config-$ecret-123'; then return 1; fi
+        [ "$supplied" = 'config-$ecret-123' ] || return 1
+        mlog 'validated LUKS secret on stdin'
+    fi
+}
 mount()       {
     mlog "mount $*"
     local target="${*: -1}"
@@ -130,6 +159,10 @@ declare -A MOCK_TMPFS_MOUNTS=()
 umount()      {
     mlog "umount $*"
     local target="${*: -1}" mounted
+    if [ "${MOCK_UNMOUNT_FAILURE:-0}" = 1 ] && [ "$target" = "$MNT" ] \
+        && grep -qF 'update-grub' "$MOCK_LOG"; then
+        return 1
+    fi
     if [ "${1:-}" = "-R" ]; then
         for mounted in "${!MOCK_MOUNTS[@]}"; do
             [[ "$mounted" = "$target" || "$mounted" = "$target/"* ]] && unset 'MOCK_MOUNTS[$mounted]'
@@ -182,6 +215,14 @@ blkid() {
 chroot() {
     mlog "chroot $*"
     shift
+    if [ "${SENSIBLE_UNATTENDED:-false}" = true ] && [ "${1:-}" = chpasswd ]; then
+        local supplied
+        supplied=$(cat)
+        if env | grep -qF 'config-$ecret-123'; then return 1; fi
+        [[ "$supplied" = 'alice:config-$ecret-123' || "$supplied" = 'root:config-$ecret-123' ]] || return 1
+        mlog 'validated account secret on stdin'
+        return 0
+    fi
     if [ "${1:-}" = "getent" ] && [ "${2:-}" = "passwd" ]; then
         if [ "${2:-}" = "passwd" ] && [ "${3:-}" = "user" ] && [ "${MOCK_LIVE_USER}" = "1" ]; then return 0; fi
         return 1
@@ -289,7 +330,26 @@ run_flow() {
     mock_setup
     : > "${OUT}"; : > "${ERR}"
     set +e
-    ( set -e; main < "${ANSWERS}" > "${OUT}" 2> "${ERR}" )
+    (
+        set -e
+        if [ "$#" -gt 0 ]; then
+            # Config mode must bypass forms even with graphical tools installed.
+            UI_TOOL=whiptail
+            welcome_screen() { mlog UNEXPECTED_PROMPT; return 99; }
+            keyboard_form() { mlog UNEXPECTED_PROMPT; return 99; }
+            user_form_flow() { mlog UNEXPECTED_PROMPT; return 99; }
+            filesystem_form() { mlog UNEXPECTED_PROMPT; return 99; }
+            confirm_encryption() { mlog UNEXPECTED_PROMPT; return 99; }
+            ui_menu() { mlog UNEXPECTED_PROMPT; return 99; }
+            ui_yesno() { mlog UNEXPECTED_PROMPT; return 99; }
+            whiptail() { mlog UNEXPECTED_PROMPT; return 99; }
+            get_live_boot_source() {
+                if [ "${MOCK_UNSAFE_DISK:-}" = live ]; then printf '/dev/sda\n'; else return 1; fi
+            }
+        fi
+        if [ "${MOCK_TRACE:-0}" = 1 ]; then set -x; fi
+        main "$@" < "${ANSWERS}" > "${OUT}" 2> "${ERR}"
+    )
     RC=$?
     set -e
     cp "${MOCK_LOG}" "${WORK}/calls.log"
@@ -663,18 +723,7 @@ assert_contains "no-candidates error surfaced" "$(output_text)" "No disk qualifi
 assert_contains "error names the rejected disk" "$(output_text)" "/dev/sda"
 assert_not_contains "no partitioning happened" "$(log_text)" "sgdisk"
 lsblk() {
-    mlog "lsblk $*"
-    case "$*" in
-        *"NAME,SIZE,TYPE,RO"*) echo "/dev/sda 500G disk 0" ;;
-        *MOUNTPOINTS*) : ;;
-        *"-dnbo SIZE"*|*"-bno SIZE"*) echo 536870912000 ;;
-        *"-dno MAJ:MIN"*) echo "8:0" ;;
-        *"-dno TYPE"*) echo "disk" ;;
-        *"-dno RO"*) echo "0" ;;
-        *"-dno SERIAL"*) echo "TEST-SERIAL-001" ;;
-        *"-dno WWN"*) echo "TEST-WWN-001" ;;
-        *"-dno MODEL"*) echo "TestDisk" ;;
-    esac
+    base_lsblk "$@"
 }
 
 t_section "Abort: declining the final destructive confirmation changes nothing"
@@ -754,6 +803,122 @@ cp "${MOCK_LOG}" "${WORK}/calls.log"; mock_teardown
 unset LIVE_ROOT_SENTINEL
 assert_rc "install succeeds after username re-prompt" 0 "${rc}"
 assert_contains "user 'alice' created (not 'Bad Name')" "$(log_text)" "useradd -m -s /bin/bash -G sudo,audio,video,plugdev,netdev,bluetooth alice"
+
+t_section "Unattended: both editions and all filesystem/encryption combinations"
+CONFIG_ANSWERS="${WORK}/config.toml"
+CONFIG_SECRET="${WORK}/secret"
+printf 'config-$ecret-123\n' > "$CONFIG_SECRET"
+chmod 600 "$CONFIG_SECRET"
+write_config_answers() {
+    local filesystem="${1:-btrfs}" luks="${2:-true}" wipe="${3:-true}" device="${4:-/dev/sda}"
+    printf 'disk = "%s"\nconfirm_wipe = %s\nfilesystem = "%s"\nluks = %s\nautologin = %s\n' \
+        "$device" "$wipe" "$filesystem" "$luks" "$luks" > "$CONFIG_ANSWERS"
+    printf 'hostname = "sensible-box"\nusername = "alice"\ntimezone = "Europe/Berlin"\nlocale = "en_US.UTF-8"\nkeyboard = "us"\npassword_file = "%s"\n' \
+        "$CONFIG_SECRET" >> "$CONFIG_ANSWERS"
+    chmod 600 "$CONFIG_ANSWERS"
+}
+: > "$ANSWERS"  # Config runs cannot accidentally consume interactive answers.
+for SENSIBLE_VARIANT in gnome kde; do
+    for config_fs in btrfs ext4; do
+        for config_luks in true false; do
+            write_config_answers "$config_fs" "$config_luks"
+            run_flow --debug --config "$CONFIG_ANSWERS"
+            assert_rc "$SENSIBLE_VARIANT/$config_fs/$config_luks succeeds" 0 "$RC"
+            assert_contains "same partitioning path" "$(log_text)" 'sgdisk --zap-all /dev/sda'
+            assert_contains "same filesystem path" "$(log_text)" "mkfs.$config_fs"
+            assert_file_exists "boot verification output present" "${MNT}/boot/grub/grub.cfg"
+            assert_contains "bounded unattended completion" "$(output_text)" 'returning to caller without reboot'
+            assert_not_contains "no prompts in config path" "$(log_text)" UNEXPECTED_PROMPT
+            assert_not_contains "caller controls reboot" "$(log_text)" 'systemctl reboot'
+            assert_not_contains "secret never logged" "$(output_text)$(log_text)" 'config-$ecret-123'
+            assert_contains "config excluded from copy" "$(log_text)" "--exclude=$CONFIG_ANSWERS"
+            assert_contains "secret excluded from copy" "$(log_text)" "--exclude=$CONFIG_SECRET"
+            assert_contains "owned target unmounted" "$(log_text)" "umount ${MNT}"
+            assert_file_exists "input secret remains caller-owned" "$CONFIG_SECRET"
+            assert_contains "account receives exact secret" "$(log_text)" 'validated account secret on stdin'
+            if [ "$config_luks" = true ]; then
+                assert_contains "LUKS enabled" "$(log_text)" 'cryptsetup luksFormat'
+                assert_contains "LUKS receives exact secret" "$(log_text)" 'validated LUKS secret on stdin'
+            else
+                assert_not_contains "no LUKS when disabled" "$(log_text)" 'cryptsetup luksFormat'
+            fi
+            if [ "$SENSIBLE_VARIANT" = kde ]; then
+                assert_contains "image selects KDE" "$(log_text)" 'systemctl enable sddm.service'
+            else
+                assert_contains "image selects GNOME" "$(log_text)" 'systemctl enable gdm3.service'
+            fi
+        done
+    done
+done
+unset SENSIBLE_VARIANT
+
+t_section "Unattended rejection before wipe"
+for config_bad in unauthorized malformed wrong-type unsafe-secret short-secret invalid-user invalid-locale invalid-zone invalid-keyboard invalid-identity missing-disk mounted undersized readonly live changed; do
+    write_config_answers
+    printf 'config-$ecret-123\n' > "$CONFIG_SECRET"
+    chmod 600 "$CONFIG_SECRET"
+    case "$config_bad" in
+        unauthorized) write_config_answers btrfs true false ;;
+        malformed) printf 'unknown = "config-$ecret-123"\n' >> "$CONFIG_ANSWERS" ;;
+        wrong-type) sed -i 's/luks = true/luks = "true"/' "$CONFIG_ANSWERS" ;;
+        unsafe-secret) chmod 644 "$CONFIG_SECRET" ;;
+        short-secret) printf short > "$CONFIG_SECRET" ;;
+        invalid-user) sed -i 's/username = "alice"/username = "root"/' "$CONFIG_ANSWERS" ;;
+        invalid-locale) sed -i 's/en_US.UTF-8/invalid_LOCALE/' "$CONFIG_ANSWERS" ;;
+        invalid-zone) sed -i 's@Europe/Berlin@../../../etc/passwd@' "$CONFIG_ANSWERS" ;;
+        invalid-keyboard) sed -i 's/keyboard = "us"/keyboard = "missing-layout"/' "$CONFIG_ANSWERS" ;;
+        invalid-identity) printf 'full_name = "bad:name"\n' >> "$CONFIG_ANSWERS" ;;
+        missing-disk) write_config_answers btrfs true true /dev/not-selected ;;
+        mounted|undersized|readonly|live|changed) MOCK_UNSAFE_DISK="$config_bad" ;;
+    esac
+    run_flow --config "$CONFIG_ANSWERS"
+    MOCK_UNSAFE_DISK=""
+    assert_ne "$config_bad fails" 0 "$RC"
+    assert_not_contains "$config_bad never partitions" "$(log_text)" sgdisk
+    assert_not_contains "$config_bad never wipes" "$(log_text)" wipefs
+    assert_not_contains "$config_bad does not change live keyboard" "$(log_text)" setupcon
+    assert_not_contains "$config_bad never prompts" "$(log_text)" UNEXPECTED_PROMPT
+    assert_not_contains "$config_bad never leaks secret" "$(output_text)$(log_text)" 'config-$ecret-123'
+done
+
+t_section "Unattended retains live closure and post-wipe failure guards"
+write_config_answers
+printf 'config-$ecret-123\n' > "$CONFIG_SECRET"
+MOCK_MISSING_LIVE_PACKAGE=shim-signed
+run_flow --config "$CONFIG_ANSWERS"
+MOCK_MISSING_LIVE_PACKAGE=""
+assert_ne "incomplete ISO rejected in config mode" 0 "$RC"
+assert_not_contains "incomplete ISO not partitioned" "$(log_text)" sgdisk
+
+t_section "Unattended secrets stay private with inherited tracing/export flags"
+(
+    export password='config-$ecret-123' USERPASS='config-$ecret-123' LUKS_PASSPHRASE='config-$ecret-123' passphrase='inherited'
+    MOCK_TRACE=1
+    # main turns both tracing and automatic exports off before consuming input.
+    set -a
+    run_flow --config "$CONFIG_ANSWERS"
+    assert_rc "exported secret variable names cannot leak" 0 "$RC"
+    assert_not_contains "secrets absent from debug and command logs" "$(output_text)$(log_text)" 'config-$ecret-123'
+    [ "$FAIL" -eq 0 ]
+)
+assert_rc "export regression passes" 0 $?
+
+MOCK_MISSING_PACKAGE=shim-signed
+run_flow --config "$CONFIG_ANSWERS"
+MOCK_MISSING_PACKAGE=""
+assert_ne "mandatory post-wipe failure not successful" 0 "$RC"
+assert_contains "post-wipe failure unmounts target" "$(log_text)" "umount ${MNT}"
+assert_not_contains "post-wipe failure never prompts" "$(log_text)" UNEXPECTED_PROMPT
+assert_not_contains "post-wipe failure never reports success" "$(output_text)" 'Installation finished successfully!'
+assert_file_exists "failure log preserved" "${MNT}/var/log/sensible-install.log"
+
+MOCK_UNMOUNT_FAILURE=1
+run_flow --config "$CONFIG_ANSWERS"
+MOCK_UNMOUNT_FAILURE=0
+assert_ne "teardown failure returns nonzero" 0 "$RC"
+assert_file_contains "failure is at final teardown" "$INSTALL_LOG" 'safely unmounting the installed system'
+assert_not_contains "teardown failure cannot report success" "$(output_text)" 'Installation finished successfully!'
+assert_not_contains "teardown failure never prompts" "$(log_text)" UNEXPECTED_PROMPT
 
 t_section "Post-wipe mandatory failure: no false success, log preserved"
 build_answers no

@@ -22,7 +22,7 @@ Blueprint for `installer/sensible-install.sh`. On the live ISO the command is `s
 Pre-flight (UEFI, unused target mountpoint)
     → Branded welcome; select and apply live keyboard
     → Disks, RAM, size/state check; remaining regional settings
-    → Remaining prompts (--config answers file: planned — release-test infrastructure)
+    → Remaining prompts (or validated --config input for unattended installation)
     → Explicit destructive confirmation (no device-path retyping)
     → Recheck selected disk identity/state
     → Partition, format, mount
@@ -68,34 +68,74 @@ variant-native utilities are always installed — not checkboxes.
 | BioPass face login | Off | Pinned `.deb` + SHA256; IR camera recommended. Fingerprint (`fprintd`) is not a prompt — always installed |
 | Developer tools | Off | `docker.io` + `docker-compose`, `lazygit`, `gh`; user **not** added to the docker group |
 
-### Unattended mode (planned — release-test infrastructure)
+<a id="unattended-mode-planned--release-test-infrastructure"></a>
+
+### Unattended mode
 
 `sensible-install --config answers.toml` reads every prompt from a file and asks nothing. Same validation as interactive mode; any missing or invalid key aborts **before** partitioning. `confirm_wipe = true` is still required as explicit destructive authorization, without making interactive users retype a device they selected and confirmed. Primary consumer is CI: running LUKS on/off for each desktop release image end-to-end in QEMU.
 
-This is #4 and precedes the installed-disk matrix, not a later desktop extra.
-The following is a proposed schema example, not a supported command today.
-Parse it as data and reject unsupported keys; optional applications belong to
-`sensible-apps`, not this file. Finalize safe secret input, the interactive/shared
-password contract and deterministic completion behavior with the implementation.
+Implemented in the feature-branch sources for #4, with rootless parser and
+mocked full-flow evidence; real image installation/boot validation follows in #5.
+Use an image containing this implementation, not an earlier release.
+The Python 3.11+ standard-library `tomllib` reader parses data and rejects
+unsupported keys; optional applications belong to `sensible-apps`, not this
+file. V1 preserves the current
+unified password contract and reads the secret from a separate protected file,
+not inline TOML, command-line arguments or environment variables. The same
+password sets the user/root recovery password and, when enabled, LUKS.
 Any later saved interactive profile must omit secrets and disk selection and
 set `confirm_wipe = false`; reusing preferences never reuses wipe authorization.
 
 ```toml
 disk            = "/dev/vda"
-confirm_wipe    = true               # required explicit authorization
+confirm_wipe    = false              # change to true only after reviewing the target
 filesystem      = "btrfs"            # btrfs or ext4
 luks            = true
-luks_passphrase = "correct-horse"
-autologin       = true              # only honored when luks = true
+autologin       = true              # rejected when luks = false
 hostname        = "debian"
 username        = "alice"
 full_name       = ""                # optional: GECOS + git user.name
 email           = ""                # optional: git user.email
-user_password   = "hunter2hunter2"
+password_file   = "/run/sensible-secrets/password" # protected local file
 timezone        = "UTC"
 locale          = "en_US.UTF-8"
 keyboard        = "us"
 ```
+
+V1 safety and completion contract:
+
+- Require all displayed fields except `full_name` and `email`; those default to
+  empty strings. Types are strict; reject unknown keys, inline password fields,
+  separate LUKS secrets and unsupported values rather than silently ignoring them.
+- Require root-owned regular config and secret files, mode `0600` or `0400`;
+  reject symlinks (including path components), hard links and special files.
+  Read from checked open file
+  descriptors so path replacement cannot bypass the checks. The secret is one
+  non-empty UTF-8 line with an optional final newline; reject embedded newlines,
+  CR and NUL, and apply the same minimum-eight-character password validation as
+  interactive input. Limit config files to 64 KiB and secret files to 4 KiB.
+  Optional identity fields reject control characters and `"`, `\`, `:`, `;`,
+  `#`, which cannot safely be written to the current GECOS/Git identity format.
+- Parse and validate all input before applying keyboard or target settings.
+  Opening a diagnostic log is allowed; do not copy secrets/config into the
+  target, log their contents or include them in parser errors or shell tracing.
+  The copy operation excludes both input paths; it does not copy their contents
+  into the installed system. Operators retain ownership of their input files; the installer does not
+  delete them automatically. Prefer ephemeral `/run` storage for CI secrets.
+- Keep disk selection explicit, enforce the same eligibility/identity checks,
+  and revalidate immediately before wipe. A config file never bypasses boot
+  preflight or authorizes cleanup of resources owned by another process.
+- No prompts, repair shells or terminal requirement, including on failure.
+  Return `0` after installation verification, log finalization and owned-resource
+  teardown succeed; return nonzero on failure with a clear stage diagnostic.
+  V1 does not reboot or power off: the caller handles media removal and boot.
+- [The checked-in example](../configs/answers.example.toml) is non-secret and
+  has `confirm_wipe = false`. Neither this example nor a saved preference file
+  authorizes an erase without explicit editing. `python3` is in the live
+  package list and the setup hook fails the build if `tomllib` is unavailable.
+
+Provisioning and invocation are covered in the
+[advanced install guide](INSTALL.md#unattended-installation-for-testing).
 
 ---
 

@@ -4,6 +4,8 @@
 # Gum-based TUI, Omarchy-inspired flow:
 # keyboard → user → disk → filesystem → encryption → confirm
 
+# Never trace account or encryption secrets, including when invoked with bash -x.
+set +ax
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,6 +19,8 @@ source "${LIB_DIR}/ui.sh"
 source "${LIB_DIR}/common.sh"
 # shellcheck source=lib/setup-form.sh
 source "${LIB_DIR}/setup-form.sh"
+# shellcheck source=lib/config.sh
+source "${LIB_DIR}/config.sh"
 # shellcheck source=lib/disk.sh
 source "${LIB_DIR}/disk.sh"
 # shellcheck source=lib/fstab.sh
@@ -403,11 +407,54 @@ confirm_encryption() {
 }
 
 main() {
-    if [ "${1:-}" = "--debug" ]; then
-        SENSIBLE_DEBUG=1
-        shift
+    set +ax
+    # Remove export attributes before shadowing globals: unexporting a local
+    # alone can leave the imported global value in a child's environment.
+    export -n password USERPASS LUKS_PASSPHRASE passphrase
+    local password USERPASS LUKS_PASSPHRASE
+    local SENSIBLE_UNATTENDED=false config_path="" debug_seen=false help_requested=false
+    local -a UNATTENDED_FIELDS=() input_exclusions=()
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --config)
+                if [ "$SENSIBLE_UNATTENDED" = true ] || [ "$#" -lt 2 ] || [ -z "$2" ] || [[ "$2" = --* ]]; then
+                    log_err "Provide exactly one --config FILE argument."
+                    return 1
+                fi
+                SENSIBLE_UNATTENDED=true
+                config_path="$2"
+                shift 2
+                ;;
+            --debug)
+                [ "$debug_seen" = false ] || { log_err "Duplicate --debug option."; return 1; }
+                debug_seen=true
+                SENSIBLE_DEBUG=1
+                shift
+                ;;
+            --help|-h)
+                help_requested=true
+                shift
+                ;;
+            *) log_err "Unknown installer argument; use --help."; return 1 ;;
+        esac
+    done
+    if [ "$help_requested" = true ]; then
+        printf '%s\n' 'Usage: sensible-install [--debug] [--config FILE]' \
+            'Config mode validates protected TOML input, installs offline and exits without rebooting.'
+        return 0
     fi
     check_root
+    if [ "$SENSIBLE_UNATTENDED" = true ]; then
+        load_unattended_config "$config_path" || return 1
+        local input_path
+        for input_path in "${UNATTENDED_FIELDS[12]}" "${UNATTENDED_FIELDS[13]}"; do
+            if [ "$input_path" -ef "$INSTALL_LOG" ] || [ "$input_path" = "$(realpath -m "$INSTALL_LOG")" ]; then
+                log_err "Installer log must not overwrite an input file."
+                return 1
+            fi
+            input_exclusions+=("--exclude=$(input_copy_exclusion "$input_path")")
+        done
+    fi
     start_install_log
     trap cleanup EXIT
     prepare_terminal
@@ -430,30 +477,41 @@ main() {
         exit 1
     fi
 
-    welcome_screen
+    if [ "$SENSIBLE_UNATTENDED" = false ]; then
+        welcome_screen
 
-    # ── 1. Keyboard ──
-    if ! keyboard_form; then
-        log_warn "Keyboard setup cancelled."
-        exit 1
-    fi
-
-    # ── 2. User account (username → password(confirm) → hostname → timezone → locale) ──
-    # Globals set by setup-form: keyboard, username, password, hostname, timezone, locale_val, full_name, email_address
-    # Also sets USERPASS, LUKS_PASSPHRASE to same password (unified)
-    username=""; password=""; hostname="debian"; timezone=""; locale_val="en_US.UTF-8"; full_name=""; email_address=""
-    # shellcheck disable=SC2034
-    USERPASS=""; LUKS_PASSPHRASE=""
-    local user_rc
-    user_form_flow && user_rc=0 || user_rc=$?
-    if [ $user_rc -ne 0 ]; then
-        if [ $user_rc -eq $SETUP_FORM_BACK ]; then
-            # Back from user form → re-ask keyboard
-            keyboard_form || exit 1
-            user_form_flow || exit 1
-        else
+        # ── 1. Keyboard ──
+        if ! keyboard_form; then
+            log_warn "Keyboard setup cancelled."
             exit 1
         fi
+
+        # ── 2. User account (username → password(confirm) → hostname → timezone → locale) ──
+        # Globals set by setup-form: keyboard, username, password, hostname, timezone, locale_val, full_name, email_address
+        # Also sets USERPASS, LUKS_PASSPHRASE to same password (unified)
+        username=""; password=""; hostname="debian"; timezone=""; locale_val="en_US.UTF-8"; full_name=""; email_address=""
+        # shellcheck disable=SC2034
+        USERPASS=""; LUKS_PASSPHRASE=""
+        local user_rc
+        user_form_flow && user_rc=0 || user_rc=$?
+        if [ $user_rc -ne 0 ]; then
+            if [ $user_rc -eq $SETUP_FORM_BACK ]; then
+                # Back from user form → re-ask keyboard
+                keyboard_form || exit 1
+                user_form_flow || exit 1
+            else
+                exit 1
+            fi
+        fi
+    else
+        keyboard=${UNATTENDED_FIELDS[10]}
+        username=${UNATTENDED_FIELDS[5]}
+        password=${UNATTENDED_FIELDS[11]}
+        hostname=${UNATTENDED_FIELDS[4]}
+        timezone=${UNATTENDED_FIELDS[8]}
+        locale_val=${UNATTENDED_FIELDS[9]}
+        full_name=${UNATTENDED_FIELDS[6]}
+        email_address=${UNATTENDED_FIELDS[7]}
     fi
     # Compat aliases for later execution phase
     HOSTNAME="$hostname"
@@ -474,22 +532,35 @@ main() {
     CURRENT_STAGE="selecting the target disk"
     local TARGET_DISK=""
     local NO_DISK_TEXT NO_DISK_CHOICE
-    while true; do
-        local chosen
-        if disk_form; then chosen="$disk"; else chosen=""; fi
-        if [ -n "$chosen" ]; then
-            TARGET_DISK="$chosen"
-            break
+    if [ "$SENSIBLE_UNATTENDED" = true ]; then
+        TARGET_DISK=$(readlink -f -- "${UNATTENDED_FIELDS[0]}")
+        local -a eligible_disks=()
+        local eligible=false i
+        mapfile -t eligible_disks < <(list_candidate_disks)
+        for ((i=0; i<${#eligible_disks[@]}; i+=2)); do
+            [ "$TARGET_DISK" != "${eligible_disks[i]}" ] || eligible=true
+        done
+        if [ "$eligible" != true ]; then
+            log_err "Configured disk is not an eligible installation target; no disk was changed."
+            exit 1
         fi
+    else
+        while true; do
+            local chosen
+            if disk_form; then chosen="$disk"; else chosen=""; fi
+            if [ -n "$chosen" ]; then
+                TARGET_DISK="$chosen"
+                break
+            fi
 
-        # Fallback: check if any candidate exists at all
-        mapfile -t DISK_CANDIDATES < <(list_candidate_disks)
-        if [ ${#DISK_CANDIDATES[@]} -gt 0 ]; then
-            TARGET_DISK=$(ui_menu "Select Target Disk" "Choose the disk where Sensible will be installed (WARNING: ENTIRE DISK WILL BE WIPED):" "${DISK_CANDIDATES[@]}")
-            [ -n "$TARGET_DISK" ] && break
-        fi
+            # Fallback: check if any candidate exists at all
+            mapfile -t DISK_CANDIDATES < <(list_candidate_disks)
+            if [ ${#DISK_CANDIDATES[@]} -gt 0 ]; then
+                TARGET_DISK=$(ui_menu "Select Target Disk" "Choose the disk where Sensible will be installed (WARNING: ENTIRE DISK WILL BE WIPED):" "${DISK_CANDIDATES[@]}")
+                [ -n "$TARGET_DISK" ] && break
+            fi
 
-        NO_DISK_TEXT="\
+            NO_DISK_TEXT="\
 No disk qualified as an installation target.
 
 Detected block devices:
@@ -502,27 +573,28 @@ The swapfile mirrors RAM so the system can hibernate, so the minimum grows
 with RAM (this machine has ${RAM_MIB} MiB). In a VM, give the guest a bigger
 virtual disk, or less RAM."
 
-        if [ ! -t 0 ]; then
-            ui_msgbox "Error: No Installable Disk" "${NO_DISK_TEXT}"
-            exit 1
-        fi
+            if [ ! -t 0 ]; then
+                ui_msgbox "Error: No Installable Disk" "${NO_DISK_TEXT}"
+                exit 1
+            fi
 
-        NO_DISK_CHOICE=$(ui_menu "Error: No Installable Disk" "${NO_DISK_TEXT}" \
-            "rescan" "Look again (after attaching or resizing a disk)" \
-            "shell"  "Open a shell to inspect or repartition disks" \
-            "quit"   "Quit the installer")
-        case "${NO_DISK_CHOICE}" in
-            rescan) continue ;;
-            shell)
-                echo "Starting a shell. Type 'exit' to return to the installer." >&2
-                if ! "${SHELL:-/bin/bash}"; then
-                    log_warn "The troubleshooting shell exited unsuccessfully; rescanning disks."
-                fi
-                ;;
-            *) exit 1 ;;
-        esac
-    done
+            NO_DISK_CHOICE=$(ui_menu "Error: No Installable Disk" "${NO_DISK_TEXT}" \
+                "rescan" "Look again (after attaching or resizing a disk)" \
+                "shell"  "Open a shell to inspect or repartition disks" \
+                "quit"   "Quit the installer")
+            case "${NO_DISK_CHOICE}" in
+                rescan) continue ;;
+                shell)
+                    echo "Starting a shell. Type 'exit' to return to the installer." >&2
+                    if ! "${SHELL:-/bin/bash}"; then
+                        log_warn "The troubleshooting shell exited unsuccessfully; rescanning disks."
+                    fi
+                    ;;
+                *) exit 1 ;;
+            esac
+        done
 
+    fi
     # Export for disk_form helper (confirm step)
     disk="$TARGET_DISK"
     CURRENT_STAGE="validating the selected disk"
@@ -552,17 +624,23 @@ virtual disk, or less RAM."
 
     # ── 4. Filesystem ──
     local FS_CHOICE
-    if ! filesystem_form; then
-        log_warn "Filesystem selection cancelled."
-        exit 1
+    if [ "$SENSIBLE_UNATTENDED" = true ]; then
+        FS_CHOICE=${UNATTENDED_FIELDS[1]}
+    else
+        if ! filesystem_form; then
+            log_warn "Filesystem selection cancelled."
+            exit 1
+        fi
+        FS_CHOICE="$filesystem"
     fi
-    FS_CHOICE="$filesystem"
 
     # ── 5. Encryption (hidden toggle, default encrypted) ──
     local ENABLE_LUKS="true"
     local encrypt_installation=true
     # Gum path with Ctrl-C toggle; text fallback uses simple yes/no
-    if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
+    if [ "$SENSIBLE_UNATTENDED" = true ]; then
+        ENABLE_LUKS=${UNATTENDED_FIELDS[2]}
+    elif command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
         local enc_confirmed=false
         while true; do
             if confirm_encryption; then
@@ -603,7 +681,10 @@ virtual disk, or less RAM."
     local EXTRA_APPS=""
 
     local ENABLE_AUTOLOGIN="false"
-    if [ "$ENABLE_LUKS" = "true" ]; then
+    if [ "$SENSIBLE_UNATTENDED" = true ]; then
+        ENABLE_AUTOLOGIN=${UNATTENDED_FIELDS[3]}
+        UNATTENDED_FIELDS=()
+    elif [ "$ENABLE_LUKS" = "true" ]; then
         if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
             clear_logo; ui_blank
             say "The disk passphrase at boot will unlock the system."
@@ -623,7 +704,7 @@ virtual disk, or less RAM."
     # The Gum flow already confirmed the destructive action on the selected
     # disk in confirm_encryption(). Text-mode users get the same single yes/no
     # safety gate here; nobody has to retype a device path they just selected.
-    if ! _ui_use_gum; then
+    if [ "$SENSIBLE_UNATTENDED" = false ] && ! _ui_use_gum; then
         if ! ui_yesno "Ready to Install" \
             "Erase ${TARGET_DISK}, create a ${FS_CHOICE} root filesystem, and install Sensible?\n\nAll existing data on this disk will be permanently destroyed." "no"; then
             log_warn "Installation cancelled before ${TARGET_DISK} was changed."
@@ -631,6 +712,15 @@ virtual disk, or less RAM."
         fi
     fi
 
+    if [ "$SENSIBLE_UNATTENDED" = true ]; then
+        # Reject an invalid target before changing even the live keyboard. Keep
+        # the final revalidation below, after setupcon and immediately before wipe.
+        if ! validate_target_disk "$TARGET_DISK" "$MIN_DISK_MIB" "$DISK_MAJMIN" "$DISK_SIZE_BYTES" "$DISK_SERIAL" "$DISK_WWN"; then
+            log_err "Configured disk changed or is in use; no disk was changed."
+            exit 1
+        fi
+        apply_live_keyboard "$keyboard" "${LIVE_KEYBOARD_FILE:-/etc/default/keyboard}"
+    fi
     if ! validate_target_disk "$TARGET_DISK" "$MIN_DISK_MIB" "$DISK_MAJMIN" "$DISK_SIZE_BYTES" "$DISK_SERIAL" "$DISK_WWN"; then
         ui_msgbox "Disk Changed or In Use" "${TARGET_DISK} no longer matches the selected disk, is now in use, or cannot be identified safely. No disk was changed. Restart the installer and check the disk selection."
         exit 1
@@ -652,7 +742,7 @@ virtual disk, or less RAM."
     install_progress_update 3 "Copying the Debian system"
     log_info "Copying live environment root to ${MNT} with rsync..."
     local DEPLOYED_FROM_LIVE="true"
-    rsync -aAX --info=progress2 \
+    rsync -aAX --info=progress2 "${input_exclusions[@]}" \
         --exclude='/dev/*' --exclude='/proc/*' --exclude='/sys/*' --exclude='/tmp/*' \
         --exclude='/run/*' --exclude="${MNT}/*" --exclude='/media/*' --exclude=/lost+found \
         --exclude=/etc/systemd/system/getty@tty1.service.d/autologin.conf \
@@ -797,8 +887,9 @@ virtual disk, or less RAM."
         exit 1
     fi
     log_info "User ${USERNAME} created (groups: $(chroot ${MNT} id -nG "$USERNAME" | tr ' ' ','))."
-    echo "${USERNAME}:${USERPASS}" | chroot ${MNT} chpasswd
-    echo "root:${USERPASS}" | chroot ${MNT} chpasswd
+    printf '%s:%s\n' "$USERNAME" "$USERPASS" | chroot "${MNT}" chpasswd
+    printf 'root:%s\n' "$USERPASS" | chroot "${MNT}" chpasswd
+    unset password USERPASS LUKS_PASSPHRASE
 
     # Store optional identity for git/GECOS if provided
     if [ -n "${full_name:-}" ]; then
@@ -933,7 +1024,13 @@ a reboot, with the installer gone."
     install_progress_update 12 "Finalizing the installation"
     local INSTALL_DURATION=""
     stop_install_log
-    preserve_install_log || record_warning "The installer log could not be copied to the installed system."
+    if ! preserve_install_log; then
+        if [ "$SENSIBLE_UNATTENDED" = true ]; then
+            log_err "Could not preserve the unattended installation log in the target."
+            exit 1
+        fi
+        record_warning "The installer log could not be copied to the installed system."
+    fi
 
     CURRENT_STAGE="safely unmounting the installed system"
     unmount_target
@@ -941,6 +1038,11 @@ a reboot, with the installer gone."
 
     trap - EXIT
     log_success "Installation finished successfully!"
+    if [ "$SENSIBLE_UNATTENDED" = true ]; then
+        log_info "Unattended installation verified and unmounted; returning to caller without reboot."
+        restore_terminal
+        return 0
+    fi
     local COMPLETE_TEXT="Sensible installation completed successfully.
 
 Installed to: ${TARGET_DISK}

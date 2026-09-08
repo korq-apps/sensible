@@ -4,5 +4,11 @@ set -e
 # Make scripts in /usr/local/bin executable
 chmod 0755 /usr/local/bin/sensible-install /usr/local/bin/lazydeb
 
+# Config mode must parse offline, without an optional pip dependency.
+if ! python3 -I -c 'import tomllib'; then
+    echo 'Error: unattended installer requires Python 3.11+ with tomllib.' >&2
+    exit 1
+fi
+
 # Enable NetworkManager
 systemctl enable NetworkManager.service

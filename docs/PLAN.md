@@ -14,38 +14,62 @@ than asked, and third-party software leaves the install path entirely.
 | Phase 7.2 copy install | **done** |
 | Phase 7.3-7.5 live session, guided prompts, KDE | **done** |
 | Phase 7.6 post-install app tool | planned |
-| Release gate | blocked on automated config input, real installed-disk tests, and physical-hardware evidence |
+| Unattended input (#4) | implemented on the feature branch; protected TOML/secret files and config-driven mocked integration tests; real ISO execution pending |
+| Release gate | blocked on real installed-disk tests and physical-hardware evidence; new config path needs image-level acceptance |
 | Phase 6 extras | re-scoped below: baked into the ISO, or moved to the post-install tool |
-| Desktop profiles | applications and GNOME image configuration implemented; real-session acceptance and native KDE profile pending; see [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md) |
+| Desktop profiles | PR #16 merged; both ISO builds/live UEFI smoke checks pass; GNOME and KDE validation reported successful by the user; targeted acceptance and native KDE configuration remain; see [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md) |
 | Offline first-login manual | implemented from PR #2 on the current installer; real desktop first-login validation remains pending |
 
-**Next implementation PR:** validated unattended installer input
-([#4](https://github.com/korq-apps/sensible/issues/4)). It unblocks the real
+**Current feature PR:** validated unattended installer input
+([#4](https://github.com/korq-apps/sensible/issues/4)), implemented on
+`codex/unattended-installer` with parser and mocked full-flow regression coverage.
+After review and image validation, it unblocks the real
 GNOME/KDE × Btrfs/Ext4 × LUKS on/off installed-disk matrix in #5. Do not start
 that matrix by bypassing prompts or disabling destructive-device checks.
 
-**Desktop roadmap:** application/dependency and GNOME-profile source changes are
-implemented. Next, validate them in real images/sessions, then deliver the native
-KDE profile and backup workflow as focused changes. Selectable GNOME theme assets
-are now included; their real-session acceptance remains pending. The agreed
-scope is recorded in [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md); source
-configuration does not waive the release gate or prove a published image.
+**Desktop roadmap:** the GNOME profile, complete global theme/icon collection,
+Flathub and ONLYOFFICE replacement are merged, not another implementation slice.
+Both editions build in CI, and the user reports successful GNOME and KDE
+validation. Keep both as the working desktop baseline; collect only the
+remaining targeted evidence rather than scheduling another general KDE check.
+Native KDE configuration, editor neutrality and backups remain separate work.
+The agreed scope and evidence are in [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md).
 
-## Reconciled priorities (2026-09-06)
+<a id="reconciled-priorities-2026-09-06"></a>
+
+## Reconciled priorities
 
 This queue governs the next work; the numbered phases below also retain
-implementation history. PR #15 is merged: the GNOME profile, optional themes
-and Flathub configuration are on `main`, not a new implementation task.
-GitHub issues #4–#9, #11 and #13 remain open as of this review. New scopes below
-are recorded here only; no new issues or changes to existing tickets have been
-published by this reconciliation.
+implementation history. Updated **2026-09-08** after PR #16 merged into `main`
+as `c7015b4`. The final PR head `5c702c8` passed the unit/integration job and
+both edition ISO/live UEFI smoke jobs in
+[CI run 34102104112](https://github.com/korq-apps/sensible/actions/runs/34102104112).
+The release-publication job was skipped; this is build evidence, not a release.
+GitHub issues #4–#9, #11 and #13 remain open as checked on this date. This
+reconciliation updates repository plans only, not GitHub ticket states.
+
+### Validation snapshot (2026-09-08)
+
+| Evidence | What it establishes | Still outstanding |
+| :--- | :--- | :--- |
+| PR #16 merged; final PR CI successful | GNOME/KDE ISOs build and reach the live UEFI smoke marker; automated regression suite passes | Installed-disk boots and Secure Boot matrix (#5), physical hardware records (#6) |
+| User: latest GNOME build works as expected with the recent changes | Positive GNOME feature smoke/acceptance feedback for this desktop slice | Exact tested ISO checksum/session context and itemized edge-case results were not supplied; do not infer them |
+| User: KDE validation done, OK | Positive KDE validation feedback; general validation reported successful for both editions | Exact artifact and itemized results were not supplied; specific release scenarios remain separately tracked |
+| Real theme/package/container checks recorded below | Theme component parity, GTK loading, office offline package/runtime checks | Targeted office document fidelity/printing, multi-monitor/accessibility, first-login manual lifecycle, shutdown edge cases and resource measurements |
+
+Do not re-plan the implemented GNOME features or repeat their packaging work
+without a reported regression. Keep #13 as the owner of the remaining itemized
+GNOME evidence, not an unstarted configuration project. Broad positive feedback
+does not assert that every device, file format or security scenario was tested.
+
+### Delivery order
 
 | Order | Bounded change | Completion evidence / existing owner |
 | :--- | :--- | :--- |
 | 1 | Validated `--config` input, sharing interactive validation | #4: strict data parsing, protected secrets, no prompts, explicit wipe permission, unchanged disk revalidation, deterministic completion and failure tests |
 | 2 | Build provenance and footprint reporting | Manifest inside both images, matching external metadata/package lists, ISO/squashfs sizes and comparable per-edition summaries; no invented size budget |
 | 3 | Complete offline payload validation and a non-destructive image check | #9: one shared validator used before wipe and by a no-target-disk smoke mode; missing packages/assets and variant mismatches fail explicitly |
-| 4 | Installed-system and desktop acceptance | #5: eight installs and detached-ISO boots, including installed Secure Boot; #13: real GNOME profile/manual/theme behavior. #6 physical Intel/AMD evidence can be collected independently whenever hardware is available |
+| 4 | Installed-system and remaining desktop acceptance | #5: eight installs and detached-ISO boots, including installed Secure Boot; #13: targeted GNOME checks beyond the reported successful smoke. General GNOME/KDE validation is reported successful; remaining targeted desktop and #6 hardware evidence can be collected independently |
 | 5 | Editor neutrality, native KDE profile and reversible customization, in separate small PRs | Include Vim and Neovim without forcing an editor; keep LazyVim opt-in. Preserve user overrides and security settings while completing the existing desktop scope |
 | 6 | Curated optional-app catalog and AI manual, then approved CLI additions | One `sensible-apps` backend, a small first catalog, official optional recipes, and the unresolved AI delivery decision in [AI_TOOLS.md](AI_TOOLS.md) |
 | 7 | Storage/recovery and broader optional capabilities | #11 hybrid ZRAM/swap, Btrfs Snapper recovery and personal backups are distinct slices; use the installed-disk harness and require restore/hibernate evidence |
@@ -56,6 +80,31 @@ hibernation messaging retain their existing scopes; fix discovered safety
 failures before release rather than waiting for their position in this queue.
 Manual-only curation can proceed without committing to AI preinstallation or
 blocking release tests on an app catalog, diagnostics suite or new UI framework.
+
+### Immediate handoff
+
+1. **Next implementation PR: #4 only.** Implement the proposed protected-secret
+   and exit-only contract with validated TOML input through the existing path,
+   and prove invalid/unauthorized configurations cannot reach a wipe. Keep the
+   interactive flow working; no desktop additions or app-catalog work in this PR.
+2. **Alongside it: capture remaining desktop evidence.** General GNOME/KDE
+   validation is reported successful. Record known-good ISO identities when
+   available and itemized office open/save/print, first-login manual lifecycle
+   and remaining lock/override checks. Keep failures
+   attached to the tested image rather than treating every new Testing build
+   as the same candidate. This work does not depend on unattended input.
+3. **Next small infrastructure slices: provenance/footprint and #9.** Reuse the
+   existing package/asset guards; add persistent build identity and a shared
+   read-only pre-wipe/image validator. No arbitrary image-size cap or package cuts.
+4. **Once #4 lands: start #5's eight installed-disk cases.** Do not postpone the
+   matrix for a new diagnostics UI, an app catalog or further theme additions.
+   Record #6 physical checks whenever machines are available.
+
+After that safety/test foundation, deliver editor neutrality (Vim + Neovim,
+Debian-selected editor, optional LazyVim), a native KDE profile, and the optional
+app/AI manual in separate PRs. ZRAM plus hibernation swap (#11), Btrfs Snapper
+recovery and personal-file backup/restore remain distinct later slices. No new
+AI preinstallation decision or storage-policy change is made here.
 
 ### Recommendations: adopt, narrow or defer
 
@@ -77,17 +126,47 @@ The external recommendations are proposals, not evidence of prior decisions.
 
 ### Small follow-up contracts
 
-**Next PR — #4:** parse TOML as data, reject unknown options/keys and invalid or
-missing values before mutation, reuse the interactive validators, and require
-an explicit disk and `confirm_wipe = true`. Specify safe secret-file handling
-and the password contract before integration; never echo secrets in diagnostics.
-Keep variant selection image-owned and retain identity/state revalidation
-immediately before wipe. Define a bounded noninteractive completion action
-instead of waiting at a final menu. Tests must prove malformed input, no wipe
-permission and unsafe/changed disks never reach destructive commands, while
-valid inputs drive the same execution path. Optional apps are not new installer
-keys. Resolve schema details in [INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode-planned--release-test-infrastructure).
-Exporting a reusable profile can follow independently: allowlist non-secret
+#### Current feature slice: validated unattended input (#4)
+
+Scope: add an input adapter to the existing installer, not a second installation
+engine. The implemented v1 contract is in
+[INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode-planned--release-test-infrastructure).
+
+1. **Parser and schema:** parse TOML without shell evaluation; reject unknown
+   CLI options/keys, duplicate or mistyped fields and missing required values.
+   Use a maintained TOML parser available offline in the image; explicitly stage
+   and test its runtime dependency. No desktop-selection or optional-app keys.
+2. **Shared validation and protected secrets:** factor prompt-independent
+   validation out of the form helpers. Keep the existing unified account/root
+   recovery/LUKS password contract, supplied through a protected local file.
+   Reject invalid identity, locale, timezone, keyboard, filesystem and
+   autologin-without-LUKS inputs before applying settings or touching the disk.
+3. **One execution path:** normalize interactive/config input into the same
+   execution state. Explicit target plus `confirm_wipe = true` replaces only
+   the unattended confirmation prompt, never candidate eligibility, minimum
+   size, live-media exclusion, identity revalidation or offline boot preflight.
+4. **No hidden interaction:** config mode must work without a controlling TTY.
+   Skip welcome/forms, repair shells and completion/failure menus. Preserve
+   logging and owned-resource cleanup; return success only after verification
+   and teardown. V1 exits to its caller; the future VM harness owns poweroff,
+   media detachment and booting the installed disk.
+5. **Regression evidence:** add parser/secret tests and config-driven integration
+   cases for both editions and all filesystem/encryption combinations. Prove
+   invalid config, unsafe secrets, insufficient/missing wipe authorization,
+   mounted/live/undersized or changed disks cannot reach partitioning. Assert
+   no prompts, no secret output, correct failure status and cleanup on mandatory
+   post-wipe failures. Existing interactive tests must remain green.
+6. **Documentation and handoff:** ship a non-secret example with wipe permission
+   disabled, document safe secret provisioning and the exit contract, and update
+   the test guide. This PR establishes #4's adapter and fixture evidence; actual
+   QEMU installs and detached-ISO boots belong to #5 immediately afterward.
+
+Not included: profile export, a general dry-run/diagnostics tool, the expanded
+#9 payload validator, new apps/themes, editor defaults or storage-policy changes.
+
+#### Later follow-up contracts
+
+**Sanitized profile export:** follow independently after #4; allowlist non-secret
 preferences, omit disk identifiers and password hashes as well as passwords,
 write with restrictive permissions, and make `confirm_wipe = false` explicit.
 An export is an incomplete template, not a ready-to-run destructive command.
@@ -183,9 +262,10 @@ are living sources of truth, not frozen contracts: update them whenever a
 beginner-journey, safety, reliability, or verified platform constraint requires
 a behavior change. Keep the documents and implementation synchronized.
 
-A checked item means the current repository implements it and has direct code
-or automated-test evidence. It does **not** mean the release is ready or that a
-mocked installer flow proves a real disk can boot.
+A checked implementation item means the repository implements it and has direct
+code or automated-test evidence. Dated acceptance entries explicitly distinguish
+CI, container checks and user-reported feedback. None of these alone means the
+release is ready or that a mocked installer flow proves a real disk can boot.
 
 ```
 Phase 1  Build harness (live-build ISO, TUI live session)
@@ -261,7 +341,12 @@ below, not an optional follow-up.
       user-overridable office file defaults, build-time payload guard and manual.
       LibreOffice remains an optional post-install Debian alternative. No extra
       APT source; updates to the upstream package require a reviewed new pin.
-- [ ] Office acceptance: build both ISOs and test fresh offline GNOME/KDE
+- [x] PR #16 GNOME/KDE ISO builds and UEFI live-boot smoke pass in CI.
+- [x] User reports the latest GNOME build works as expected with recent desktop
+      changes (2026-09-08); broad smoke feedback, not an itemized release matrix.
+- [x] User reports KDE validation done and OK (2026-09-08); both desktop
+      baselines have positive validation, separate from the installed-disk matrix.
+- [ ] Remaining office acceptance: test fresh offline GNOME/KDE
       sessions, create/save/reopen DOCX/XLSX/PPTX and representative ODF files,
       PDF export/printing, fonts/scaling, file defaults and user overrides.
       Measure image footprint and runtime memory; audit corresponding-source
@@ -287,8 +372,10 @@ the mechanism is unresolved and shutdown still needs checking in real sessions.
       defaults. Keep optional theme and backup choices distinct from shipped scope.
   - [x] Application/dependency configuration: photo tools, pinned LocalSend,
         phone integration, management tools, explicit runtime deps and sharing rules.
-  - [ ] Build both images; test offline app startup and actual discovery/transfer
-        with UFW enabled. Record image size/build-time impact before release.
+  - [x] Both edition ISO builds and live UEFI smoke jobs pass for PR #16.
+  - [ ] Complete targeted offline app startup and actual discovery/transfer
+        checks with UFW enabled. Both editions have positive user validation;
+        record itemized results and image/resource impact before release.
   - [x] GNOME profile image configuration: curated extension activation,
         build-validated pins/dependencies, titlebar buttons and privacy-conscious
         fresh-user defaults. These are dconf defaults, not locks.
@@ -304,7 +391,8 @@ the mechanism is unresolved and shutdown still needs checking in real sessions.
         GNOME components globally; no forced Shell/GDM/personal CSS override.
         Murrine omitted because Testing removed it; the selected GTK 3/4
         components do not depend on GTK 2.
-  - [ ] Theme session acceptance: readability, scaling, menus/overview, dock,
+  - [ ] Remaining theme session acceptance beyond the reported GNOME smoke:
+        readability, scaling, menus/overview, dock,
         GTK 3/4 apps, libadwaita boundaries and unchanged login/lock behavior;
         confirm return to stock.
   - [ ] Validate the GNOME extensions in a real offline session across login,
@@ -341,7 +429,7 @@ unsafe disk operation reliable.
 - [x] **Owned cleanup and live sanitization:** track mounts and mappings created by this installer run and clean only those resources; remove live autostart, commands, branding, packages/state, staged source, and reused machine identity from the target
 - [x] **Truthful failures and logs:** critical failures produce failure rather than success; non-critical skipped choices are summarized; terminal/package output is retained in sudo-readable `/var/log/sensible-install.log` and copied to the target, including post-wipe failure cleanup when possible
 - [x] **Beginner install guide:** `docs/INSTALL.md` covers release download/checksum, trusted USB writing, requirements, destructive scope, offline flow, choices, first boot, updates, and honest support/log expectations
-- [ ] **Automated install input:** implement the validated `--config answers.toml` path in [INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode-planned--release-test-infrastructure) as release-test infrastructure, including explicit `confirm_wipe = true`; it belongs before the matrix rather than waiting behind the release gate
+- [x] **Automated install input (source/fixture evidence):** protected `--config answers.toml` input, shared validation, explicit `confirm_wipe = true`, unchanged disk revalidation and exit-only completion; all eight mocked config combinations and failure-path regressions. See [INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode). Real ISO execution remains part of the installed-disk gate below.
 - [ ] **Real QEMU installed-boot matrix:** install each GNOME/KDE release image onto fresh virtual disks for Btrfs/Ext4 × LUKS on/off, then boot from those installed disks under UEFI (not the ISO); verify expected partitions, mounts, `fstab`/`crypttab`, swap/resume arguments, desktop/login, and the LUKS prompt where applicable. Include an installed-system Secure Boot boot
 - [ ] **Physical hardware smoke:** install and first-boot the candidate on at least one Intel and one AMD amd64 UEFI machine; record disk selection, wired/Wi-Fi, graphics, audio input/output, suspend/resume, Secure Boot state, and `fwupd` detection. Document hardware unavailable for a check rather than silently treating it as passed
 - [ ] **Release decision:** archive the candidate ISO checksum and matrix/hardware results, review all failures and warnings, then and only then set `SENSIBLE_RELEASE_READY` to `true` for the release tag

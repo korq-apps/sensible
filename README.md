@@ -60,7 +60,8 @@ Free office fonts are included instead of the recommended Microsoft font
 downloader. There is no extra ONLYOFFICE APT source: updates require a reviewed
 new package, not an ordinary Debian upgrade. The [manual](manual/applications.html#onlyoffice)
 covers usage, compatibility, updates and optional LibreOffice installation.
-Full ISO and real GNOME/KDE office-session acceptance remain pending.
+Both ISO builds and live UEFI smoke passed for PR #16. User validation of GNOME
+and KDE is successful; targeted office acceptance remains separately tracked.
 
 **Desktop profile additions (image configuration):** Shotwell, Extension Manager,
 Tweaks and a curated GNOME extension set; digiKam, KDE Connect and Plasma System
@@ -77,8 +78,9 @@ GTK 3/4 and Shell alternatives installed globally in `/usr/share/themes/`.
 Marble and Graphite remain selectable; Shell/login-screen and libadwaita
 styling are not forcibly overridden. Native KDE
 profile configuration and deferred themes remain in the
-[desktop profile plan](docs/DESKTOP_PROFILES.md). Full-image and real-session
-acceptance is still pending.
+[desktop profile plan](docs/DESKTOP_PROFILES.md). That plan records the successful
+CI builds and 2026-09-08 GNOME/KDE user validation separately from the remaining
+targeted desktop and installed-system release checks.
 
 **Offline help:** open **Sensible Manual** from the application menu or run
 `sensible-manual`. The [local HTML manual](manual/index.html) opens on the
@@ -98,9 +100,13 @@ or first login.
 
 **Included, no question asked:** fingerprint login (`fprintd`, dormant without a reader), oh-my-bash for all users with a two-line Powerline prompt, system-wide git defaults, Powerline symbols and JetBrainsMono Nerd Font, `ufw` firewall (deny incoming / allow outgoing, KDE Connect-aware), and printing/scanning (CUPS driverless + `sane-airscan`) — all baked into the image at build time.
 
-**Planned ([shared priority queue](docs/PLAN.md#reconciled-priorities-2026-09-06)):**
-validated unattended `--config` input comes next to enable real installed-disk
-tests. A later post-install catalog will cover approved optional apps and
+**Unattended installation (implemented in source):** `--config` reads protected
+TOML and a separate password file, retains disk-safety checks, and exits without
+rebooting. See the [testing instructions](docs/INSTALL.md#unattended-installation-for-testing).
+Real installed-disk tests follow; mocked flow coverage is not boot evidence.
+
+**Planned ([shared priority queue](docs/PLAN.md#reconciled-priorities)):**
+a later post-install catalog will cover approved optional apps and
 developer tools (Docker + Compose, `lazygit`, `gh`); BioPass needs separate
 authentication/removal validation. These are not additional installer checkboxes.
 

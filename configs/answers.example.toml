@@ -1,0 +1,15 @@
+# Copy to a root-owned mode-0600 file in the live session and review every value.
+# Never put a password here. This template intentionally does not authorize a wipe.
+disk = "/dev/vda"
+confirm_wipe = false
+filesystem = "btrfs"
+luks = true
+autologin = true
+hostname = "sensible-box"
+username = "alice"
+full_name = ""
+email = ""
+timezone = "UTC"
+locale = "en_US.UTF-8"
+keyboard = "us"
+password_file = "/run/sensible-secrets/password"
