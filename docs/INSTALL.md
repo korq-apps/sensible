@@ -198,6 +198,18 @@ Not every device exposes firmware updates through LVFS.
 - **Secure Boot with proprietary NVIDIA:** Debian's stock boot chain remains
   signed, but the proprietary NVIDIA module may require disabling Secure Boot
   or separately enrolling a Machine Owner Key.
+- **No sound, or silent speakers while headphones work:** run
+  `sensible-audio-check` in a terminal on the installed system, then
+  `sudo sensible-audio-check` for driver detail. It names the cause and the
+  fix: a per-model amplifier tuning file missing from the installed
+  `firmware-cirrus` (the usual reason on a laptop newer than Debian's firmware
+  snapshot), a muted output (`sensible-audio-check --unmute`), another
+  missing firmware file and the package that ships it, or a speaker amplifier
+  the running kernel has no quirk for yet. The firmware and kernel cases
+  affect very new laptops with Realtek codecs and Cirrus/TI amplifiers and
+  clear with `sudo apt full-upgrade` once Debian Testing ships the firmware
+  or kernel that knows the model. The installer shows the same finding on its
+  completion screen when the live session is affected.
 
 The installer writes a log to `/var/log/sensible-install.log` in the live
 session and copies it to the same path on the installed system. It is readable

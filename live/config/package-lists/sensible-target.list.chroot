@@ -28,6 +28,14 @@ wireplumber
 pipewire-pulse
 pipewire-audio
 pipewire-alsa
+# Nothing in the PipeWire stack depends on these, yet Debian calls the UCM
+# profiles "absolutely necessary to make some sound hardware work": without
+# alsa-ucm-conf, Intel SOF and SoundWire (Realtek RT7xx/RT13xx) laptops show
+# no usable output or microphone. alsa-utils supplies alsamixer/alsactl/
+# speaker-test for sensible-audio-check and stores mixer state across boots.
+alsa-ucm-conf
+alsa-topology-conf
+alsa-utils
 network-manager
 power-profiles-daemon
 fwupd

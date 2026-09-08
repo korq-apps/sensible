@@ -190,9 +190,9 @@ Facts to not relearn later:
 | Area | Packages / behavior |
 | :--- | :--- |
 | CPU | `intel-microcode`, `amd64-microcode` |
-| Firmware | `firmware-linux`, `firmware-misc-nonfree`, `firmware-iwlwifi`, `firmware-realtek`, `firmware-atheros`, `firmware-brcm80211`, `firmware-mediatek`, `firmware-sof-signed` |
+| Firmware | `firmware-linux`, `firmware-misc-nonfree`, `firmware-iwlwifi`, `firmware-realtek`, `firmware-atheros`, `firmware-brcm80211`, `firmware-mediatek`, `firmware-sof-signed`, `firmware-cirrus` (per-model CS35L41/CS35L56 speaker-amplifier tuning), `firmware-intel-sound` |
 | Wi-Fi / BT | NetworkManager, `iwd` or `wpa_supplicant`, BlueZ, `libspa-0.2-bluetooth` |
-| Audio | PipeWire, WirePlumber, `pipewire-pulse`, `pipewire-audio`, `pipewire-alsa` |
+| Audio | PipeWire, WirePlumber, `pipewire-pulse`, `pipewire-audio`, `pipewire-alsa`, `alsa-ucm-conf` (nothing in PipeWire depends on it; without the UCM profiles SOF and SoundWire laptops expose no device), `alsa-topology-conf`, `alsa-utils`; `sensible-audio-check` is baked as a read-only diagnostic with an opt-in `--unmute`, and the installer runs its `--summary` in the live session to record findings as completion warnings |
 | GPU | `mesa-vulkan-drivers`, `va-driver-all` (VDPAU comes from `mesa-libgallium` via mesa; `vdpau-driver-all` was removed from Testing); the offline closure includes `nvidia-driver`, while NVIDIA KMS configuration is enabled only when `lspci` sees matching hardware |
 | Power | `power-profiles-daemon` (not TLP — it fights PPD and both DEs) |
 | Biometrics | `fprintd`, `libpam-fprintd` (baked); BioPass optional — see §5 **(planned — post-install tool)** |
@@ -203,6 +203,8 @@ Facts to not relearn later:
 `firmware-broadcom` is not a Debian package name; Broadcom Wi-Fi is `firmware-brcm80211`. `firmware-linux-nonfree` is a leftover name — do not list it.
 
 NVIDIA: the proprietary stack is baked into the offline closure because installation cannot fetch it after the live root is copied. There is no nouveau-vs-proprietary prompt in v1. The installer adds `nvidia-drm.modeset=1` only when NVIDIA is detected — without KMS, GDM/KWin silently fall back to X11 on exactly the hardware being special-cased.
+
+Audio: the image can only be as new as Testing's firmware and kernel. Laptops with a Realtek HDA codec and Cirrus CS35L54/56/57 speaker amplifiers (the codec vendors list as ALC3306, ALC3287 and similar) need a per-model tuning file, `cirrus/cs35l56-*-dsp1-misc-<system name>*`, that linux-firmware adds model by model; the amplifier driver refuses to run without it because the BIOS leaves the DSP unpatched, so the internal speakers stay silent while headphones work until `firmware-cirrus` catches up (`apt full-upgrade`). The kernel side is generic since 6.12, which binds any CS35L54/56/57 found in ACPI, but brand-new models can still need a quirk for lesser features such as the mic-mute LED or a ghost AMD-DSP microphone. `sensible-audio-check` checks the tuning file directly, reports an unbound amplifier with the codec subsystem ID a report needs, and the weekly rebuilds pick up firmware and kernel as they migrate. Debian packages no AMD SOF DSP firmware, so boards that route the microphone through the AMD DSP keep it off. The installer deletes the live session's `/var/lib/alsa/asound.state` so the installed system initialises its mixer from the ALSA defaults rather than from the live console's levels.
 
 ---
 

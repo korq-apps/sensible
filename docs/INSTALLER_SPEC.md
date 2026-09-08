@@ -231,9 +231,16 @@ chmod 1777 /mnt/tmp
 
 After a live-root copy, remove the live installer profile scripts, command
 wrappers, staged `/opt/sensible` source/docs, live issue/MOTD branding, root
-autologin units, and live-only package/state trees. Reset `machine-id`. Purge
-`live-boot`, `live-config`, and `live-config-systemd` before rebuilding the
-target initramfs.
+autologin units, and live-only package/state trees. Reset `machine-id` and
+delete `/var/lib/alsa/asound.state` (mixer levels `alsa-state.service` stored
+for the live console). Purge `live-boot`, `live-config`, and
+`live-config-systemd` before rebuilding the target initramfs.
+
+Before the completion summary, run `sensible-audio-check --summary` from the
+live root and record each printed line as a warning (`record_audio_warnings`
+in `installer/lib/hardware.sh`). The live session runs the same kernel and
+firmware the target copies, so a silent laptop is silent after first boot too.
+The check is read-only; a missing or failing checker never aborts the install.
 
 Bind the API filesystems before any chroot, but mount a fresh tmpfs at target
 `/run` so live runtime state cannot leak into initramfs generation:
@@ -339,10 +346,12 @@ Always:
   locales keyboard-configuration console-setup
   firmware-linux firmware-misc-nonfree firmware-iwlwifi firmware-realtek
   firmware-atheros firmware-brcm80211 firmware-mediatek firmware-sof-signed
+  firmware-cirrus firmware-intel-sound
   cryptsetup cryptsetup-initramfs
   plymouth plymouth-themes
   grub-efi-amd64 grub-efi-amd64-signed shim-signed
-  network-manager pipewire wireplumber pipewire-pulse pipewire-audio
+  network-manager pipewire wireplumber pipewire-pulse pipewire-audio pipewire-alsa
+  alsa-ucm-conf alsa-topology-conf alsa-utils
   libspa-0.2-bluetooth bluez
   power-profiles-daemon fwupd
   flatpak

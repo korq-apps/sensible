@@ -88,6 +88,11 @@ sanitize_live_target() {
           "${MNT}/usr/local/bin/lazydeb" \
           "${MNT}/etc/issue.sensible"
     rm -rf "${MNT}/opt/sensible"
+    # alsa-utils stores mixer levels here (alsa-state.service) and restores
+    # them at boot. Levels captured from the live console session must not
+    # become the installed system's baseline; a fresh first boot initialises
+    # the mixer from the ALSA defaults instead.
+    rm -f "${MNT}/var/lib/alsa/asound.state"
     printf 'Debian GNU/Linux testing \\n \\l\n' > "${MNT}/etc/issue"
     printf 'Debian GNU/Linux testing\n' > "${MNT}/etc/issue.net"
     : > "${MNT}/etc/motd"
@@ -928,6 +933,8 @@ a reboot, with the installer gone."
         exit 1
     fi
     log_success "Post-install verification passed: kernel, initramfs, GRUB, and fstab are in place."
+
+    record_audio_warnings
 
     CURRENT_STAGE="finalizing the installer log"
     install_progress_update 12 "Finalizing the installation"

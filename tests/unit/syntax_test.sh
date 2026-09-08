@@ -49,6 +49,7 @@ sh_files=(
     live/config/includes.chroot/etc/profile.d/99-sensible-firmware-check.sh
     live/config/includes.chroot/etc/profile.d/99-sensible-autostart.sh
     live/config/includes.chroot/usr/local/bin/lazydeb
+    live/config/includes.chroot/usr/local/bin/sensible-audio-check
     scripts/run-qemu.sh
     scripts/smoke-boot.sh
     scripts/build-native.sh
@@ -67,6 +68,7 @@ sh_files=(
     tests/unit/ci_runtime_test.sh
     tests/unit/build_cache_test.sh
     tests/unit/package_check_test.sh
+    tests/unit/audio_test.sh
     tests/integration/installer_flow_test.sh
 )
 for f in "${sh_files[@]}"; do

@@ -113,15 +113,17 @@ Slack, WhatsApp, Zoom, Discord, and the rest belong on **Flathub**, not in the b
 Make as much hardware work as Debian Testing allows, on first boot:
 
 - Kernel: `linux-image-amd64` plus `intel-microcode` / `amd64-microcode`
-- Firmware: `firmware-linux`, `firmware-misc-nonfree`, `firmware-iwlwifi`, `firmware-realtek`, `firmware-atheros`, `firmware-brcm80211`, `firmware-mediatek`, `firmware-sof-signed`
+- Firmware: `firmware-linux`, `firmware-misc-nonfree`, `firmware-iwlwifi`, `firmware-realtek`, `firmware-atheros`, `firmware-brcm80211`, `firmware-mediatek`, `firmware-sof-signed`, `firmware-cirrus`, `firmware-intel-sound`
 - GPU: Mesa Vulkan + VA-API/VDPAU; the offline closure includes `nvidia-driver`, and NVIDIA-specific KMS configuration is enabled only when matching hardware is detected
-- Audio / BT: PipeWire + WirePlumber + `libspa-0.2-bluetooth`
+- Audio / BT: PipeWire + WirePlumber + `libspa-0.2-bluetooth`, plus `alsa-ucm-conf` (no PipeWire package depends on it, yet Intel SOF and SoundWire laptops expose no audio device without it), `alsa-utils` and the Cirrus/TI speaker-amplifier firmware. `sensible-audio-check` names the cause of a silent laptop (muted output, missing firmware file, or a speaker amplifier the running kernel has no quirk for) and the fix; the installer runs it in the live session and shows the findings on the completion screen
 - Power: `power-profiles-daemon`
 - Device firmware updates: `fwupd` + LVFS
 - Secure Boot: shim + Debian-signed GRUB chain on the **installed system** (NVIDIA module and hibernation are blocked under lockdown — documented in Architecture). Secure Boot on the live installer ISO is enabled via live-build (`--uefi-secure-boot enable`) and verified under OVMF with Microsoft keys (`SMOKE_FIRMWARE=sb scripts/smoke-boot.sh`): the kernel reports `secureboot: Secure boot enabled` and loads the Debian Secure Boot CA.
 - Biometrics: fingerprint via `fprintd` + `libpam-fprintd` (baked; dormant without a reader). Printing/scanning (CUPS driverless + `sane-airscan`) is baked too. BioPass face login is a planned post-install opt-in.
 
 First target is **amd64 + UEFI**. Legacy BIOS and other arches are out of scope for v1.
+
+Two audio limits sit outside the image's control, and `sensible-audio-check` names both. Laptops with a Realtek HDA codec and Cirrus CS35L56 speaker amplifiers (Lenovo, Dell and HP list the codec as ALC3306 and similar) need a per-model amplifier tuning file that linux-firmware adds after the laptop ships; the amplifier driver refuses to run without it, so on a laptop newer than the `firmware-cirrus` snapshot in the image the internal speakers stay silent while headphones work. A routine `apt full-upgrade` clears it once Debian packages the newer snapshot (the Lenovo Legion 7 15ASH11's files arrived in firmware-nonfree 20260519-1, which Debian stable does not have; the image tracks Testing). Kernel quirks for brand-new models lag the same way. Debian also packages no AMD SOF DSP firmware, so a board that routes its microphone through the AMD DSP keeps it off.
 
 ---
 

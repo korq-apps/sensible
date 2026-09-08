@@ -1,0 +1,372 @@
+#!/usr/bin/env bash
+# sensible-audio-check — explain why a machine has no sound, and what to do.
+#
+# Sensible bakes the audio stack (PipeWire, ALSA UCM profiles, SOF and
+# amplifier firmware) into the image, but laptops with a Realtek HDA codec and
+# separate speaker amplifiers (Cirrus CS35L41/CS35L56, TI TAS2781 -- the parts
+# Lenovo, Dell and HP list as "ALC3306" and friends) still go silent for three
+# reasons that look identical from the desktop:
+#   - the per-model amplifier tuning file is missing because the installed
+#     firmware snapshot predates the laptop: the CS35L56 driver refuses to run
+#     without it, so the internal speakers stay silent while headphones work;
+#   - the kernel has no quirk for the laptop yet, so the codec never binds
+#     the amplifiers: the same symptom;
+#   - the output is simply muted in PipeWire or the ALSA mixer.
+# This tool reads /proc/asound, ACPI, the kernel log and the session state,
+# names the problem and prints the command that fixes it. It is read-only
+# unless --unmute is given.
+#
+# Usage: sensible-audio-check [--summary] [--unmute]
+#   --summary   one plain line per problem, nothing else (installer use)
+#   --unmute    unmute the default output and the ALSA speaker controls
+# Exit 0: no problem found; 1: at least one problem; 2: usage error.
+set -uo pipefail
+
+# Test hook: prefix for every absolute path read below.
+SYSROOT="${SENSIBLE_AUDIO_SYSROOT:-}"
+ASOUND="${SYSROOT}/proc/asound"
+ACPI_DEVICES="${SYSROOT}/sys/bus/acpi/devices"
+DMI="${SYSROOT}/sys/class/dmi/id"
+UCM_DIR="${SYSROOT}/usr/share/alsa/ucm2"
+FIRMWARE_DIR="${SYSROOT}/usr/lib/firmware"
+ALSACTL="${SYSROOT}/usr/sbin/alsactl"
+
+# ACPI hardware IDs of the HDA "side codec" speaker amplifiers that the
+# Realtek driver must bind through a per-laptop quirk
+# (sound/hda/codecs/side-codecs in the kernel tree).
+AMP_HIDS='CSC3551|CSC3554|CSC3556|CSC3557|CLSA0100|CLSA0101|TXNW2781|TIAS2781|INT8866'
+USAGE="Usage: sensible-audio-check [--summary] [--unmute]"
+
+SUMMARY=false
+UNMUTE=false
+for arg in "$@"; do
+    case "$arg" in
+        --summary) SUMMARY=true ;;
+        --unmute) UNMUTE=true ;;
+        -h|--help) echo "$USAGE"; exit 0 ;;
+        *)
+            echo "Error: unknown argument '${arg}'" >&2
+            echo "$USAGE" >&2
+            exit 2 ;;
+    esac
+done
+
+PROBLEMS=()
+NOTES=()
+
+say() { [ "$SUMMARY" = true ] || printf '%s\n' "$*"; }
+
+# problem SUMMARY-LINE [DETAIL-LINE...]: the summary line is what --summary
+# prints and what the installer records; the detail lines are the fix.
+problem() {
+    local summary="$1"
+    shift
+    PROBLEMS+=("$summary")
+    [ "$SUMMARY" = true ] && return 0
+    printf '\nPROBLEM: %s\n' "$summary"
+    local line
+    for line in "$@"; do
+        printf '  %s\n' "$line"
+    done
+}
+
+note() { NOTES+=("$*"); }
+
+read_line() { [ -r "$1" ] && head -n 1 "$1" 2>/dev/null; }
+
+# --- Machine ---------------------------------------------------------------
+MACHINE="$(read_line "${DMI}/sys_vendor") $(read_line "${DMI}/product_name")"
+PRODUCT_VERSION="$(read_line "${DMI}/product_version")"
+[ -n "$PRODUCT_VERSION" ] && MACHINE="${MACHINE} (${PRODUCT_VERSION})"
+say "Sensible audio check"
+say "  Machine: ${MACHINE# }"
+say "  Kernel:  $(uname -r)"
+
+# --- Sound cards and codecs ---------------------------------------------------
+CARD_IDS=()
+if [ -r "${ASOUND}/cards" ]; then
+    while IFS= read -r line; do
+        [[ "$line" =~ ^[[:space:]]*([0-9]+)[[:space:]]+\[[^]]*\][[:space:]]*:[[:space:]]*(.*)$ ]] || continue
+        CARD_IDS+=("${BASH_REMATCH[1]}")
+        say "  card${BASH_REMATCH[1]}: ${BASH_REMATCH[2]}"
+    done < "${ASOUND}/cards"
+fi
+[ ${#CARD_IDS[@]} -gt 0 ] || say "  Sound cards: none"
+
+REALTEK_CODEC=""
+REALTEK_SSID=""
+for codec in "${ASOUND}"/card*/codec#*; do
+    [ -r "$codec" ] || continue
+    name="$(sed -n 's/^Codec: //p' "$codec" | head -n 1)"
+    ssid="$(sed -n 's/^Subsystem Id: //p' "$codec" | head -n 1)"
+    say "  Codec:   ${name:-unknown} (subsystem ${ssid:-unknown})"
+    if [ -z "$REALTEK_CODEC" ] && [[ "$name" == Realtek* ]]; then
+        REALTEK_CODEC="$name"
+        REALTEK_SSID="${ssid:-unknown}"
+    fi
+done
+
+AMPS=()
+for dev in "${ACPI_DEVICES}"/*; do
+    hid="${dev##*/}"
+    hid="${hid%%:*}"
+    [[ "$hid" =~ ^(${AMP_HIDS})$ ]] || continue
+    case " ${AMPS[*]:-} " in
+        *" ${hid} "*) ;;
+        *) AMPS+=("$hid") ;;
+    esac
+done
+[ ${#AMPS[@]} -gt 0 ] && say "  Speaker amplifiers (ACPI): ${AMPS[*]}"
+
+# --- Kernel log --------------------------------------------------------------
+KERNEL_LOG=""
+if KERNEL_LOG="$(journalctl -k -b 0 --no-pager -o cat 2>/dev/null)" && [ -n "$KERNEL_LOG" ]; then
+    :
+elif KERNEL_LOG="$(dmesg 2>/dev/null)" && [ -n "$KERNEL_LOG" ]; then
+    :
+else
+    KERNEL_LOG=""
+    note "The kernel log is not readable by this user; run 'sudo sensible-audio-check' for driver and firmware detail."
+fi
+
+if [ ${#CARD_IDS[@]} -eq 0 ]; then
+    problem "No sound card was detected by the kernel." \
+        "Common causes: the audio DSP firmware failed to load (look for 'sof-audio'" \
+        "errors below or in 'sudo journalctl -k'), or audio is disabled in firmware setup." \
+        "Intel laptops can use the plain HDA driver until the DSP path works, at the" \
+        "cost of the internal microphone: add snd_intel_dspcfg.dsp_driver=1 to" \
+        "GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub, run 'sudo update-grub', reboot."
+fi
+
+# --- Per-model amplifier tuning ----------------------------------------------
+# linux-firmware ships the Cirrus amplifier tuning per laptop model, named after
+# the system name the amplifier driver reports (normally the codec subsystem
+# ID). CS35L54/56/57 refuse to run without it when the BIOS leaves the DSP
+# unpatched, which is the normal case, so a laptop newer than the installed
+# firmware snapshot is silent for exactly this reason. Check the file itself
+# rather than inferring it from a log that may be unreadable.
+TUNING_NAME=""
+if [ -n "$KERNEL_LOG" ]; then
+    TUNING_NAME="$(grep -oE "DSP system name: '[0-9A-Fa-f]+'" <<< "$KERNEL_LOG" \
+        | head -n 1 | grep -oE "[0-9A-Fa-f]+'" | tr -d "'")"
+fi
+if [ -z "$TUNING_NAME" ] && [[ "$REALTEK_SSID" =~ ^0x([0-9A-Fa-f]{8})$ ]]; then
+    TUNING_NAME="${BASH_REMATCH[1]}"
+fi
+TUNING_NAME="${TUNING_NAME,,}"
+HAS_CS35L56=false
+HAS_CS35L41=false
+for hid in "${AMPS[@]}"; do
+    case "$hid" in
+        CSC3554|CSC3556|CSC3557) HAS_CS35L56=true ;;
+        CSC3551|CLSA0100|CLSA0101) HAS_CS35L41=true ;;
+    esac
+done
+TUNING_MISSING=false
+if [ -n "$TUNING_NAME" ] && [ "$HAS_CS35L56" = true ]; then
+    if compgen -G "${FIRMWARE_DIR}/cirrus/cs35l5[467]-*-dsp1-misc-${TUNING_NAME}*" >/dev/null; then
+        say "  Amplifier tuning: cirrus/cs35l56-*-dsp1-misc-${TUNING_NAME}* present"
+    else
+        TUNING_MISSING=true
+        problem "Amplifier tuning firmware for this laptop (cirrus/cs35l56-*-dsp1-misc-${TUNING_NAME}*) is not installed; the CS35L56 speaker amplifiers stay silent without it." \
+            "Headphones still work. The installed firmware-cirrus snapshot predates this laptop:" \
+            "linux-firmware adds these files model by model. Update Debian's firmware, reboot:" \
+            "  sudo apt update && sudo apt full-upgrade" \
+            "If Debian has no newer firmware-cirrus yet, copy the matching files from upstream" \
+            "linux-firmware (https://gitlab.com/kernel-firmware/linux-firmware, cirrus/) into" \
+            "/usr/lib/firmware/cirrus/ and reboot."
+    fi
+fi
+if [ -n "$TUNING_NAME" ] && [ "$HAS_CS35L41" = true ] \
+    && ! compgen -G "${FIRMWARE_DIR}/cirrus/cs35l41-dsp1-spk-prot-${TUNING_NAME}*" >/dev/null; then
+    note "No per-model CS35L41 tuning (cirrus/cs35l41-dsp1-spk-prot-${TUNING_NAME}*) is installed; the amplifiers run with generic settings (lower volume, no speaker protection) until a newer firmware-cirrus provides it."
+fi
+
+if [ -n "$REALTEK_CODEC" ] && [ ${#AMPS[@]} -gt 0 ] && [ "$TUNING_MISSING" = false ]; then
+    if [ -z "$KERNEL_LOG" ]; then
+        note "Could not verify that the ${AMPS[*]} speaker amplifier is bound; run 'sudo sensible-audio-check'."
+    elif ! grep -qE "bound (i2c|spi)-(${AMP_HIDS}):" <<< "$KERNEL_LOG"; then
+        problem "Speaker amplifier ${AMPS[*]} was not bound by this kernel (${REALTEK_CODEC}, subsystem ${REALTEK_SSID}); internal speakers may stay silent until a newer kernel is installed." \
+            "Headphones usually still work. The amplifier firmware is installed, so what is" \
+            "left is the kernel: it needs a quirk for this exact laptop model, and Debian" \
+            "Testing kernels add them continuously. Install updates, reboot:" \
+            "  sudo apt update && sudo apt full-upgrade" \
+            "If the speakers stay silent on the newest kernel, report it with this output;" \
+            "the manual's Troubleshooting chapter lists what to include."
+    fi
+fi
+
+# --- Firmware ----------------------------------------------------------------
+firmware_package() {
+    case "$1" in
+        cirrus/*) echo "firmware-cirrus" ;;
+        intel/sof*) echo "firmware-sof-signed" ;;
+        intel/avs*|intel/catpt*) echo "firmware-intel-sound" ;;
+        ti/*|TAS2*|INT8866*) echo "firmware-misc-nonfree" ;;
+        *) echo "" ;;
+    esac
+}
+
+FW_MISSING=()
+if [ -n "$KERNEL_LOG" ]; then
+    while IFS= read -r path; do
+        [ -n "$path" ] || continue
+        case " ${FW_MISSING[*]:-} " in
+            *" ${path} "*) ;;
+            *) FW_MISSING+=("$path") ;;
+        esac
+    done < <(grep -oE 'Direct firmware load for [^ ]+ failed' <<< "$KERNEL_LOG" \
+        | awk '{ print $5 }' \
+        | grep -E '^(cirrus/|intel/sof|intel/avs|intel/catpt|amd/sof|ti/|TAS2|INT8866)')
+fi
+for path in "${FW_MISSING[@]}"; do
+    package="$(firmware_package "$path")"
+    if [ -n "$package" ]; then
+        problem "Audio firmware file ${path} was not found; it belongs to Debian's ${package} package." \
+            "Reinstall or update the package, then reboot:" \
+            "  sudo apt update && sudo apt install --reinstall ${package}" \
+            "A file newer than Debian's firmware snapshot arrives with the next" \
+            "firmware update ('sudo apt full-upgrade')."
+    elif [[ "$path" == amd/sof* ]]; then
+        problem "Audio firmware file ${path} was not found; Debian does not package the AMD SOF DSP firmware." \
+            "This board routes its microphone or speakers through the AMD audio DSP." \
+            "Debian ships no package for that firmware; the only source is upstream" \
+            "linux-firmware. Until then the affected device stays off."
+    else
+        problem "Audio firmware file ${path} was not found by the kernel." \
+            "Check that firmware-linux is installed and up to date: sudo apt full-upgrade"
+    fi
+done
+
+DRIVER_ERRORS=""
+if [ -n "$KERNEL_LOG" ]; then
+    # Device names carry colons (0000:00:1f.3, i2c-CSC3556:00), so match
+    # "<driver> <device>: <message>" by whitespace rather than by colon.
+    DRIVER_ERRORS="$(grep -E \
+        '(cs35l41|cs35l56|tas2781|tas2563)-hda[^ ]* [^ ]*: .*([Ff]ail|[Ee]rror|not found|required)|(sof-audio|snd_sof)[^ ]* [^ ]*: .*([Ee]rror|[Ff]ail)|snd_hda_intel [^ ]*: no codecs found|hdaudio [^ ]*: (Unable|[Ff]ailed)' \
+        <<< "$KERNEL_LOG" | grep -vE 'Direct firmware load' | sort -u | head -n 8)"
+fi
+if [ -n "$DRIVER_ERRORS" ]; then
+    problem "The audio driver reported errors in the kernel log (see 'sudo journalctl -k')." \
+        "$DRIVER_ERRORS" \
+        "Include these lines in a bug report."
+fi
+
+# --- Installed audio components ---------------------------------------------
+if [ ! -d "$UCM_DIR" ]; then
+    problem "ALSA Use Case Manager profiles are missing (alsa-ucm-conf); SOF and SoundWire laptops show no usable audio devices without them." \
+        "Install them and reboot:  sudo apt install alsa-ucm-conf"
+fi
+if [ ${#AMPS[@]} -gt 0 ] && [ ! -d "${FIRMWARE_DIR}/cirrus" ]; then
+    problem "Cirrus amplifier firmware is not installed (firmware-cirrus)." \
+        "Install it and reboot:  sudo apt install firmware-cirrus"
+fi
+[ -d "${FIRMWARE_DIR}/intel/sof" ] || note "Intel SOF firmware directory is absent (firmware-sof-signed); Intel laptops with a DSP need it."
+[ -x "$ALSACTL" ] || note "alsa-utils (alsamixer, alsactl, speaker-test) is not installed; 'sudo apt install alsa-utils' adds the ALSA mixer tools."
+
+# --- PipeWire session (only for a logged-in, non-root user) ------------------
+SINK_STATE=""
+SESSION_CHECKED=false
+if [ "$(id -u)" -ne 0 ] && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+    SESSION_CHECKED=true
+    if command -v systemctl >/dev/null 2>&1; then
+        units=(pipewire wireplumber)
+        states=()
+        mapfile -t states < <(systemctl --user is-active "${units[@]}" 2>/dev/null)
+        for i in "${!units[@]}"; do
+            [ "${states[$i]:-unknown}" = "active" ] \
+                || problem "PipeWire session service ${units[$i]} is not running (${states[$i]:-unknown})." \
+                    "Start it:  systemctl --user start ${units[$i]}"
+        done
+    fi
+    if command -v wpctl >/dev/null 2>&1; then
+        if SINK_STATE="$(wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null)" && [ -n "$SINK_STATE" ]; then
+            say "  Default output: ${SINK_STATE}"
+            volume="${SINK_STATE#Volume: }"
+            volume="${volume%% *}"
+            if [[ "$SINK_STATE" == *"[MUTED]"* ]]; then
+                problem "The default audio output is muted in PipeWire." \
+                    "Unmute it:  sensible-audio-check --unmute   (or the desktop volume control)"
+            elif [ "$volume" = "0.00" ]; then
+                problem "The default audio output volume is 0." \
+                    "Raise it:  sensible-audio-check --unmute   (sets 50%) or the desktop volume control"
+            fi
+        else
+            SINK_STATE=""
+            problem "PipeWire has no default audio output device." \
+                "The sound card is missing, its driver failed, or its profile is set to" \
+                "'Off' in the desktop sound settings."
+        fi
+        if source_state="$(wpctl get-volume @DEFAULT_AUDIO_SOURCE@ 2>/dev/null)" \
+            && [[ "$source_state" == *"[MUTED]"* ]]; then
+            note "The default microphone is muted in PipeWire; unmute it in the desktop sound settings if that is not intended."
+        fi
+    fi
+else
+    note "PipeWire session checks were skipped (run as the logged-in user, without sudo, to check mute state and volume)."
+fi
+
+# --- ALSA mixer switches ------------------------------------------------------
+MUTED_CONTROLS=()
+if command -v amixer >/dev/null 2>&1; then
+    for id in "${CARD_IDS[@]}"; do
+        control=""
+        control_recorded=false
+        while IFS= read -r line; do
+            case "$line" in
+                "Simple mixer control '"*)
+                    control="${line#Simple mixer control \'}"
+                    control="${control%%\'*}"
+                    control_recorded=false ;;
+                *Playback*"[off]"*)
+                    # One entry per control, however many channels it lists.
+                    [ "$control_recorded" = false ] || continue
+                    case "$control" in
+                        Master|Speaker|"Bass Speaker"|PCM|Front)
+                            MUTED_CONTROLS+=("${id}:${control}")
+                            control_recorded=true ;;
+                    esac ;;
+            esac
+        done < <(amixer -c "$id" 2>/dev/null)
+    done
+fi
+if [ ${#MUTED_CONTROLS[@]} -gt 0 ]; then
+    problem "ALSA mixer controls are muted: ${MUTED_CONTROLS[*]} (card:control)." \
+        "Unmute them:  sensible-audio-check --unmute   (or alsamixer, key M)"
+fi
+
+# --- Optional repair ----------------------------------------------------------
+if [ "$UNMUTE" = true ]; then
+    say ""
+    if [ "$SESSION_CHECKED" = true ] && command -v wpctl >/dev/null 2>&1; then
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ 0 2>/dev/null && say "Unmuted the default PipeWire output."
+        if [[ "$SINK_STATE" == "Volume: 0.00"* ]]; then
+            wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.5 2>/dev/null && say "Set the default output volume to 50%."
+        fi
+    fi
+    for entry in "${MUTED_CONTROLS[@]}"; do
+        amixer -q -c "${entry%%:*}" sset "${entry#*:}" unmute 2>/dev/null \
+            && say "Unmuted ALSA control '${entry#*:}' on card ${entry%%:*}."
+    done
+    say "Re-run sensible-audio-check to confirm."
+fi
+
+# --- Result ------------------------------------------------------------------
+if [ "$SUMMARY" = true ]; then
+    [ ${#PROBLEMS[@]} -eq 0 ] || printf '%s\n' "${PROBLEMS[@]}"
+else
+    if [ ${#NOTES[@]} -gt 0 ]; then
+        say ""
+        say "Notes:"
+        for line in "${NOTES[@]}"; do
+            say "  - ${line}"
+        done
+    fi
+    say ""
+    if [ ${#PROBLEMS[@]} -eq 0 ]; then
+        say "Result: no audio problems detected."
+    else
+        say "Result: ${#PROBLEMS[@]} problem(s) found. Include this output when asking for help."
+    fi
+fi
+[ ${#PROBLEMS[@]} -eq 0 ]

@@ -95,6 +95,7 @@ and path confinement even for a known reference.
 | `ci_runtime_test.sh` | Smoke-test early readiness, deadline failures, premature guest exits, settling, QEMU cancellation, and named-container status/cleanup using process mocks |
 | `build_cache_test.sh` | Real stage-driver filesystem operations with mocked build commands: clean state, package-only cache restore, successful snapshot refresh, and preservation of the prior snapshot after failure |
 | `package_check_test.sh` | Native Testing-only APT configuration, host-state isolation, missing packages, archive refresh failures, and incomplete package collection |
+| `audio_test.sh` | Audio closure packages (UCM, ALSA tools, amplifier/DSP firmware) and their placement outside the documented app set; `sensible-audio-check` against fixture sysroots with mocked journal, PipeWire and ALSA: healthy Legion 7 15ASH11, per-model amplifier tuning missing from the firmware snapshot (log or codec-ID based, compressed files), CS35L41 generic-tuning note, unbound amplifier (missing kernel quirk), SoundWire board without an HDA codec, unreadable log, missing firmware files mapped to packages, no sound card, missing UCM/tools, session mute/zero/no-sink/inactive, mixer mute without the headphone switch, `--unmute` writes and the read-only default; the installer's warning helper |
 | `verify_test.sh` | Installed boot artifacts and extracted initramfs mapping/source identity, including stale UUIDs and literal mapping-name matching |
 
 ### Integration test (`tests/integration/installer_flow_test.sh`)
@@ -118,8 +119,9 @@ Assertions cover generated files (fstab, crypttab, hostname,
 locale, keyboard, grub `resume=` rules, keyd, brave origin), call sequences
 (partition types/sizes, LUKS format args, live keyboard setup,
 stable disk identity, group creation, sudo membership, offline closure checks, theme,
-bootloader, owned teardown, and preserved failure logs), plus success/abort exit
-codes.
+bootloader, owned teardown, and preserved failure logs), live ALSA mixer state
+removal and audio-check findings on the completion screen, plus success/abort
+exit codes.
 
 ## Testing hooks in production code (behavior-preserving)
 
@@ -139,6 +141,9 @@ codes.
   boot smoke (`build-iso.yml`) asserts UEFI boot reaches a stable marker from
   the live serial autologin shell.
 - Plymouth graphical unlock and `systemctl` behavior of the installed system.
+- Real audio hardware: whether the kernel binds a laptop's speaker amplifier or
+  PipeWire produces sound is only observable on hardware. The audio fixtures
+  cover parsing and messaging, not drivers.
 - Desktop app startup on real GNOME/KDE sessions, file-chooser/tray integration,
   phone pairing and LocalSend transfers with UFW enabled on IPv4/IPv6 networks.
   Mocked rule tests do not prove discovery or firewall behavior on hardware.
