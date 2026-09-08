@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Prepare the "Try Sensible" live desktop chosen from the boot menu.
+#
+# Runs once per boot as root from sensible-live-desktop.service: after
+# live-config has created the throwaway live account and before the display
+# manager starts. The live account's password is "live", so the idle screen
+# lock the installed system keeps would only lock people out of a session they
+# cannot lose anything in. Everything written here lands in the live user's
+# home (deleted by the installer's sanitize step) or in /etc/sddm.conf (also
+# removed there), so nothing can reach an installed system.
+set -uo pipefail
+
+# Test hooks: a root prefix for every path, and the kernel command line file.
+ROOT="${SENSIBLE_LIVE_ROOT:-}"
+CMDLINE="${SENSIBLE_LIVE_CMDLINE:-/proc/cmdline}"
+LAUNCHER="${ROOT}/usr/share/applications/sensible-install.desktop"
+
+[ -r "$CMDLINE" ] || exit 0
+read -r -a args < "$CMDLINE"
+session=""
+live_user="user"
+for arg in "${args[@]}"; do
+    case "$arg" in
+        sensible.session=*) session="${arg#sensible.session=}" ;;
+        live-config.username=*|username=*) live_user="${arg#*username=}" ;;
+    esac
+done
+[ "$session" = "desktop" ] || exit 0
+
+home="${ROOT}/home/${live_user}"
+if [ ! -d "$home" ]; then
+    echo "sensible-live-desktop: live user '${live_user}' has no home; nothing to prepare." >&2
+    exit 0
+fi
+variant="$(cat "${ROOT}/etc/sensible/variant" 2>/dev/null || echo gnome)"
+
+# GSettings must be written as the live user, against that user's own dconf
+# database, so runuser carries the user's HOME along.
+user_gsettings() {
+    runuser -u "$live_user" -- env HOME="/home/${live_user}" \
+        dbus-run-session -- gsettings "$@"
+}
+
+case "$variant" in
+    gnome)
+        user_gsettings set org.gnome.desktop.screensaver lock-enabled false \
+            || echo "sensible-live-desktop: could not disable the live screen lock." >&2
+        # Put the installer first in the dash so it is one click away.
+        favorites="$(user_gsettings get org.gnome.shell favorite-apps 2>/dev/null || echo '[]')"
+        if [[ "$favorites" != *"'sensible-install.desktop'"* ]]; then
+            inner="${favorites#\[}"
+            inner="${inner%\]}"
+            inner="${inner# }"
+            if [ -n "$inner" ]; then
+                favorites="['sensible-install.desktop', ${inner}]"
+            else
+                favorites="['sensible-install.desktop']"
+            fi
+            user_gsettings set org.gnome.shell favorite-apps "$favorites" \
+                || echo "sensible-live-desktop: could not pin the installer to the dash." >&2
+        fi
+        ;;
+    kde)
+        mkdir -p "${home}/.config" "${home}/Desktop"
+        printf '[Daemon]\nAutolock=false\nLockOnResume=false\n' > "${home}/.config/kscreenlockerrc"
+        # Plasma's desktop folder view shows ~/Desktop; give the installer an icon.
+        [ -f "$LAUNCHER" ] && install -m 0755 "$LAUNCHER" "${home}/Desktop/sensible-install.desktop"
+        chown -R "${live_user}:${live_user}" "${home}/.config" "${home}/Desktop" \
+            || echo "sensible-live-desktop: could not hand the live desktop files to ${live_user}." >&2
+        # live-config writes /etc/sddm.conf with an empty Session= unless the
+        # X11 session-manager alternative points at Plasma, and SDDM never
+        # auto-logs in without a session. Use the Wayland session the installed
+        # system uses.
+        sddm="${ROOT}/etc/sddm.conf"
+        if [ -f "$sddm" ] && grep -qE '^Session=[[:space:]]*$' "$sddm"; then
+            sed -i 's/^Session=[[:space:]]*$/Session=plasma/' "$sddm"
+        fi
+        ;;
+    *)
+        echo "sensible-live-desktop: unknown desktop variant '${variant}'; leaving the session untouched." >&2
+        ;;
+esac
+exit 0

@@ -30,4 +30,5 @@ lb config noauto \
     --cache true \
     --cache-packages true \
     --bootappend-live "boot=live components sensible.variant=${SENSIBLE_VARIANT} console=tty0 console=ttyS0,115200n8" \
+    --bootappend-live-failsafe "boot=live components sensible.variant=${SENSIBLE_VARIANT} memtest noapic noapm nodma nomce nolapic nosmp nosplash vga=normal console=tty0 console=ttyS0,115200n8" \
     "${@}"

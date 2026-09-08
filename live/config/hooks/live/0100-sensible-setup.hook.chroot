@@ -2,7 +2,12 @@
 set -e
 
 # Make scripts in /usr/local/bin executable
-chmod 0755 /usr/local/bin/sensible-install /usr/local/bin/lazydeb
+chmod 0755 /usr/local/bin/sensible-install /usr/local/bin/lazydeb \
+    /usr/local/bin/sensible-audio-check /usr/local/bin/sensible-live-desktop
 
 # Enable NetworkManager
 systemctl enable NetworkManager.service
+
+# "Try Sensible" boot entry: inert unless the kernel command line carries
+# sensible.session=desktop (see the unit's Condition).
+systemctl enable sensible-live-desktop.service

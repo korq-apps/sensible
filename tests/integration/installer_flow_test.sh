@@ -90,6 +90,13 @@ rsync()       {
     touch "${MNT}/etc/profile.d/99-sensible-autostart.sh" \
           "${MNT}/etc/profile.d/99-sensible-firmware-check.sh" \
           "${MNT}/usr/local/bin/sensible-install" "${MNT}/usr/local/bin/lazydeb"
+    # "Try Sensible" live desktop pieces: launcher, preparation unit and its
+    # enablement symlink ride along in the copied root and must not survive.
+    mkdir -p "${MNT}/usr/share/applications" "${MNT}/etc/systemd/system/graphical.target.wants"
+    touch "${MNT}/usr/local/bin/sensible-live-desktop" \
+          "${MNT}/usr/share/applications/sensible-install.desktop" \
+          "${MNT}/etc/systemd/system/sensible-live-desktop.service"
+    ln -sf ../sensible-live-desktop.service "${MNT}/etc/systemd/system/graphical.target.wants/sensible-live-desktop.service"
     # The live root carries the full baked closure: kernel and initramfs are
     # copied by rsync, NOT installed by apt on the offline path.
     touch "${MNT}/boot/vmlinuz-7.1.0-amd64" "${MNT}/boot/initrd.img-7.1.0-amd64"
@@ -337,6 +344,15 @@ assert_common_success() {
     assert_file_not_exists "no root autologin leak into target (tty1)" "${MNT}/etc/systemd/system/getty@tty1.service.d/autologin.conf"
     assert_file_not_exists "no live installer autostart profile" "${MNT}/etc/profile.d/99-sensible-autostart.sh"
     assert_file_not_exists "no live serial smoke marker" "${MNT}/etc/profile.d/98-sensible-serial-ready.sh"
+    assert_file_not_exists "live desktop launcher removed from target" "${MNT}/usr/share/applications/sensible-install.desktop"
+    assert_file_not_exists "live desktop preparation script removed" "${MNT}/usr/local/bin/sensible-live-desktop"
+    assert_file_not_exists "live desktop unit removed" "${MNT}/etc/systemd/system/sensible-live-desktop.service"
+    if [ -L "${MNT}/etc/systemd/system/graphical.target.wants/sensible-live-desktop.service" ]; then
+        t_fail "live desktop unit enablement symlink removed" "dangling symlink remains"
+    else
+        t_ok
+    fi
+    assert_file_exists "installed manual launcher survives with the live launcher gone" "${MNT}/usr/share/applications/sensible-manual.desktop"
     assert_file_exists "installer log preserved on target" "${MNT}/var/log/sensible-install.log"
     assert_file_not_exists "live ALSA mixer state is not carried to the target" "${MNT}/var/lib/alsa/asound.state"
     assert_contains "live audio findings reach the completion summary" "$(output_text)" "- Audio: Speaker amplifier CSC3556 was not bound by this kernel"

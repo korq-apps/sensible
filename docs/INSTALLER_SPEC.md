@@ -230,7 +230,8 @@ chmod 1777 /mnt/tmp
 ```
 
 After a live-root copy, remove the live installer profile scripts, command
-wrappers, staged `/opt/sensible` source/docs, live issue/MOTD branding, root
+wrappers, the "Try Sensible" desktop launcher and its preparation unit,
+staged `/opt/sensible` source/docs, live issue/MOTD branding, root
 autologin units, and live-only package/state trees. Reset `machine-id` and
 delete `/var/lib/alsa/asound.state` (mixer levels `alsa-state.service` stored
 for the live console). Purge `live-boot`, `live-config`, and
@@ -364,7 +365,7 @@ Always:
   fonts-noto-core fonts-noto-color-emoji fonts-liberation
 
 If GNOME:
-  gnome-core gdm3 gnome-software gnome-software-plugin-flatpak dconf-cli
+  gnome-core gdm3 gnome-software gnome-software-plugin-flatpak dconf-cli ptyxis
   file-roller amberol simple-scan
   gnome-shell-extension-manager gnome-tweaks
   paper-icon-theme papirus-icon-theme orchis-gtk-theme gtk-update-icon-cache librsvg2-common
@@ -375,7 +376,7 @@ If GNOME:
   plymouth theme: spinner
 
 If KDE:
-  kde-plasma-desktop sddm plasma-discover plasma-discover-backend-flatpak
+  kde-plasma-desktop sddm plasma-discover plasma-discover-backend-flatpak konsole
   okular ark gwenview kate kcalc kde-spectacle elisa skanlite
   plymouth theme: breeze (package plymouth-theme-breeze if needed)
 

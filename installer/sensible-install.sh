@@ -86,6 +86,10 @@ sanitize_live_target() {
           "${MNT}/etc/profile.d/99-sensible-firmware-check.sh" \
           "${MNT}/usr/local/bin/sensible-install" \
           "${MNT}/usr/local/bin/lazydeb" \
+          "${MNT}/usr/local/bin/sensible-live-desktop" \
+          "${MNT}/usr/share/applications/sensible-install.desktop" \
+          "${MNT}/etc/systemd/system/sensible-live-desktop.service" \
+          "${MNT}/etc/systemd/system/graphical.target.wants/sensible-live-desktop.service" \
           "${MNT}/etc/issue.sensible"
     rm -rf "${MNT}/opt/sensible"
     # alsa-utils stores mixer levels here (alsa-state.service) and restores

@@ -1,0 +1,16 @@
+# Prepares the "Try Sensible" live desktop chosen from the boot menu. Only that
+# menu entry carries sensible.session=desktop, so the unit is inert on the
+# default console-installer boot and cannot fire on an installed system (the
+# installer removes it from the target as well).
+[Unit]
+Description=Sensible live desktop session preparation
+ConditionKernelCommandLine=sensible.session=desktop
+After=live-config.service
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/sensible-live-desktop
+
+[Install]
+WantedBy=graphical.target

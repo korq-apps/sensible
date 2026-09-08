@@ -24,12 +24,15 @@
 │   Plymouth graphical unlock (LUKS only)                     │
 ├─────────────────────────────────────────────────────────────┤
 │ Layer 1: Live ISO (`live-build`)                            │
-│   Console / TUI only · firmware so Wi-Fi works in the live  │
-│   session · `sensible-install` (`lazydeb`) · hybrid UEFI ISO│
+│   Console installer (default) or "Try Sensible" desktop ·   │
+│   firmware so Wi-Fi works · `sensible-install` (`lazydeb`) ·│
+│   hybrid UEFI ISO                                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 The live image is an **installer appliance** carrying the complete target closure, including one desktop variant. Installation is offline; firmware and NetworkManager remain useful for hardware support and optional diagnostics, but reaching a mirror is not a prerequisite.
+
+The boot menu's default entry is the console installer, which the CI serial smoke test asserts. "Try Sensible" boots the same live root with `sensible.session=desktop systemd.unit=graphical.target`: the display manager auto-logs the throwaway live account into the baked desktop, `sensible-live-desktop.service` disables the idle lock for that account and pins an **Install Sensible** launcher (a `Terminal=true` entry running the same installer), and the installer strips the launcher, the unit and the live account from the target. Menu templates live in `live/config/bootloaders/`.
 
 ---
 

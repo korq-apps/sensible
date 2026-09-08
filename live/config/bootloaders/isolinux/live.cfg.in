@@ -1,0 +1,22 @@
+# Sensible live boot menu (syslinux, the legacy BIOS path; the target is
+# UEFI-only, so this mirrors the GRUB menu for completeness). live-build fills
+# in the @...@ placeholders. The first label stays the default and is the one
+# menu.cfg boots after the timeout (ontimeout live-amd64).
+label live-@FLAVOUR@
+	menu label ^Install Sensible
+	menu default
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@
+
+label live-@FLAVOUR@-desktop
+	menu label ^Try Sensible (live desktop, changes nothing on disk)
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@ sensible.session=desktop systemd.unit=graphical.target
+
+label live-@FLAVOUR@-failsafe
+	menu label Install Sensible (fail-safe mode)
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE_FAILSAFE@

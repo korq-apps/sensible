@@ -11,6 +11,9 @@ plasma-discover
 plasma-discover-backend-flatpak
 plymouth-theme-breeze
 dconf-cli
+# Plasma's terminal; kde-plasma-desktop does not depend on it directly, and the
+# live desktop's "Install Sensible" launcher (Terminal=true) needs one.
+konsole
 
 # Applications
 firefox-esr

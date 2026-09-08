@@ -212,8 +212,10 @@ to a console with NetworkManager and the required live firmware available.
 - [x] `scripts/smoke-boot.sh` and CI boot the ISO in headless UEFI QEMU and assert a stable marker from the live serial autologin shell; this is an ISO-boot smoke, not an installed-disk test
 - [x] Artifact names: `sensible-gnome-debian-testing-amd64.iso` and `sensible-kde-debian-testing-amd64.iso`
 
-The live session boots to the console installer even though the selected GNOME
-or KDE target closure is baked into its squashfs for offline copying.
+The default live entry boots to the console installer. The boot menu's "Try
+Sensible" entry boots the baked GNOME or KDE closure as a live desktop with an
+**Install Sensible** launcher (`sensible-live-desktop.service`, templates in
+`live/config/bootloaders/`); the CI smoke covers only the console entry.
 
 ---
 
@@ -442,6 +444,7 @@ package closure from the live image and requires no network. See
   - drop the hardware/desktop/apps package stages, whose names are now fixed when the ISO is built
   - keep `validate_installed_boot` as the gate; it already asserts the artifacts this path must produce
 - [x] Branded console live session that launches straight into the installer
+- [x] "Try Sensible" live desktop boot entry with a pinned installer launcher; `ptyxis`/`konsole` named per edition so `Terminal=true` launchers and the manual's terminal recipes work
 - [x] Searchable Gum prompts with a branded welcome, detailed disk selection,
   filesystem and identity/locale choices, one destructive confirmation, and
   staged progress

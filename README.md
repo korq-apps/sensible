@@ -17,7 +17,7 @@ Debian itself is excellent. Getting to a usable desktop is not:
 3. **Hardware is half-enabled.** Wi-Fi firmware, SOF laptop audio, Bluetooth codecs, GPU decode, and power profiles are extra work.
 4. **Switching from macOS or Windows feels alien.** Shortcuts, app stores, and “where is Slack?” are the usual friction — not a reason to ship Basecamp.
 
-Sensible is a **reproducible live ISO** plus a **TUI installer**. It partitions the disk the way people actually want and turns on firmware and PipeWire. Separate GNOME and KDE release images provide the chosen desktop; the installer does not download or switch desktops. Third-party apps stay on Flatpak. Nothing commercial is baked in. The machine you get is Debian.
+Sensible is a **reproducible live ISO** plus a **TUI installer**. The boot menu offers **Install Sensible** (the console installer, default) and **Try Sensible** (the baked GNOME or KDE desktop as a live session that changes nothing on disk, with the same installer one click away). It partitions the disk the way people actually want and turns on firmware and PipeWire. Separate GNOME and KDE release images provide the chosen desktop; the installer does not download or switch desktops. Third-party apps stay on Flatpak. Nothing commercial is baked in. The machine you get is Debian.
 
 ---
 
