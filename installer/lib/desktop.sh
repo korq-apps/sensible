@@ -54,45 +54,24 @@ configure_login() {
     # authentication step, so the desktop may auto-login — while the idle
     # screen lock (always configured) protects the running session.
     local desktop_env="$1" autologin="$2" username="$3"
+    local config_dir="${4:-${CONFIG_DIR:-/opt/sensible/configs}}"
 
     # Screen lock on idle (and on resume from suspend) for both desktops.
     if [ "$desktop_env" = "gnome" ]; then
         log_info "Configuring GNOME profile and idle screen lock (5 min)..."
+        # One source for the image and the installed system: the build hook
+        # (0260-gnome-profile.hook.chroot) bakes this keyfile so the "Try
+        # Sensible" live desktop shows the same profile, and it is re-applied
+        # here. These are system defaults, not dconf locks: each user can still
+        # disable an extension or change any preference in Settings/Tweaks.
+        local dconf_defaults="${config_dir}/gnome-dconf-defaults"
+        if [ ! -f "$dconf_defaults" ]; then
+            log_err "GNOME defaults file ${dconf_defaults} is missing; refusing to install without the desktop profile."
+            exit 1
+        fi
         mkdir -p ${MNT}/etc/dconf/profile ${MNT}/etc/dconf/db/local.d
         printf 'user-db:user\nsystem-db:local\n' > ${MNT}/etc/dconf/profile/user
-        # These are system defaults, not dconf locks: each user can still
-        # disable an extension or change any preference in Settings/Tweaks.
-        cat <<EOF > ${MNT}/etc/dconf/db/local.d/00-sensible-desktop
-[org/gnome/desktop/session]
-idle-delay=uint32 300
-
-[org/gnome/desktop/screensaver]
-lock-enabled=true
-lock-delay=uint32 0
-
-[org/gnome/desktop/wm/preferences]
-button-layout='appmenu:minimize,maximize,close'
-
-[org/gnome/desktop/interface]
-icon-theme='Paper'
-gtk-theme='Orchis'
-
-[org/gnome/shell]
-enabled-extensions=['ubuntu-appindicators@ubuntu.com', 'gsconnect@andyholmes.github.io', 'caffeine@patapon.info', 'clipboard-indicator@tudmotu.com', 'dash-to-dock@micxgx.gmail.com', 'batterytime@typeof.pw', 'shotzy@SamkitJain660.github.io', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'Vitals@CoreCoding.com']
-
-[org/gnome/shell/extensions/caffeine]
-user-enabled=false
-restore-state=false
-enable-fullscreen=false
-enable-mpris=false
-
-[org/gnome/shell/extensions/clipboard-indicator]
-cache-only-favorites=true
-cache-images=false
-
-[org/gnome/shell/extensions/vitals]
-include-public-ip=false
-EOF
+        cp "$dconf_defaults" ${MNT}/etc/dconf/db/local.d/00-sensible-desktop
         chroot ${MNT} dconf update
     else
         log_info "Configuring KDE idle screen lock (5 min)..."

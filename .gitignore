@@ -89,3 +89,7 @@ live/.build.lock
 
 # Generated per build from live/variants/<variant>.list
 live/config/package-lists/desktop.list.chroot
+
+# Python bytecode from the test helpers
+__pycache__/
+*.pyc

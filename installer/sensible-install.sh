@@ -826,7 +826,7 @@ EOF
         fi
     fi
 
-    configure_login "$DESKTOP_CHOICE" "$ENABLE_AUTOLOGIN" "$USERNAME"
+    configure_login "$DESKTOP_CHOICE" "$ENABLE_AUTOLOGIN" "$USERNAME" "$CONFIG_DIR"
 
     CURRENT_STAGE="preparing installed applications"
     install_progress_update 8 "Preparing installed applications"

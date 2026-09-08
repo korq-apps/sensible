@@ -561,7 +561,10 @@ Screen lock defaults are written for both desktops regardless of the choice:
   Indicator persistence limited to favorites with image caching off; and Vitals
   public-IP lookup off. These live in `/etc/dconf/profile/user` plus
   `/etc/dconf/db/local.d/`, followed by `dconf update`; no dconf locks are added,
-  so later user choices win.
+  so later user choices win. The keyfile is `configs/gnome-dconf-defaults`:
+  `0260-gnome-profile.hook.chroot` bakes it into the image, so the "Try
+  Sensible" live desktop shows the same profile, and `configure_login`
+  re-applies the same file to the target (hard failure if it is missing).
 - KDE: `/etc/xdg/kscreenlockerrc` — `Autolock=true`, `Timeout=5`,
   `LockOnResume=true` (covers resume from suspend).
 

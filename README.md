@@ -68,7 +68,8 @@ Monitor on KDE; pinned LocalSend on both. The GNOME defaults enable Vitals,
 GSConnect, Caffeine, Clipboard Indicator, Dash to Dock, Battery Time, Shotzy,
 User Themes and AppIndicator support. Caffeine starts inactive, clipboard disk
 caching is limited to favorites, Vitals public-IP lookup is off, and users can
-override every default. LocalSend and the four non-Debian GNOME extensions are
+override every default. The same profile is baked into the image, so the Try
+Sensible live desktop shows it too. LocalSend and the four non-Debian GNOME extensions are
 checksum-pinned at image-build time, not downloaded by the installer. Sharing-port
 exceptions are configured on both editions; see the [manual](manual/applications.html)
 for usage and privacy details. GNOME uses user-overridable Paper icons and Orchis

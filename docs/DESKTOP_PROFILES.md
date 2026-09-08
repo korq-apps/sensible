@@ -310,7 +310,9 @@ substitute for that review. Uniform libadwaita/Flatpak styling is not promised.
 ## Configuration policy
 
 - Store maintainable, edition-specific defaults in the repository. GNOME uses
-  an unlocked system dconf database; choose the Plasma mechanism with its slice.
+  an unlocked system dconf database, `configs/gnome-dconf-defaults`, baked into
+  the image by `0260-gnome-profile.hook.chroot` and re-applied by the
+  installer; choose the Plasma mechanism with its slice.
 - Apply defaults to a fresh user's session. Do not copy the live user's home,
   hardware identifiers, personal files, tokens, or paired devices.
 - Let subsequent user customization take precedence. Do not overwrite it on

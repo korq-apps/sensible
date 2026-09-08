@@ -1,0 +1,35 @@
+# Sensible GNOME profile: unlocked system dconf defaults (GKeyFile syntax).
+# Baked into the image by live/config/hooks/live/0260-gnome-profile.hook.chroot
+# so the "Try Sensible" live desktop shows it, and re-applied to the installed
+# system by installer/lib/desktop.sh. These are defaults, not dconf locks: every
+# user can change any of them in Settings, Tweaks or Extension Manager.
+
+[org/gnome/desktop/session]
+idle-delay=uint32 300
+
+[org/gnome/desktop/screensaver]
+lock-enabled=true
+lock-delay=uint32 0
+
+[org/gnome/desktop/wm/preferences]
+button-layout='appmenu:minimize,maximize,close'
+
+[org/gnome/desktop/interface]
+icon-theme='Paper'
+gtk-theme='Orchis'
+
+[org/gnome/shell]
+enabled-extensions=['ubuntu-appindicators@ubuntu.com', 'gsconnect@andyholmes.github.io', 'caffeine@patapon.info', 'clipboard-indicator@tudmotu.com', 'dash-to-dock@micxgx.gmail.com', 'batterytime@typeof.pw', 'shotzy@SamkitJain660.github.io', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'Vitals@CoreCoding.com']
+
+[org/gnome/shell/extensions/caffeine]
+user-enabled=false
+restore-state=false
+enable-fullscreen=false
+enable-mpris=false
+
+[org/gnome/shell/extensions/clipboard-indicator]
+cache-only-favorites=true
+cache-images=false
+
+[org/gnome/shell/extensions/vitals]
+include-public-ip=false
