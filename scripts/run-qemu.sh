@@ -3,6 +3,24 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+umask 077
+
+usage() {
+    echo "Usage: $0 [--offline] [ISO [DISK.qcow2]]"
+    echo "       $0 [--offline] --installed DISK.qcow2"
+    echo "Fresh private logs: .qemu/run.*/ (or QEMU_LOG_ROOT)."
+}
+INSTALLED=false
+OFFLINE=false
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --help|-h) usage; exit 0 ;;
+        --offline) OFFLINE=true; shift ;;
+        --installed) INSTALLED=true; shift ;;
+        --*) usage >&2; exit 2 ;;
+        *) break ;;
+    esac
+done
 
 # Default to the variant ISO; SENSIBLE_VARIANT selects which one, and an
 # explicit path still wins. Artifacts are per-variant since the desktop is
@@ -10,11 +28,20 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SENSIBLE_VARIANT="${SENSIBLE_VARIANT:-gnome}"
 ISO_PATH="${1:-${REPO_ROOT}/sensible-${SENSIBLE_VARIANT}-debian-testing-amd64.iso}"
 DISK_PATH="${2:-${REPO_ROOT}/test-disk.qcow2}"
-DISK_SIZE="64G"
-RAM="4096"
-CPUS="4"
+DISK_SIZE="${QEMU_DISK_SIZE:-64G}"
+RAM="${QEMU_RAM:-4096}"
+CPUS="${QEMU_CPUS:-4}"
+if [ "$INSTALLED" = true ]; then
+    [ "$#" -eq 1 ] || { usage >&2; exit 2; }
+    DISK_PATH="$1"
+    ISO_PATH=""
+    [ -f "$DISK_PATH" ] || { echo "Error: installed disk does not exist." >&2; exit 1; }
+elif [ "$#" -gt 2 ]; then
+    usage >&2
+    exit 2
+fi
 
-if [ ! -f "${ISO_PATH}" ]; then
+if [ "$INSTALLED" = false ] && [ ! -f "${ISO_PATH}" ]; then
     echo "Error: ISO not found at ${ISO_PATH}" >&2
     echo "Build the ISO first with ./live/build.sh" >&2
     exit 1
@@ -26,11 +53,17 @@ if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
 fi
 
 # Locate OVMF firmware (prefer pflash code+vars pairing, fall back to -bios)
-OVMF_CODE=""
+OVMF_CODE="${QEMU_OVMF_CODE:-}"
+if [ -n "$OVMF_CODE" ] && [ ! -f "$OVMF_CODE" ]; then
+    echo "Error: requested QEMU_OVMF_CODE does not exist." >&2
+    exit 1
+fi
 for candidate in \
+    "${OVMF_CODE}" \
     /usr/share/OVMF/OVMF_CODE_4M.fd \
     /usr/share/OVMF/OVMF_CODE.fd \
     /usr/share/edk2/x64/OVMF_CODE.fd \
+    /usr/share/edk2/x64/OVMF_CODE.4m.fd \
     /usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
     /usr/share/edk2/ovmf/OVMF_CODE.fd \
     /usr/share/edk2-ovmf/OVMF_CODE.fd \
@@ -53,6 +86,10 @@ if [ -n "${OVMF_CODE}" ] && [[ "${OVMF_CODE}" == *OVMF_CODE*.fd ]]; then
     OVMF_VARS="${OVMF_CODE/OVMF_CODE/OVMF_VARS}"
     [ -f "${OVMF_VARS}" ] || OVMF_VARS=""
 fi
+if [ -n "${QEMU_OVMF_VARS:-}" ]; then
+    [ -f "$QEMU_OVMF_VARS" ] || { echo "Error: requested QEMU_OVMF_VARS does not exist." >&2; exit 1; }
+    OVMF_VARS="$QEMU_OVMF_VARS"
+fi
 
 if [ -z "${OVMF_CODE}" ]; then
     echo "Error: OVMF UEFI firmware not found in standard paths." >&2
@@ -61,6 +98,20 @@ if [ -z "${OVMF_CODE}" ]; then
     echo "  Arch:          sudo pacman -S edk2-ovmf" >&2
     exit 1
 fi
+
+# QEMU's comma-separated option syntax is not a shell quoting mechanism.
+# Reject ambiguous paths before creating files or starting the VM.
+DISK_PATH="$(realpath -m -- "$DISK_PATH")"
+if [ -n "$ISO_PATH" ]; then ISO_PATH="$(realpath -- "$ISO_PATH")"; fi
+OVMF_CODE="$(realpath -- "$OVMF_CODE")"
+if [ -n "$OVMF_VARS" ]; then OVMF_VARS="$(realpath -- "$OVMF_VARS")"; fi
+LOG_ROOT="$(realpath -m -- "${QEMU_LOG_ROOT:-${REPO_ROOT}/.qemu}")"
+for path in "$ISO_PATH" "$DISK_PATH" "$OVMF_CODE" "$OVMF_VARS" "$LOG_ROOT"; do
+    if [[ "$path" = *','* || "$path" = *$'\n'* ]]; then
+        echo "Error: QEMU paths must not contain commas or newlines." >&2
+        exit 2
+    fi
+done
 
 # Create test disk if not existing
 if [ ! -f "${DISK_PATH}" ]; then
@@ -77,9 +128,9 @@ fi
 
 BIOS_OPT=()
 if [ -n "${OVMF_CODE}" ] && [ -n "${OVMF_VARS}" ]; then
-    # Fresh working copy of the EFI variable store per test disk
+    # Preserve installed UEFI boot entries across ISO and installed-disk boots.
     VARS_COPY="${DISK_PATH}.ovmf-vars.fd"
-    cp "${OVMF_VARS}" "${VARS_COPY}"
+    if [ ! -e "$VARS_COPY" ]; then cp "${OVMF_VARS}" "${VARS_COPY}"; fi
     BIOS_OPT+=(
         "-drive" "if=pflash,format=raw,readonly=on,file=${OVMF_CODE}"
         "-drive" "if=pflash,format=raw,file=${VARS_COPY}"
@@ -90,14 +141,41 @@ elif [ -n "${OVMF_CODE}" ]; then
     echo "==> Using OVMF (bios, no persistent vars): ${OVMF_CODE}"
 fi
 
-echo "==> Launching QEMU with ISO: ${ISO_PATH}..."
-exec qemu-system-x86_64 \
-    "${KVM_OPT[@]}" \
-    "${BIOS_OPT[@]}" \
-    -m "${RAM}" \
-    -smp "${CPUS}" \
-    -cdrom "${ISO_PATH}" \
-    -drive file="${DISK_PATH}",format=qcow2,if=virtio \
-    -netdev user,id=net0 -device virtio-net-pci,netdev=net0 \
-    -vga virtio \
-    -display default
+mkdir -p -- "$LOG_ROOT"
+RUN_DIR="$(mktemp -d "${LOG_ROOT}/run.XXXXXXXX")"
+RUN_DIR="$(realpath -- "$RUN_DIR")"
+MEDIA_OPT=()
+if [ "$INSTALLED" = false ]; then MEDIA_OPT=(-cdrom "$ISO_PATH" -boot once=d); fi
+NETWORK_OPT=(-netdev user,id=net0 -device virtio-net-pci,netdev=net0)
+if [ "$OFFLINE" = true ]; then NETWORK_OPT=(-nic none); fi
+QEMU_ARGS=("${KVM_OPT[@]}" "${BIOS_OPT[@]}" -m "$RAM" -smp "$CPUS"
+    "${MEDIA_OPT[@]}" -drive "file=${DISK_PATH},format=qcow2,if=virtio"
+    "${NETWORK_OPT[@]}" -vga virtio -display "${QEMU_DISPLAY:-default}"
+    -serial "file:${RUN_DIR}/serial.log"
+    -chardev "file,id=diagnostics,path=${RUN_DIR}/diagnostics.stream"
+    -device virtio-serial-pci
+    -device virtserialport,chardev=diagnostics,name=org.sensible.diagnostics)
+{
+    date -u '+UTC: %Y-%m-%dT%H:%M:%SZ'
+    qemu-system-x86_64 --version
+    if revision=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null); then
+        printf 'Repository commit: %s\n' "$revision"
+    else
+        printf 'Repository commit: unavailable\n'
+    fi
+    if repository_status=$(git -C "$REPO_ROOT" status --short 2>/dev/null); then
+        printf 'Repository status: %s\n' "${repository_status:-clean}"
+    else
+        printf 'Repository status: unavailable\n'
+    fi
+    if [ -n "$ISO_PATH" ]; then sha256sum -- "$ISO_PATH"; fi
+    sha256sum -- "$OVMF_CODE"
+    printf 'Command: qemu-system-x86_64'
+    printf ' %q' "${QEMU_ARGS[@]}"
+    printf '\n'
+} > "${RUN_DIR}/host.txt"
+echo "==> VM logs: ${RUN_DIR}"
+printf '==> Collect after installer failure (VM may stay open):\n    python3 %q %q\n' \
+    "${SCRIPT_DIR}/collect-vm-logs.py" "$RUN_DIR"
+echo "==> QEMU stderr is saved in ${RUN_DIR}/qemu.log"
+exec qemu-system-x86_64 "${QEMU_ARGS[@]}" 2> >(tee "${RUN_DIR}/qemu.log" >&2)

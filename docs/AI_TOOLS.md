@@ -132,7 +132,7 @@ Keep the existing tools and their manual explanations. In particular, `jq`,
 
 These are issue-ready scopes, **not yet published GitHub issues**. They do not
 replace the existing installer/release gate or pending desktop acceptance work.
-The [reconciled priority queue](PLAN.md#reconciled-priorities-2026-09-06) sets the
+The [reconciled priority queue](PLAN.md#reconciled-priorities) sets the
 cross-project order: validated install input and acceptance infrastructure come
 next. Manual curation need not wait for the optional-app tool, but automated
 optional AI installation must use its shared catalog rather than invent a second

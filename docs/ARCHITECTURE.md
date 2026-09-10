@@ -258,7 +258,9 @@ it does not change PDF or plain-text handlers. There is no account enrollment,
 installer download or extra ONLYOFFICE APT repository. Debian upgrades do not
 update the pinned editor: maintainers review newer artifacts for future images,
 and the manual describes verified local-package updates and optional LibreOffice.
-Full ISO, actual GNOME/KDE sessions, document fidelity, printing and release
+Both edition ISO builds and live UEFI smoke passed for PR #16; on 2026-09-08 the
+user reported successful GNOME and KDE validation with recent changes.
+Targeted document fidelity/printing, session edge cases and release
 corresponding-source availability remain acceptance checks in [PLAN.md](PLAN.md).
 
 ### Offline manual
@@ -282,15 +284,16 @@ payload check; tests validate local links and documented default-package coverag
 evidence. Application/dependency configuration, the GNOME profile and optional
 GNOME themes are now implemented in the image sources with user-overridable
 defaults. Native Plasma configuration and appearance, plus backup choices,
-remain planned. Full ISO builds and real offline sessions are still required
-before release claims can treat the configured behavior as proven.
+remain planned. PR #16 passed both ISO/live-smoke jobs, and both desktop editions
+have positive user validation. The profile plan distinguishes that evidence from
+remaining targeted session checks and the installed-system release matrix.
 
 ### Shell (all users)
 
 oh-my-bash from a **shared, read-only install** — not per-user clones:
 
 - A pinned upstream commit vendored to `/usr/share/oh-my-bash` (pin + SHA256 in `live/pins.env`; staged by `scripts/fetch-pins.sh` at build time).
-- `/etc/skel/.bashrc` comes from `configs/omb-bashrc`: `OSH=/usr/share/oh-my-bash`, the `font` theme (no patched-font dependency), auto-update off (the install is root-owned; updates come with the OS), git/ssh completions.
+- `/etc/skel/.bashrc` comes from `configs/omb-bashrc`: `OSH=/usr/share/oh-my-bash`, the `powerline-multiline` theme with the shipped Powerline/Nerd Font support, auto-update off (the install is root-owned; pin updates are reviewed for future images), git/ssh completions.
 - The same file **activates the CLI set we already install** — `zoxide init`, fzf keybindings, `eza` ls aliases, and `bat`/`fd` aliases for Debian's renamed `batcat`/`fdfind` binaries. Installing tools nobody wired up is not sensible.
 - `/etc/skel` is populated when the ISO is built, so the installer's `useradd -m` inherits it — the ordering problem the network design had does not exist here. Root keeps the stock Debian bashrc.
 
@@ -337,7 +340,9 @@ The image hook checks Shell 50, appearance packages and required assets, then
 builds the added icon caches. Sources, licenses and build adapters accompany the
 image in `/usr/share/doc/sensible-themes/`. These pinned assets are not updated
 by Debian APT. Selection/reset instructions and limitations are in the manual;
-full-image and real-session validation remains pending.
+both ISO builds pass and GNOME has positive user smoke feedback. Targeted
+readability/accessibility, reset/persistence and session edge cases remain in
+the desktop profile acceptance checklist.
 
 **Later, not implemented:** the [AI tools plan](AI_TOOLS.md) evaluates a small
 open-source CLI core versus all-opt-in delivery, with proprietary clients kept
@@ -357,7 +362,16 @@ Steam, Slack, WhatsApp, Zoom, Discord, Spotify, Snapd, any SaaS “default clien
 
 **In v1:** amd64, UEFI only, single-disk wipe, Btrfs or Ext4 with LUKS on/off, separate GNOME and KDE images, selectable locales, and working Wi-Fi/audio/GPU on common laptops.
 
-**Planned (post-install tool):** developer tools and BioPass (§5, §7). `--config` unattended installs are release-test infrastructure (PLAN.md).
+**Unattended input:** `--config` is an adapter to the same offline installer,
+not a separate execution engine. A Python `tomllib` helper reads protected
+config/secret descriptors and passes a fixed NUL-delimited record through a
+private pipe; Bash reuses the form validators. Config mode preserves disk
+eligibility, identity revalidation and boot checks, excludes both input files
+from the copy, suppresses interactive UI and exits after verification/cleanup.
+There is no automatic reboot; the caller owns the next boot. Fixture evidence
+does not replace installed-disk acceptance. See [INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode).
+
+**Planned (post-install tool):** developer tools and BioPass (§5, §7).
 
 **Later:** Btrfs Snapper and evaluated `grub-btrfs` recovery integration (a separate follow-up after desktop apps; see the layout/restore acceptance requirements in [PLAN.md](PLAN.md)), TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis; PCR policy must account for the unencrypted `/boot`), FIDO2 keys for sudo/polkit (`libpam-u2f`), GUI NVIDIA/MOK enrollment flow, Calamares if someone wants a GUI, other arches.
 

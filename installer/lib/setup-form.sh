@@ -58,9 +58,19 @@ validate_keyboard_layout() {
 }
 
 valid_locale() {
-    local locale="$1"
-    [ -r /usr/share/i18n/SUPPORTED ] || return 0  # accept if no SUPPORTED file (tests)
-    awk -v loc="${locale}" '$1 == loc && $2 == "UTF-8" { found = 1 } END { exit !found }' /usr/share/i18n/SUPPORTED
+    local locale="$1" supported="${2:-${SENSIBLE_SUPPORTED_LOCALES_FILE:-/usr/share/i18n/SUPPORTED}}"
+    [ -r "$supported" ] || return 1
+    awk -v loc="$locale" '$1 == loc && $2 == "UTF-8" { found = 1 } END { exit !found }' "$supported"
+}
+
+valid_password() {
+    [ "${#1}" -ge 8 ] && [[ "$1" != *$'\n'* && "$1" != *$'\r'* ]]
+}
+
+valid_optional_identity() {
+    # These values are written to GECOS and an unquoted Git config value.
+    # Do not allow line/field injection or Git comment/escape syntax.
+    [[ "$1" != *[[:cntrl:]]* && "$1" != *[\"\\\;\#\:]* ]]
 }
 
 # ── Live keyboard helpers ──
@@ -369,9 +379,9 @@ sensible_prompt_password() {
             else ui_msgbox "Invalid Password" "Password cannot be empty."; fi
             continue
         fi
-        if [ ${#pw1} -lt 8 ]; then
+        if ! valid_password "$pw1"; then
             if _setup_use_gum; then clear_logo; ui_blank; ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 1 "Password must be at least 8 characters."; sleep 1.2
-            else ui_msgbox "Invalid Password" "Password must be at least 8 characters."; fi
+            else ui_msgbox "Invalid Password" "Password must be at least 8 characters without line breaks."; fi
             continue
         fi
         if _setup_use_gum; then
@@ -432,19 +442,25 @@ sensible_prompt_locale() {
 sensible_prompt_identity() {
     # Optional full name / email for git + GECOS (can be skipped)
     local name_input email_input
-    if _setup_use_gum; then
-        clear_logo; ui_blank
-        ui_style --padding "0 0 0 $PADDING_LEFT" --bold "Identity (optional)"
-        ui_blank
-        ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 8 "Full name and email for git. Leave empty to skip."
-        ui_blank
-        name_input=$(gum input --placeholder "Full name (optional)" --width 50 2>/dev/tty) || return $SETUP_FORM_BACK
-        # Allow empty - not validated
-        email_input=$(gum input --placeholder "Email (optional)" --width 50 2>/dev/tty) || return $SETUP_FORM_BACK
-    else
-        name_input=$(ui_inputbox "Full name (optional)" "Enter full name for git/GECOS (leave empty to skip):" "") || return $SETUP_FORM_BACK
-        email_input=$(ui_inputbox "Email (optional)" "Enter email for git (leave empty to skip):" "") || return $SETUP_FORM_BACK
-    fi
+    while true; do
+        if _setup_use_gum; then
+            clear_logo; ui_blank
+            ui_style --padding "0 0 0 $PADDING_LEFT" --bold "Identity (optional)"
+            ui_blank
+            ui_style --padding "0 0 0 $PADDING_LEFT" --foreground 8 "Full name and email for git. Leave empty to skip."
+            ui_blank
+            name_input=$(gum input --placeholder "Full name (optional)" --width 50 2>/dev/tty) || return $SETUP_FORM_BACK
+            # Empty optional values are accepted by the shared validator.
+            email_input=$(gum input --placeholder "Email (optional)" --width 50 2>/dev/tty) || return $SETUP_FORM_BACK
+        else
+            name_input=$(ui_inputbox "Full name (optional)" "Enter full name for git/GECOS (leave empty to skip):" "") || return $SETUP_FORM_BACK
+            email_input=$(ui_inputbox "Email (optional)" "Enter email for git (leave empty to skip):" "") || return $SETUP_FORM_BACK
+        fi
+        if valid_optional_identity "$name_input" && valid_optional_identity "$email_input"; then
+            break
+        fi
+        ui_msgbox "Invalid Identity" 'Do not include control characters, quotes, backslashes, colons, semicolons or # in the optional identity fields.'
+    done
     full_name="$name_input"
     email_address="$email_input"
     return $SETUP_FORM_OK

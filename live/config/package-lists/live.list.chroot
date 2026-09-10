@@ -16,6 +16,8 @@ nano
 kbd
 console-setup
 locales
+# Unattended TOML reader (tomllib is verified by the image hook)
+python3
 
 # TUI / User Interface
 gum

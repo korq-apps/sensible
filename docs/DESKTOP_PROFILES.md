@@ -1,18 +1,19 @@
 # Desktop profiles: GNOME and KDE
 
-Status: **application/dependency, GNOME-profile and optional GNOME-theme slices
-implemented in image configuration; full-image and real-session acceptance
-pending**. Native KDE profile/appearance defaults and backup choices remain planned.
-Recorded 2026-09-05, after installer PR #3 was merged. A configured package list
-is not evidence that an already published ISO contains these additions.
+Status, reconciled **2026-09-08**: **PR #16 merged; GNOME/KDE ISO builds and live
+UEFI smoke checks pass; the user reports that the latest GNOME build works as
+expected and KDE validation is also OK.** The application baseline, GNOME profile,
+Paper/Orchis defaults, global replacement themes/icons and ONLYOFFICE are no
+longer pending implementation. Native KDE profile/appearance configuration,
+editor neutrality and backup choices remain planned.
 
-Reconciled 2026-09-06: PR #15 has merged the GNOME profile, optional themes and
-Flathub setup into `main`. Issue #13 remains open for real-session acceptance;
-do not re-plan the implemented GNOME work or close it on source changes alone.
-The [shared priority queue](PLAN.md#reconciled-priorities-2026-09-06) puts validated
-installer input and installed-system evidence ahead of further profile expansion.
-The explicitly requested Paper/Orchis and replacement GTK/icon additions below
-are a follow-up appearance slice; they do not close that acceptance work.
+Issue #13 remains open for targeted GNOME acceptance; preserve the successful
+user smoke report without treating it as evidence for every checklist item.
+The [shared priority queue](PLAN.md#reconciled-priorities) keeps validated
+installer input (#4) next and installed-system evidence ahead of more expansion.
+General validation of both desktops is now reported successful. Historical entries below
+retain their original dates and test scope; the current evidence is recorded in
+[Merged desktop slice and user feedback](#merged-desktop-slice-and-user-feedback-2026-09-08).
 
 ## Intent
 
@@ -21,15 +22,16 @@ should cover the same everyday tasks, while retaining their native interfaces.
 Equivalent capability does not require identical applications or an equal
 number of extensions and widgets.
 
-Keep the existing productivity, browser, media, security and CLI baseline.
-This milestone adds to it; it does not remove applications to compensate for
-image size. Measure image size, build time and idle resource use as additions
-land, and review those costs explicitly.
+Keep the agreed productivity, browser, media, security and CLI capabilities.
+PR #16 deliberately replaces LibreOffice with ONLYOFFICE, with LibreOffice
+documented as optional; this is a selected office workflow, not image-size
+pruning. Measure image size, build time and idle resource use as changes land.
 
 ## Agreed application and feature scope
 
 | Capability | GNOME edition | KDE edition | Delivery decision |
 | :--- | :--- | :--- | :--- |
+| Office suite | ONLYOFFICE Desktop Editors | ONLYOFFICE Desktop Editors | Complete pinned upstream package installed offline; free fonts, scoped office defaults and manual update guidance; LibreOffice optional |
 | Photo library | Shotwell | digiKam; keep Gwenview for quick viewing | Include in the respective image |
 | Nearby file sharing | LocalSend | LocalSend | Include in both images |
 | Flatpak application source | Flathub via GNOME Software | Flathub via KDE Discover | System remote/key preconfigured offline; downloads require network; no Flatpak apps/runtimes preinstalled |
@@ -43,7 +45,7 @@ land, and review those costs explicitly.
 | Window controls | Close, Minimize and Maximize titlebar buttons | Native Plasma titlebar controls | Apply as a fresh-user GNOME default; never overwrite later user changes |
 | Battery estimate | Battery Time | Native battery widget | Show useful laptop information; avoid empty desktop indicators |
 | Screenshot search, OCR and QR | Shotzy | Retain Spectacle; investigate an OCR/search companion | GNOME scope agreed; KDE feature parity still exploratory |
-| Themes | Paper icons and Orchis GTK 3 defaults; Papirus; Qogir/Matcha/Fluent GTK 3/4 + Shell and Qogir icons; existing Marble/Graphite choices | Native Plasma appearance settings; theme shortlist still pending | Offline GNOME assets and overridable defaults; no forced Shell/GDM/personal CSS override; session acceptance pending |
+| Themes | Paper icons and Orchis GTK 3 defaults; Papirus; Qogir/Matcha/Fluent GTK 3/4 + Shell and Qogir icons; existing Marble/Graphite choices | Native Plasma appearance settings; theme shortlist still pending | Merged offline GNOME assets and overridable defaults; positive user smoke feedback; targeted acceptance remains; no forced Shell/GDM/personal CSS override |
 
 The requested GNOME extensions are Vitals, GSConnect, Caffeine, Clipboard
 Indicator, Dash to Dock, Battery Time, Shotzy and User Themes. Do not silently
@@ -77,7 +79,8 @@ backup jobs without a user-selected destination.
 1. Prefer packages from the Debian Testing archive when they provide the
    selected application or extension with the required compatibility.
 2. When an agreed default is unavailable there, evaluate a pinned upstream
-   release with a verified checksum and redistribution license. LocalSend's
+   release with a verified checksum and redistribution license. ONLYOFFICE's
+   official amd64 `.deb` (`9.4.0-129`, retained upstream notices), LocalSend's
    official 1.18.2 amd64 `.deb` (control version `1.18.2+64`, Apache-2.0) and
    four non-Debian GNOME extension archives are pinned in `live/pins.env` with
    provenance, license and compatibility checks.
@@ -106,6 +109,13 @@ or automatic transfer acceptance is added. Refresh the version, control version,
 package checksum and license checksum together after reviewing a release; rerun
 dependency/runtime checks and both image builds. Existing installations need a
 reviewed upstream package update; Debian upgrades do not update this pin.
+
+ONLYOFFICE follows the same build-time local-package model, retaining the entire
+upstream payload and adding the runtime libraries missing from its dependency
+metadata. It has no added update repository: the manual explains reviewed local
+package updates and optional LibreOffice installation. See the
+[office architecture](ARCHITECTURE.md#offline-office-suite) for the font policy,
+payload/linker guard and user-overridable office-only file associations.
 
 The curated GNOME extension closure is explicit:
 
@@ -342,13 +352,14 @@ each profile change is implemented and validated.
 
 | Change | Scope | Required evidence |
 | :--- | :--- | :--- |
-| 1. Applications and dependencies | Photo tools, LocalSend, phone integration, management tools and approved support packages | Both images build; applications start offline; network integrations work with the firewall |
-| 2. GNOME profile | Image configuration complete: package/pin the selected extensions and apply fresh-user defaults, including titlebar buttons | Correct Shell compatibility, enabled state, dependency checks and user-overridable defaults are automated; reboot/login/lock tests remain |
+| 1. Applications and dependencies | Merged photo tools, LocalSend, phone integration, management tools, ONLYOFFICE and support packages | Both images build and pass live smoke; positive GNOME/KDE user validation; targeted application/network/office checks remain |
+| 2. GNOME profile | Merged selected extensions, fresh-user defaults, titlebar buttons and complete global GNOME themes/icons | Build guards and automated checks pass; latest GNOME build works as expected per user; targeted edge-case evidence remains |
 | 3. KDE profile | Native feature configuration, selected apps and evaluation of screenshot OCR/search | Equivalent task coverage, correct panel behavior, reboot/login/lock tests |
 | 4. Optional appearance and backups | GNOME theme assets included; native KDE appearance and validated backup workflow pending | GNOME readability/accessibility and session review; successful backup and restore before recommending defaults |
 
 Each change updates the manual and the actual-current-state documentation.
-Do not advertise planned features as shipped while this checklist is open.
+Distinguish merged/shipped image configuration from itemized acceptance instead
+of describing this entire milestone as unimplemented while a checklist is open.
 
 The separate [AI tools and CLI follow-up plan](AI_TOOLS.md) covers cross-edition
 tool selection and optional desktop-client guidance. It does not add AI clients
@@ -393,10 +404,40 @@ to this profile or replace the outstanding session acceptance checks above.
   actual activation, panel layout, OCR/QR, login/lock/reboot behavior, battery and
   no-battery behavior, multi-monitor behavior and user-setting persistence.
 
+### Merged desktop slice and user feedback (2026-09-08)
+
+- [PR #16](https://github.com/korq-apps/sensible/pull/16) merged on 2026-09-07
+  as `c7015b4`. Its final head `5c702c8` passed unit/integration checks and both
+  GNOME/KDE ISO builds plus live UEFI smoke in
+  [CI run 34102104112](https://github.com/korq-apps/sensible/actions/runs/34102104112).
+  Release publication was skipped. These are live-boot checks, not the installed
+  disk or Secure Boot matrix.
+- On 2026-09-08 the user reported that the latest GNOME build works as expected
+  considering the recent changes. Record this as positive GNOME feature smoke
+  feedback and the working baseline for follow-ups. The report did not identify
+  an ISO checksum or enumerate individual tests, so it cannot be tied to an
+  exact artifact or used to check off every hardware/session scenario.
+- The user subsequently confirmed on 2026-09-08: KDE validation is done and OK.
+  Both desktops therefore have positive user validation. Exact ISO identities
+  and individual scenarios were not specified; retain targeted evidence gaps
+  without treating general KDE validation as pending.
+- Do not repeat GNOME packaging or add more themes merely because the remaining
+  checklist is open. Remaining desktop evidence consists of focused
+  checks for office documents/printing, first-login manual behavior, lock/reset
+  and override persistence, transfers/OCR and multi-monitor/battery cases.
+- ONLYOFFICE's earlier forced-SIGTERM headless shutdown fault remains unresolved;
+  normal window closure passed in the container test. General positive GNOME
+  feedback does not establish that this specific shutdown case was exercised.
+
 ## Acceptance checklist
 
-- [ ] Exact sources, licenses, package names, extension UUIDs and versions recorded.
-- [ ] All required artifacts/dependencies available before any target disk is wiped.
+- [x] Selected package/artifact sources, license notices, extension UUIDs and pins
+      recorded; final release corresponding-source/redistribution audit remains separate.
+- [x] Build hooks reject missing/incompatible pinned desktop assets and required dependencies.
+- [x] Both edition ISO builds and live UEFI smoke pass for the final PR #16 head.
+- [x] Positive user-reported smoke of the latest GNOME build recorded on 2026-09-08.
+- [x] User reports KDE validation completed successfully on 2026-09-08.
+- [ ] Complete shared package/asset validation before any target disk is wiped (#9).
 - [ ] A new GNOME user and a new KDE user can reach the configured desktop offline.
 - [ ] Extensions are actually enabled and functional, not merely installed.
 - [ ] LocalSend transfers and GSConnect/KDE Connect pairing work with the firewall on.
@@ -408,7 +449,12 @@ to this profile or replace the outstanding session acceptance checks above.
       user, and later user changes survive logout, reboot and upgrades.
 - [ ] Multi-monitor layout and battery/no-battery behavior are checked.
 - [ ] Before/after image size, build duration and idle resource use are recorded.
-- [ ] The offline manual accurately describes the shipped profile and recovery/reset paths.
+- [x] Offline manual entries cover the implemented applications, themes, defaults
+      and selection/reset paths, with automated package/link coverage.
+- [ ] Verify the first-login manual opens offline and does not reopen on later
+      logins, for installed GNOME and KDE users.
+- [ ] Verify office document round trips, PDF export/printing, file associations,
+      normal shutdown and user overrides in real sessions on both editions.
 
 These checks supplement, not replace, the release blockers in
 [PLAN.md](PLAN.md): [automated input #4](https://github.com/korq-apps/sensible/issues/4),

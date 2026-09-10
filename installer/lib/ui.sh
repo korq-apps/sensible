@@ -52,6 +52,7 @@ _ui_has_controlling_tty() {
 # Keep normal character echoing, but hide control replies for the installer
 # session and restore the original terminal state when it exits.
 prepare_terminal() {
+    [ "${SENSIBLE_UNATTENDED:-false}" != true ] || return 0
     _ui_has_controlling_tty || return 0
     [ -z "$SENSIBLE_STTY_STATE" ] || return 0
     if ! SENSIBLE_STTY_STATE=$(stty -g </dev/tty 2>/dev/null); then
@@ -351,11 +352,15 @@ notice() {
 # ── Legacy whiptail-compatible wrappers (now gum-first) ──
 
 _ui_use_gum() {
-    [ "${UI_TOOL:-}" = "gum" ] && _ui_has_controlling_tty
+    [ "${SENSIBLE_UNATTENDED:-false}" != true ] && [ "${UI_TOOL:-}" = "gum" ] && _ui_has_controlling_tty
 }
 
 ui_msgbox() {
     local title="$1" text="$2"
+    if [ "${SENSIBLE_UNATTENDED:-false}" = true ]; then
+        printf '%s: %b\n' "$title" "$text" >&2
+        return 0
+    fi
     # Callers pass \n escapes (they are whiptail's native form). gum and the
     # text fallback print them literally, so expand once for everyone —
     # whiptail handles real newlines identically.

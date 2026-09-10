@@ -21,6 +21,7 @@
 # instead of failing it.
 show_failure_screen() {
     local stage="$1" exit_code="$2" log_file="${3:-${INSTALL_LOG}}"
+    [ "${SENSIBLE_UNATTENDED:-false}" != true ] || return 0
     [ -t 0 ] || return 0
     [ "${SENSIBLE_NO_FAILURE_SCREEN:-}" = "1" ] && return 0
 
@@ -50,7 +51,7 @@ Full log: ${log_file}" \
         case "${choice}" in
             log)
                 if command -v less >/dev/null 2>&1; then
-                    less "${log_file}"
+                    less -R "${log_file}"
                 else
                     # No pager: page it manually rather than flooding the screen
                     # with a log the user cannot scroll back through.

@@ -17,7 +17,9 @@ syntax_checker_for() {
 sh_files=(
     installer/sensible-install.sh
     installer/lib/common.sh
+    installer/lib/config.sh
     installer/lib/disk.sh
+    installer/lib/diagnostics.sh
     installer/lib/fstab.sh
     installer/lib/hardware.sh
     installer/lib/desktop.sh
@@ -58,6 +60,7 @@ sh_files=(
     tests/lib/harness.sh
     tests/unit/common_test.sh
     tests/unit/setup_form_test.sh
+    tests/unit/config_test.sh
     tests/unit/disk_test.sh
     tests/unit/fstab_test.sh
     tests/unit/desktop_test.sh
@@ -65,6 +68,7 @@ sh_files=(
     tests/unit/syntax_test.sh
     tests/unit/verify_test.sh
     tests/unit/ci_runtime_test.sh
+    tests/unit/diagnostics_test.sh
     tests/unit/build_cache_test.sh
     tests/unit/package_check_test.sh
     tests/integration/installer_flow_test.sh
@@ -127,7 +131,7 @@ assert_not_contains "form TTY check does not redirect the fd it is testing" "${s
 assert_contains "UI detects the controlling terminal" "${ui_source}" '( : </dev/tty )'
 assert_contains "forms share the UI terminal detector" "${setup_source}" $'_setup_use_gum() {\n    _ui_use_gum'
 assert_contains "welcome offers an explicit start action" "${ui_source}" "Press Enter to start"
-assert_contains "installer opens the welcome before keyboard setup" "$(<"${REPO_ROOT}/installer/sensible-install.sh")" $'    welcome_screen\n\n    # ── 1. Keyboard'
+assert_contains "installer opens the welcome before keyboard setup" "$(<"${REPO_ROOT}/installer/sensible-install.sh")" $'        welcome_screen\n\n        # ── 1. Keyboard'
 assert_contains "terminal size is measured from its controlling TTY" "${ui_source}" 'stty size </dev/tty'
 style_fallback_output="$(bash -c '
     set -e
