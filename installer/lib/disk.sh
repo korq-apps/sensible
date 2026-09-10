@@ -429,6 +429,23 @@ create_swapfile() {
     log_info "Swapfile ready at ${SWAPFILE} (resume_offset=${RESUME_OFFSET})."
 }
 
+declare -a FAILED_MOUNT_ARGS=()
+
+# Keep the first failing mount's exact arguments, without changing its options,
+# retrying it, or losing its exit status. The EXIT trap captures system state.
+mount_target() {
+    local status=0
+    printf '[mount]'
+    printf ' %q' "$@"
+    printf '\n'
+    mount "$@" || status=$?
+    if [ "$status" -ne 0 ]; then
+        if [ "${#FAILED_MOUNT_ARGS[@]}" -eq 0 ]; then FAILED_MOUNT_ARGS=("$@"); fi
+        log_err "mount failed with exit code ${status}; collecting diagnostics before cleanup."
+    fi
+    return "$status"
+}
+
 format_and_mount() {
     local disk="$1"
     local fs_type="$2"
@@ -472,7 +489,7 @@ format_and_mount() {
     if [ "$fs_type" = "btrfs" ]; then
         log_info "Creating Btrfs filesystem on ${TARGET_ROOT} with subvolumes..."
         mkfs.btrfs -f -L ROOT "$TARGET_ROOT"
-        mount "$TARGET_ROOT" ${MNT}
+        mount_target "$TARGET_ROOT" ${MNT}
         INSTALLER_OWNS_TARGET_MOUNTS="true"
         btrfs subvolume create ${MNT}/@
         btrfs subvolume create ${MNT}/@home
@@ -482,16 +499,16 @@ format_and_mount() {
         umount ${MNT}
 
         local BTRFS_OPTS="noatime,compress=zstd:1,space_cache=v2,discard=async"
-        mount -o "${BTRFS_OPTS},subvol=@" "$TARGET_ROOT" ${MNT}
+        mount_target -o "${BTRFS_OPTS},subvol=@" "$TARGET_ROOT" ${MNT}
         mkdir -p ${MNT}/{home,.snapshots,var/log,boot,swap}
-        mount -o "${BTRFS_OPTS},subvol=@home" "$TARGET_ROOT" ${MNT}/home
-        mount -o "${BTRFS_OPTS},subvol=@snapshots" "$TARGET_ROOT" ${MNT}/.snapshots
-        mount -o "${BTRFS_OPTS},subvol=@var_log" "$TARGET_ROOT" ${MNT}/var/log
-        mount -o "noatime,subvol=@swap" "$TARGET_ROOT" ${MNT}/swap
+        mount_target -o "${BTRFS_OPTS},subvol=@home" "$TARGET_ROOT" ${MNT}/home
+        mount_target -o "${BTRFS_OPTS},subvol=@snapshots" "$TARGET_ROOT" ${MNT}/.snapshots
+        mount_target -o "${BTRFS_OPTS},subvol=@var_log" "$TARGET_ROOT" ${MNT}/var/log
+        mount_target -o "noatime,subvol=@swap" "$TARGET_ROOT" ${MNT}/swap
     else
         log_info "Creating Ext4 filesystem on ${TARGET_ROOT}..."
         mkfs.ext4 -F -L ROOT -O fast_commit "$TARGET_ROOT"
-        mount -o "noatime,errors=remount-ro,discard" "$TARGET_ROOT" ${MNT}
+        mount_target -o "noatime,errors=remount-ro,discard" "$TARGET_ROOT" ${MNT}
         INSTALLER_OWNS_TARGET_MOUNTS="true"
         mkdir -p ${MNT}/boot
     fi
@@ -500,9 +517,9 @@ format_and_mount() {
     # there is no partition to fall back to when encryption is off.
     create_swapfile "$fs_type" "$swap_mb"
 
-    mount -o "noatime" "$BOOT_PART" ${MNT}/boot
+    mount_target -o "noatime" "$BOOT_PART" ${MNT}/boot
     mkdir -p ${MNT}/boot/efi
-    mount -o "umask=0077" "$EFI_PART" ${MNT}/boot/efi
+    mount_target -o "umask=0077" "$EFI_PART" ${MNT}/boot/efi
     log_success "Filesystems formatted and mounted to ${MNT} successfully."
 }
 

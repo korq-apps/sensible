@@ -94,6 +94,7 @@ and path confinement even for a known reference.
 | `manual_test.sh` | Offline chapter assets/links, current app-list coverage, both build paths, missing payload rejection, launcher fallback/retry/idempotency, and scoped per-user autostart ownership |
 | `syntax_test.sh` | `bash -n` over every shell script in the repo, executable bits, live-build hook naming (`*.hook.{chroot,binary}` — anything else is silently skipped), and direct-file/release CI guards |
 | `ci_runtime_test.sh` | Smoke-test early readiness, deadline failures, premature guest exits, settling, QEMU cancellation, and named-container status/cleanup using process mocks |
+| `diagnostics_test.sh` | Bounded read-only probes, missing tools/timeouts, archive metadata and allowlist, FIFO export/receive round trip, stalled export, corrupt/incomplete/oversized frames, private files and no extraction, QEMU launch arguments, ISO identity, installed-disk boot, preserved firmware variables and exit propagation |
 | `build_cache_test.sh` | Real stage-driver filesystem operations with mocked build commands: clean state, package-only cache restore, successful snapshot refresh, and preservation of the prior snapshot after failure |
 | `package_check_test.sh` | Native Testing-only APT configuration, host-state isolation, missing packages, archive refresh failures, and incomplete package collection |
 | `verify_test.sh` | Installed boot artifacts and extracted initramfs mapping/source identity, including stale UUIDs and literal mapping-name matching |
@@ -113,6 +114,7 @@ function mock that records its invocation. Asserts, per scenario:
 - Live-copy deploy path: API mountpoints remain available while live-only installer artifacts are removed
 - Completion: stay-live, successful reboot request, and failed reboot fallback
 - Aborts: undersized/no-disk, failed partition-table reread, missing partition devices before formatting, surviving live initramfs diversion, missing cryptsetup closure, declined destructive confirmation, and a mandatory post-wipe failure
+- Boot-mount failure: exact arguments captured before teardown; successful, failed and timed-out diagnostics all preserve exit code 32. The full-flow fixture mocks the collector so it never probes the host.
 - Re-prompts: invalid username rejected, valid accepted
 
 Assertions cover generated files (fstab, crypttab, hostname,

@@ -23,6 +23,8 @@ source "${LIB_DIR}/setup-form.sh"
 source "${LIB_DIR}/config.sh"
 # shellcheck source=lib/disk.sh
 source "${LIB_DIR}/disk.sh"
+# shellcheck source=lib/diagnostics.sh
+source "${LIB_DIR}/diagnostics.sh"
 # shellcheck source=lib/fstab.sh
 source "${LIB_DIR}/fstab.sh"
 # shellcheck source=lib/hardware.sh
@@ -52,6 +54,9 @@ cleanup() {
         fi
         printf '[ERROR] %s\n' "$failure_text" >> "$INSTALL_LOG" \
             || log_warn "Could not append the final failure to ${INSTALL_LOG}."
+        if ! capture_install_diagnostics "$exit_code"; then
+            log_warn "Diagnostic collection was incomplete; preserving the original installation failure."
+        fi
         if [ "${INSTALLER_OWNS_TARGET_MOUNTS:-false}" = "true" ]; then
             preserve_install_log || log_warn "Could not copy the installer log into the partial target."
         fi
@@ -63,6 +68,7 @@ cleanup() {
         fi
     fi
     restore_terminal
+    return "$exit_code"
 }
 
 sanitize_live_target() {
@@ -793,7 +799,7 @@ virtual disk, or less RAM."
     install_progress_update 4 "Preparing the installed system"
     log_info "Preparing chroot environment..."
     for d in /dev /dev/pts /proc /sys; do
-        mount --bind "$d" "${MNT}$d"
+        mount_target --bind "$d" "${MNT}$d"
     done
     # /run is mounted as a fresh tmpfs, not a bind of the live host's /run.
     # Runtime state from the installer must not become target state.  In
@@ -804,7 +810,7 @@ virtual disk, or less RAM."
     # A fresh tmpfs is also enough for `chroot systemctl enable ...`, which
     # only writes to /etc/systemd/system.
     log_info "Mounting fresh tmpfs on ${MNT}/run (must NOT be a bind of the live /run)"
-    if ! mount -t tmpfs tmpfs "${MNT}/run"; then
+    if ! mount_target -t tmpfs tmpfs "${MNT}/run"; then
         log_err "Could not mount tmpfs on ${MNT}/run. The live /run contains /run/live/medium, which makes update-initramfs refuse to regenerate and leaves the LUKS root un-unlockable. Aborting rather than producing an unbootable install."
         return 1
     fi
@@ -813,7 +819,7 @@ virtual disk, or less RAM."
     # then only warns "EFI variables cannot be set on this system", leaving the
     # machine without a boot entry. Bind it explicitly.
     if [ -d /sys/firmware/efi/efivars ] && [ -d "${MNT}/sys/firmware/efi" ]; then
-        if ! mount --bind /sys/firmware/efi/efivars "${MNT}/sys/firmware/efi/efivars"; then
+        if ! mount_target --bind /sys/firmware/efi/efivars "${MNT}/sys/firmware/efi/efivars"; then
             log_err "Could not bind efivarfs into the target. GRUB would be unable to create the firmware boot entry."
             return 1
         fi

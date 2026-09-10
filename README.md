@@ -182,6 +182,11 @@ The installed system hostname defaults to `debian`. The UEFI boot entry stays **
 
 Build: `./live/build.sh` (podman/docker) or `sudo ./scripts/build-native.sh` (containerless, on Debian) produces `sensible-$SENSIBLE_VARIANT-debian-testing-amd64.iso` (`SENSIBLE_VARIANT=gnome`, the default, or `kde`). Verify it the way CI does with `./scripts/smoke-boot.sh` (headless UEFI boot assertion), or launch it interactively with `./scripts/run-qemu.sh`. Tests: `tests/run-tests.sh` — no root, no network.
 
+Interactive QEMU runs save private host/serial logs and receive automatic
+pre-cleanup installer failure bundles without networking. See
+[QEMU testing and diagnostic export](docs/INSTALL.md#qemu-testing-and-diagnostic-export)
+for the host collection command and installed-disk boot mode.
+
 CI builds both desktop editions and tests each under UEFI and Secure Boot.
 Smoke tests stop after both serial boot markers appear and QEMU remains alive
 for `SMOKE_SETTLE` seconds (default 5); `SMOKE_TIMEOUT` (default 600) is the

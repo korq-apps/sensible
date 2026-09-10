@@ -19,6 +19,7 @@ sh_files=(
     installer/lib/common.sh
     installer/lib/config.sh
     installer/lib/disk.sh
+    installer/lib/diagnostics.sh
     installer/lib/fstab.sh
     installer/lib/hardware.sh
     installer/lib/desktop.sh
@@ -67,6 +68,7 @@ sh_files=(
     tests/unit/syntax_test.sh
     tests/unit/verify_test.sh
     tests/unit/ci_runtime_test.sh
+    tests/unit/diagnostics_test.sh
     tests/unit/build_cache_test.sh
     tests/unit/package_check_test.sh
     tests/integration/installer_flow_test.sh

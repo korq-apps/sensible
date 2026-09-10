@@ -48,13 +48,14 @@ The release-publication job was skipped; this is build evidence, not a release.
 GitHub issues #4–#9, #11 and #13 remain open as checked on this date. This
 reconciliation updates repository plans only, not GitHub ticket states.
 
-### Validation snapshot (2026-09-08)
+### Validation snapshot (updated 2026-09-10)
 
 | Evidence | What it establishes | Still outstanding |
 | :--- | :--- | :--- |
 | PR #16 merged; final PR CI successful | GNOME/KDE ISOs build and reach the live UEFI smoke marker; automated regression suite passes | Installed-disk boots and Secure Boot matrix (#5), physical hardware records (#6) |
 | User: latest GNOME build works as expected with the recent changes | Positive GNOME feature smoke/acceptance feedback for this desktop slice | Exact tested ISO checksum/session context and itemized edge-case results were not supplied; do not infer them |
 | User: KDE validation done, OK | Positive KDE validation feedback; general validation reported successful for both editions | Exact artifact and itemized results were not supplied; specific release scenarios remain separately tracked |
+| User: QEMU installation retry completed and the installed system booted (2026-09-10) | Positive install/boot validation for the tested scenario; the earlier `/boot` mount failure did not recur | Root cause remains unconfirmed. ISO checksum, exact configuration and interactive versus `--config` mode were not recorded for this retry; this does not complete #5's matrix or validate diagnostic export on a real failure |
 | Real theme/package/container checks recorded below | Theme component parity, GTK loading, office offline package/runtime checks | Targeted office document fidelity/printing, multi-monitor/accessibility, first-login manual lifecycle, shutdown edge cases and resource measurements |
 
 Do not re-plan the implemented GNOME features or repeat their packaging work
@@ -160,6 +161,12 @@ engine. The implemented v1 contract is in
    disabled, document safe secret provisioning and the exit contract, and update
    the test guide. This PR establishes #4's adapter and fixture evidence; actual
    QEMU installs and detached-ISO boots belong to #5 immediately afterward.
+
+The VM investigation also adds bounded pre-cleanup failure bundles and a dedicated
+QEMU guest-to-host log channel; see [diagnostic export](INSTALL.md#qemu-testing-and-diagnostic-export).
+The mount instrumentation preserves the existing options and does not retry
+failed mounts. The user's successful install/boot retry is acceptance evidence,
+not proof of a root-cause fix for the earlier intermittent failure.
 
 Not included: profile export, a general dry-run/diagnostics tool, the expanded
 #9 payload validator, new apps/themes, editor defaults or storage-policy changes.

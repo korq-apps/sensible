@@ -75,6 +75,7 @@ live/config/packages.chroot/onlyoffice-desktopeditors_amd64.deb
 live/config/includes.chroot/usr/share/doc/sensible-office/
 
 # Temporary files
+/.qemu/
 *~
 *.swp
 *.bak

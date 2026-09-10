@@ -14,6 +14,10 @@ SENSIBLE_TEST_MODE=1
 check_root() { :; }
 check_uefi()  { :; }
 sleep()       { :; }
+capture_install_diagnostics() {
+    mlog "diagnostics $* mount ${FAILED_MOUNT_ARGS[*]}"
+    return "${MOCK_DIAGNOSTICS_RC:-0}"
+}
 wait_for_device() { mlog "wait_for_device $*"; [ "$1" != "${MOCK_MISSING_PARTITION:-}" ]; }
 
 WORK="$(mktemp -d /tmp/sensible-flow-test.XXXXXX)"
@@ -143,6 +147,7 @@ cryptsetup()  {
 mount()       {
     mlog "mount $*"
     local target="${*: -1}"
+    if [ "${MOCK_BOOT_MOUNT_FAILURE:-0}" = 1 ] && [ "$target" = "${MNT}/boot" ]; then return 32; fi
     MOCK_MOUNTS["$target"]=1
     # Track the kind of mount so we can assert /run is a fresh tmpfs and not a
     # bind of the live host's /run (which carries /run/live/medium and makes
@@ -889,6 +894,25 @@ run_flow --config "$CONFIG_ANSWERS"
 MOCK_MISSING_LIVE_PACKAGE=""
 assert_ne "incomplete ISO rejected in config mode" 0 "$RC"
 assert_not_contains "incomplete ISO not partitioned" "$(log_text)" sgdisk
+
+t_section "Failed boot mount captures evidence before cleanup without masking exit 32"
+for diagnostic_rc in 0 1 124; do
+    MOCK_BOOT_MOUNT_FAILURE=1
+    MOCK_DIAGNOSTICS_RC="$diagnostic_rc"
+    run_flow --config "$CONFIG_ANSWERS"
+    MOCK_BOOT_MOUNT_FAILURE=0
+    MOCK_DIAGNOSTICS_RC=0
+    assert_rc "diagnostic rc $diagnostic_rc preserves mount failure" 32 "$RC"
+    assert_contains "exact failed mount args captured" "$(log_text)" "diagnostics 32 mount -o noatime /dev/sda2 ${MNT}/boot"
+    diag_line=$(awk '/^diagnostics / { print NR; exit }' "${WORK}/calls.log")
+    cleanup_line=$(awk -v expected="umount ${MNT}/swap" '$0 == expected { print NR; exit }' "${WORK}/calls.log")
+    if [ -n "$diag_line" ] && [ -n "$cleanup_line" ] && [ "$diag_line" -lt "$cleanup_line" ]; then
+        t_ok
+    else
+        t_fail "diagnostics run before failure cleanup"
+    fi
+    assert_not_contains "failure never reports success" "$(output_text)" 'Installation finished successfully!'
+done
 
 t_section "Unattended secrets stay private with inherited tracing/export flags"
 (

@@ -51,7 +51,7 @@ Full log: ${log_file}" \
         case "${choice}" in
             log)
                 if command -v less >/dev/null 2>&1; then
-                    less "${log_file}"
+                    less -R "${log_file}"
                 else
                     # No pager: page it manually rather than flooding the screen
                     # with a log the user cannot scroll back through.

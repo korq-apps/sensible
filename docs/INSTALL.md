@@ -220,6 +220,78 @@ error, and the last relevant output. Review logs before posting and remove
 usernames, network names, serial numbers, and other private data. Never post
 passwords or encryption passphrases.
 
+## QEMU testing and diagnostic export
+
+Use an ISO built from sources containing the diagnostic collector. From the
+repository on the **host**, launch a disposable virtual disk (created as 64 GiB
+if absent; never point this command at a disk you need to preserve):
+
+```bash
+./scripts/run-qemu.sh --offline sensible-gnome-debian-testing-amd64.iso test-disk.qcow2
+```
+
+Omit `--offline` to use QEMU user networking. Neither mode forwards host ports
+or shares a host directory. The launcher prints a fresh private `.qemu/run.*`
+directory and an exact collection command. On installer failure, leave the VM
+open and run that command in another **host** terminal, for example:
+
+```bash
+python3 scripts/collect-vm-logs.py .qemu/run.ABC12345
+```
+
+Replace the example directory with the printed path. The installer automatically
+captures evidence **before cleanup**, saves a private archive under `/run` in
+the live guest, and sends it over a dedicated virtio-serial port. This works
+without networking, SSH, manual mounts, or copying output from the VM console.
+Collection/export is best-effort and time-bounded (40 seconds plus a 2-second
+kill grace); it never retries the failed mount or changes the original exit code.
+
+The host directory contains:
+
+- `diagnostics-<sha256>.tar.gz`: checksum-checked guest report, installer log,
+  exact failed mount arguments, kernel messages, mount table, filesystem/device
+  signatures, udev properties, boot superblock and tool versions. Each probe's
+  exit status, timeout or output truncation is recorded in `report.json`.
+- `host.txt`: ISO SHA256, launcher repository revision/dirty status, firmware
+  hash, QEMU version and launch arguments. The ISO hash identifies the tested
+  artifact; the host checkout revision is not necessarily its build revision.
+- `serial.log`: serial console output (installed systems only produce it if
+  configured to use a serial console).
+- `qemu.log`: QEMU's own error output.
+
+The receiver never extracts guest archives. Empty, incomplete, oversized or
+corrupt transfers fail explicitly; retry an incomplete transfer once export has
+finished. Bundles are limited to 32 MiB and a run's stream to 128 MiB. Host logs
+survive guest shutdown; guest `/run` bundles do not. Check the local bundle path
+in the installer log if export fails. Collection does not include answer files,
+password files, the shell environment or `/etc/shadow`, but logs can contain
+usernames, paths, UUIDs, device serials and other identifiers. **Review and redact
+before sharing**, including the host/serial logs; do not post an entire run
+directory indiscriminately.
+
+For a manual report in an updated live guest's root shell (evidence is then
+from the current state, not necessarily the point of failure):
+
+```bash
+python3 /opt/sensible/installer/collect-diagnostics.py --device /dev/vda2 --boot-device /dev/vda2
+```
+
+Use your actual boot partition. The same host collection command retrieves it.
+An older ISO lacks this collector: rebuild once before reproducing the failure.
+The transport and capture tests are not a substitute for a fresh-ISO VM run.
+
+After a successful installation, close the VM and boot the same disk without
+the ISO. The launcher preserves its UEFI variable store between runs:
+
+```bash
+./scripts/run-qemu.sh --offline --installed test-disk.qcow2
+```
+
+Host requirements: QEMU, OVMF, Python 3 and the repository's usual GNU utilities.
+`QEMU_RAM`, `QEMU_CPUS`, `QEMU_DISPLAY`, `QEMU_LOG_ROOT`, `QEMU_OVMF_CODE` and
+`QEMU_OVMF_VARS` override the launcher defaults. The VM remains interactive;
+this does not yet automate the installed-boot acceptance matrix.
+
 ## Unattended installation for testing
 
 This advanced mode is implemented in the current sources for installer testing;
