@@ -1,19 +1,41 @@
 # Desktop profiles: GNOME and KDE
 
-Status, reconciled **2026-09-08**: **PR #16 merged; GNOME/KDE ISO builds and live
-UEFI smoke checks pass; the user reports that the latest GNOME build works as
-expected and KDE validation is also OK.** The application baseline, GNOME profile,
+Status, reconciled **2026-09-10**: **PRs #16–#18 are merged; both editions passed
+each PR's ISO build and live console smoke.** Earlier user feedback confirms
+successful GNOME and KDE validation, and the user now confirms Try Sensible
+works as expected. This does not assert every hardware/audio scenario passed.
+The application baseline, GNOME profile,
 Paper/Orchis defaults, global replacement themes/icons and ONLYOFFICE are no
 longer pending implementation. Native KDE profile/appearance configuration,
-editor neutrality and backup choices remain planned.
+editor neutrality and backup choices remain planned. PR #18 adds the Try
+Sensible live desktop and bakes the shared GNOME dconf profile into the image;
+those are implemented and the live-desktop experience has positive validation.
 
 Issue #13 remains open for targeted GNOME acceptance; preserve the successful
 user smoke report without treating it as evidence for every checklist item.
-The [shared priority queue](PLAN.md#reconciled-priorities) keeps validated
-installer input (#4) next and installed-system evidence ahead of more expansion.
-General validation of both desktops is now reported successful. Historical entries below
+The [shared priority queue](PLAN.md#reconciled-priorities) now parks further
+unattended automation and prioritizes user-facing features; release evidence
+remains required, but a new harness is not a prerequisite. General validation of both
+desktops is reported successful. Historical entries below
 retain their original dates and test scope; the current evidence is recorded in
-[Merged desktop slice and user feedback](#merged-desktop-slice-and-user-feedback-2026-09-08).
+[Merged desktop slice and user feedback](#merged-desktop-slice-and-user-feedback-2026-09-08)
+and [Merged live-desktop and audio slice](#merged-live-desktop-and-audio-slice-2026-09-10).
+
+The [GitHub prioritization index (#28)](https://github.com/korq-apps/sensible/issues/28)
+links the planned desktop scopes: [native KDE defaults (#27)](https://github.com/korq-apps/sensible/issues/27),
+[editor neutrality (#26)](https://github.com/korq-apps/sensible/issues/26),
+[personal backups (#21)](https://github.com/korq-apps/sensible/issues/21) and
+[Btrfs recovery (#19)](https://github.com/korq-apps/sensible/issues/19).
+KDE defaults and backup-tool selection need a design choice; the editor decision
+is already confirmed. Personal backups and system snapshots remain distinct.
+
+The KDE wallet-creation error reported on 2026-09-10 is tracked separately in
+[#29: wallet/keyring integration](https://github.com/korq-apps/sensible/issues/29),
+ahead of cosmetic KDE work. It covers both desktops: password-backed first use,
+PAM/password-login unlock, honest autologin/biometric prompts, preservation of
+existing credentials and isolation of live-user state. Supported reuse of a
+disk-unlock secret is a separate evaluation, not an assumed fix. The report
+does not invalidate the otherwise successful Try Sensible feedback.
 
 ## Intent
 
@@ -431,6 +453,28 @@ to this profile or replace the outstanding session acceptance checks above.
   normal window closure passed in the container test. General positive GNOME
   feedback does not establish that this specific shutdown case was exercised.
 
+### Merged live-desktop and audio slice (2026-09-10)
+
+- [PR #18](https://github.com/korq-apps/sensible/pull/18) merged as `aa1c44e`.
+  [Its CI](https://github.com/korq-apps/sensible/actions/runs/34499641262)
+  passed unit/integration checks and both edition ISO/console UEFI smoke jobs.
+  This does not test the new graphical boot entry. Combined post-merge image
+  validation is tracked in the [shared plan](PLAN.md#validation-snapshot-updated-2026-09-10).
+- Implemented: Try Sensible live account/session preparation and installer
+  launcher; explicit terminal packages; one `configs/gnome-dconf-defaults`
+  source for live and installed GNOME; removal of live desktop artifacts from
+  the target; additional ALSA/firmware packages and `sensible-audio-check`.
+- The user confirms Try Sensible works as expected. Record this as positive
+  live-desktop validation, not another generic retest assignment. Separately
+  retain checks that the installed system has its own account/locking behavior
+  with no live launcher/autologin leftovers.
+  A throwaway live account with idle locking disabled is not an installed-user
+  security default.
+- Collect speaker, headphone and microphone results on real Intel/AMD hardware
+  under #6, with checker output and the exact image identity. Package presence
+  and fixture coverage do not prove a model-specific amplifier or microphone
+  works; known firmware/kernel limitations remain explicit.
+
 ## Acceptance checklist
 
 - [x] Selected package/artifact sources, license notices, extension UUIDs and pins
@@ -439,6 +483,10 @@ to this profile or replace the outstanding session acceptance checks above.
 - [x] Both edition ISO builds and live UEFI smoke pass for the final PR #16 head.
 - [x] Positive user-reported smoke of the latest GNOME build recorded on 2026-09-08.
 - [x] User reports KDE validation completed successfully on 2026-09-08.
+- [x] PR #18 live-desktop/audio implementation merged; PR ISO/console smoke checks pass.
+- [x] User reports Try Sensible works as expected (2026-09-10); exact per-edition scenarios were not enumerated.
+- [ ] Installed users retain the intended lock/autologin policy; live desktop state and launchers are removed.
+- [ ] #29: fresh KDE wallet creation works without mandatory GPG setup; matching password login unlocks the store on both desktops, and existing/live credentials are handled safely. Autologin/biometric and optional disk-secret paths have explicit tested or deferred outcomes.
 - [ ] Complete shared package/asset validation before any target disk is wiped (#9).
 - [ ] A new GNOME user and a new KDE user can reach the configured desktop offline.
 - [ ] Extensions are actually enabled and functional, not merely installed.
@@ -459,7 +507,7 @@ to this profile or replace the outstanding session acceptance checks above.
       normal shutdown and user overrides in real sessions on both editions.
 
 These checks supplement, not replace, the release blockers in
-[PLAN.md](PLAN.md): [automated input #4](https://github.com/korq-apps/sensible/issues/4),
+[PLAN.md](PLAN.md): merged [automated input #4](https://github.com/korq-apps/sensible/issues/4),
 [installed-disk matrix #5](https://github.com/korq-apps/sensible/issues/5), and
 [physical hardware evidence #6](https://github.com/korq-apps/sensible/issues/6).
 The expanded asset set also belongs in

@@ -53,7 +53,7 @@ suite (`tests/`) can run the full flow unprivileged against a temp directory.
 | Timezone | `timedatectl` or `UTC` | zoneinfo |
 | Locale | `en_US.UTF-8` | Must be in `/usr/share/i18n/SUPPORTED` |
 | Keyboard | live console layout | Validate and apply to the live console before either password; write the same layout through target `keyboard-configuration` |
-| Skip login password (autologin) | On (only offered with LUKS) | GDM/SDDM autologin; the LUKS passphrase stays the single authentication and the idle screen lock is always enforced |
+| Skip login password (autologin) | On (only offered with LUKS) | GDM/SDDM autologin after disk unlock; saved-secret access may still prompt; idle screen lock remains enabled |
 | Full name | empty | Optional GECOS + git `user.name` |
 | Email | empty | Optional git `user.email`, written only to the user's `~/.gitconfig` |
 
@@ -589,7 +589,7 @@ x = C-x
 ## 12. Session login and screen lock
 
 With LUKS enabled the installer offers autologin (default **on**): the boot
-passphrase authenticates once, the desktop starts without a login prompt, and
+passphrase unlocks the disk, the desktop starts without a login prompt, and
 the password remains set for sudo, screen unlock, and the keyring. Without
 LUKS the prompt is never shown.
 
@@ -631,8 +631,21 @@ User=<username>
 Session=plasma
 ```
 
-Caveats (by design): logout immediately logs back in, and gnome-keyring is not
-unlocked by autologin (first use prompts once).
+Caveats: logout immediately logs back in. Skipping the display-manager login
+does not guarantee password-free access to saved credentials. Autologin or
+biometric authentication alone does not supply the wallet/keyring password;
+password login can unlock a matching store through PAM. Prompts may recur
+according to wallet locking policy, so do not promise exactly one per session.
+
+[#29](https://github.com/korq-apps/sensible/issues/29) plans KDE first-use and
+cross-desktop PAM acceptance without changing existing encrypted wallets,
+installed screen locking or the LUKS-only autologin choice. It separately
+evaluates GDM's upstream cached disk-password mechanism; current package
+configuration is not proof of working boot-to-keyring unlock. See
+[Architecture: desktop wallets](ARCHITECTURE.md#desktop-wallets-and-saved-credentials).
+Neither empty-password persistent wallets nor plaintext saved passwords are
+an acceptable way to suppress a prompt. This is a planned integration contract,
+not a claim that the fix or a new secret-handoff mechanism has shipped.
 
 ---
 

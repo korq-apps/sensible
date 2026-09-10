@@ -1,8 +1,9 @@
 # AI tools and CLI follow-ups
 
-Status: **planned, not implemented**. Recorded 2026-09-06. No AI client,
-provider account, model weights or new repository is added by this plan.
-Upstream availability below was checked on that date; installation recipes
+Status: **planned, not implemented**. Originally recorded 2026-09-06; ticket
+links added 2026-09-10. No AI client, provider account, model weights or new
+repository is added by this plan.
+Upstream availability below was checked on 2026-09-06; installation recipes
 must be rechecked and tested when their implementation lands.
 
 ## Intent and proposed delivery
@@ -130,28 +131,32 @@ Keep the existing tools and their manual explanations. In particular, `jq`,
 
 ## Proposed follow-up slices
 
-These are issue-ready scopes, **not yet published GitHub issues**. They do not
-replace the existing installer/release gate or pending desktop acceptance work.
+The first three slices now have GitHub issues, linked below and grouped in
+the [prioritization index (#28)](https://github.com/korq-apps/sensible/issues/28).
+Local inference remains a later unticketed evaluation, not an approved default.
+These scopes do not replace the existing release evidence requirements.
 The [reconciled priority queue](PLAN.md#reconciled-priorities) sets the
-cross-project order: validated install input and acceptance infrastructure come
-next. Manual curation need not wait for the optional-app tool, but automated
-optional AI installation must use its shared catalog rather than invent a second
+cross-project order: further unattended automation is parked and user-facing
+features take priority. Manual curation need not wait for a VM harness or the
+optional-app tool, but automated optional AI installation must use the
+[shared catalog (#24)](https://github.com/korq-apps/sensible/issues/24) rather than invent a second
 installer. Its initial source adapters may not fit every AI CLI; add a reviewed
 adapter or keep an official manual recipe instead of allowing arbitrary scripts.
-The separate editor follow-up includes both Vim and Neovim without overriding
+The separate [editor follow-up (#26)](https://github.com/korq-apps/sensible/issues/26)
+includes both Vim and Neovim without overriding
 Debian's editor selection, with LazyVim configuration opt-in. It is not a
 prerequisite for this AI scope and does not imply selecting an AI tool's editor
 on the user's behalf.
 
-1. **Curated AI manual and optional client recipes.** Add the AI chapter and
+1. **[Curated AI manual and optional client recipes (#23)](https://github.com/korq-apps/sensible/issues/23).** Add the AI chapter and
    navigation; cover the shortlist, privacy/account distinctions and verified
    Linux desktop options. Update manual staging, payload checks and tests so
    the new chapter is available offline. Optional installation itself is online.
-2. **Approved open-source CLI core.** Resolve the preinstall/opt-in decision,
+2. **[AI delivery decision and candidate packaging (#22)](https://github.com/korq-apps/sensible/issues/22).** Resolve the preinstall/opt-in decision,
    then package OpenCode and evaluate LLM against the requirements above.
    Include rationale, safe usage examples, update support and both-edition
    acceptance. Defer a candidate rather than waive an unmet packaging gate.
-3. **CLI usability and developer-tool catalog.** Evaluate tmux/tealdeer and the
+3. **[CLI usability (#25)](https://github.com/korq-apps/sensible/issues/25) and [developer-tool catalog (#24)](https://github.com/korq-apps/sensible/issues/24).** Evaluate tmux/tealdeer and the
    chosen Python tool mechanism; reconcile with the existing `gh`/`lazygit`
    plan. Provide examples and offline behavior tests for each accepted addition.
 4. **Optional local inference.** Separately evaluate
