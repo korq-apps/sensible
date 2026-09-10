@@ -254,7 +254,7 @@ sudo flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/
           <h2>7. Hardware &amp; Peripherals</h2>
           <ul>
             <li><strong>Kernel &amp; Firmware:</strong> Debian Testing kernel with selected firmware packages for Intel, AMD, Realtek, Broadcom, MediaTek and SOF audio hardware.</li>
-            <li><strong>Audio &amp; Bluetooth:</strong> PipeWire and WirePlumber manage audio routing and Bluetooth profiles.</li>
+            <li><strong>Audio &amp; Bluetooth:</strong> PipeWire and WirePlumber manage audio routing and Bluetooth profiles; ALSA UCM profiles, ALSA mixer tools and Cirrus/TI speaker-amplifier firmware are included. If a laptop is silent, run <code>sensible-audio-check</code> (see <a href="#no-sound">Troubleshooting</a>).</li>
             <li><strong>Power Management:</strong> <code>power-profiles-daemon</code> provides integrated power modes in desktop settings. Available profiles depend on the hardware.</li>
             <li><strong>Printing &amp; Scanning:</strong> CUPS, <code>ipp-usb</code>, and <code>sane-airscan</code> provide driverless IPP/eSCL printing and scanning support.</li>
             <li><strong>Fingerprint Support:</strong> <code>fprintd</code> and its PAM integration are included; enrollment requires a supported reader. Face recognition is not included.</li>
@@ -297,6 +297,21 @@ journalctl -b --no-pager
 
 # Check system hardware and services
 systemctl status</code></pre>
+
+          <h3 id="no-sound">No Sound, or Silent Speakers While Headphones Work</h3>
+          <p>Run the built-in check as your normal user, then once more with <code>sudo</code> for driver and firmware detail from the kernel log:</p>
+          <pre><code>sensible-audio-check
+sudo sensible-audio-check</code></pre>
+          <p>It prints the machine model, sound cards, codec subsystem ID and speaker amplifiers, then one <strong>PROBLEM</strong> block per finding with the command that fixes it:</p>
+          <ul>
+            <li><strong>Muted output or a muted mixer switch:</strong> <code>sensible-audio-check --unmute</code> unmutes the default PipeWire output and the ALSA <em>Master</em> and <em>Speaker</em> switches. The headphone switch is left alone: it is auto-muted whenever nothing is plugged in.</li>
+            <li><strong>Amplifier tuning missing for this laptop:</strong> laptops with a Realtek codec and Cirrus CS35L56 speaker amplifiers (Lenovo, Dell and HP list the codec as <em>ALC3306</em>, <em>ALC3287</em> and similar) need a tuning file named after the machine, <code>cirrus/cs35l56-*-dsp1-misc-&lt;id&gt;*</code>, which linux-firmware adds after the laptop ships. Without it the amplifiers refuse to run: internal speakers silent, headphones fine. This is the usual cause on a laptop newer than Debian's firmware snapshot, and Debian stable is often too old. Install updates and reboot:
+              <pre><code>sudo apt update &amp;&amp; sudo apt full-upgrade</code></pre>
+              If Debian has no newer <code>firmware-cirrus</code> yet, the report names the exact files to copy from upstream linux-firmware into <code>/usr/lib/firmware/cirrus/</code>.</li>
+            <li><strong>Other missing firmware file:</strong> the report names the file and the Debian package that ships it (<code>firmware-cirrus</code>, <code>firmware-sof-signed</code> for Intel DSPs) with the reinstall command. Debian packages no AMD SOF DSP firmware; a board that needs it keeps that device off.</li>
+            <li><strong>Speaker amplifier not bound by this kernel:</strong> with the tuning installed, a brand-new model can still lack its kernel entry. The speakers stay silent while headphones work until Debian Testing ships a kernel that knows the model; the same update command applies. The installer shows both findings on its completion screen when they affect the live session.</li>
+          </ul>
+          <p>If the newest kernel still leaves the speakers silent, open an issue with the complete <code>sensible-audio-check</code> output and the lines from <code>sudo journalctl -k | grep -iE 'cs35l|tas2|sof|hda'</code>; the codec subsystem ID in the report is what a kernel quirk is keyed on. Redact anything private first.</p>
 
           <div class="callout warn">
             <div class="callout-title">Log Sanitization Reminder</div>

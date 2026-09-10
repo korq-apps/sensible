@@ -91,17 +91,27 @@ the writer reports success, eject the USB safely.
    remain enabled. If the USB is not listed, confirm that UEFI boot is enabled
    and Legacy/CSM is disabled before changing Secure Boot settings.
 
-The live environment is text-based and opens the branded installer
-immediately. Press Enter on the welcome screen, then choose the keyboard layout
-before entering any password. Installation is offline and does not wait for a
-Debian mirror. If you leave the installer for diagnostics, start it again with:
+The boot menu offers two ways in:
 
-```bash
-sensible-install
-```
+- **Install Sensible** (default, boots after 10 seconds): a text console that
+  opens the branded installer immediately. Press Enter on the welcome screen,
+  then choose the keyboard layout before entering any password. If you leave
+  the installer for diagnostics, start it again with `sensible-install`.
+- **Try Sensible**: the same live system booted into the GNOME or KDE desktop
+  of the edition you downloaded, without touching any disk. Wi-Fi, audio and
+  the bundled applications behave as they will after installation, so this is
+  the place to check your hardware first (`sensible-audio-check` works here
+  too). The live account is `user` with the password `live`. When ready, open
+  **Install Sensible** from the dash (GNOME) or from the desktop icon and
+  application menu (KDE); it runs the same installer in a terminal window.
+  Keep that window open until the installer reports completion: closing it
+  mid-install interrupts a partially erased disk. A disk you opened in the
+  file manager is mounted and therefore excluded from installation until you
+  unmount it.
 
-Networking can still be configured with `nmtui` from the live shell, but it is
-not required to complete the installation.
+Installation is offline in both modes and does not wait for a Debian mirror.
+Networking can be configured with `nmtui` from the console or from the
+desktop's network menu, but it is not required to complete the installation.
 
 ## 4. Make the installer choices
 
@@ -198,6 +208,18 @@ Not every device exposes firmware updates through LVFS.
 - **Secure Boot with proprietary NVIDIA:** Debian's stock boot chain remains
   signed, but the proprietary NVIDIA module may require disabling Secure Boot
   or separately enrolling a Machine Owner Key.
+- **No sound, or silent speakers while headphones work:** run
+  `sensible-audio-check` in a terminal on the installed system, then
+  `sudo sensible-audio-check` for driver detail. It names the cause and the
+  fix: a per-model amplifier tuning file missing from the installed
+  `firmware-cirrus` (the usual reason on a laptop newer than Debian's firmware
+  snapshot), a muted output (`sensible-audio-check --unmute`), another
+  missing firmware file and the package that ships it, or a speaker amplifier
+  the running kernel has no quirk for yet. The firmware and kernel cases
+  affect very new laptops with Realtek codecs and Cirrus/TI amplifiers and
+  clear with `sudo apt full-upgrade` once Debian Testing ships the firmware
+  or kernel that knows the model. The installer shows the same finding on its
+  completion screen when the live session is affected.
 
 The installer writes a log to `/var/log/sensible-install.log` in the live
 session and copies it to the same path on the installed system. It is readable

@@ -270,10 +270,18 @@ chmod 1777 /mnt/tmp
 ```
 
 After a live-root copy, remove the live installer profile scripts, command
-wrappers, staged `/opt/sensible` source/docs, live issue/MOTD branding, root
-autologin units, and live-only package/state trees. Reset `machine-id`. Purge
-`live-boot`, `live-config`, and `live-config-systemd` before rebuilding the
-target initramfs.
+wrappers, the "Try Sensible" desktop launcher and its preparation unit,
+staged `/opt/sensible` source/docs, live issue/MOTD branding, root
+autologin units, and live-only package/state trees. Reset `machine-id` and
+delete `/var/lib/alsa/asound.state` (mixer levels `alsa-state.service` stored
+for the live console). Purge `live-boot`, `live-config`, and
+`live-config-systemd` before rebuilding the target initramfs.
+
+Before the completion summary, run `sensible-audio-check --summary` from the
+live root and record each printed line as a warning (`record_audio_warnings`
+in `installer/lib/hardware.sh`). The live session runs the same kernel and
+firmware the target copies, so a silent laptop is silent after first boot too.
+The check is read-only; a missing or failing checker never aborts the install.
 
 Bind the API filesystems before any chroot, but mount a fresh tmpfs at target
 `/run` so live runtime state cannot leak into initramfs generation:
@@ -379,10 +387,12 @@ Always:
   locales keyboard-configuration console-setup
   firmware-linux firmware-misc-nonfree firmware-iwlwifi firmware-realtek
   firmware-atheros firmware-brcm80211 firmware-mediatek firmware-sof-signed
+  firmware-cirrus firmware-intel-sound
   cryptsetup cryptsetup-initramfs
   plymouth plymouth-themes
   grub-efi-amd64 grub-efi-amd64-signed shim-signed
-  network-manager pipewire wireplumber pipewire-pulse pipewire-audio
+  network-manager pipewire wireplumber pipewire-pulse pipewire-audio pipewire-alsa
+  alsa-ucm-conf alsa-topology-conf alsa-utils
   libspa-0.2-bluetooth bluez
   power-profiles-daemon fwupd
   flatpak
@@ -395,7 +405,7 @@ Always:
   fonts-noto-core fonts-noto-color-emoji fonts-liberation
 
 If GNOME:
-  gnome-core gdm3 gnome-software gnome-software-plugin-flatpak dconf-cli
+  gnome-core gdm3 gnome-software gnome-software-plugin-flatpak dconf-cli ptyxis
   file-roller amberol simple-scan
   gnome-shell-extension-manager gnome-tweaks
   paper-icon-theme papirus-icon-theme orchis-gtk-theme gtk-update-icon-cache librsvg2-common
@@ -406,7 +416,7 @@ If GNOME:
   plymouth theme: spinner
 
 If KDE:
-  kde-plasma-desktop sddm plasma-discover plasma-discover-backend-flatpak
+  kde-plasma-desktop sddm plasma-discover plasma-discover-backend-flatpak konsole
   okular ark gwenview kate kcalc kde-spectacle elisa skanlite
   plymouth theme: breeze (package plymouth-theme-breeze if needed)
 
@@ -591,7 +601,10 @@ Screen lock defaults are written for both desktops regardless of the choice:
   Indicator persistence limited to favorites with image caching off; and Vitals
   public-IP lookup off. These live in `/etc/dconf/profile/user` plus
   `/etc/dconf/db/local.d/`, followed by `dconf update`; no dconf locks are added,
-  so later user choices win.
+  so later user choices win. The keyfile is `configs/gnome-dconf-defaults`:
+  `0260-gnome-profile.hook.chroot` bakes it into the image, so the "Try
+  Sensible" live desktop shows the same profile, and `configure_login`
+  re-applies the same file to the target (hard failure if it is missing).
 - KDE: `/etc/xdg/kscreenlockerrc` — `Autolock=true`, `Timeout=5`,
   `LockOnResume=true` (covers resume from suspend).
 

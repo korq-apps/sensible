@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Install Sensible
+Comment=Erase one disk and install Sensible (Debian Testing) from this live session
+Exec=/usr/local/bin/sensible-install
+Icon=system-software-install
+Terminal=true
+Categories=System;
+Keywords=install;installer;debian;sensible;lazydeb;
+StartupNotify=true

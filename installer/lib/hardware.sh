@@ -35,6 +35,10 @@ install_hardware_packages() {
         firmware-brcm80211
         firmware-mediatek
         firmware-sof-signed
+        # Speaker amplifier (Cirrus CS35L41/CS35L56) and Intel DSP firmware;
+        # transitively present today, named so the closure cannot lose them.
+        firmware-cirrus
+        firmware-intel-sound
         mesa-vulkan-drivers
         va-driver-all
         # No vdpau-driver-all: it no longer exists in Debian Testing, and
@@ -47,6 +51,11 @@ install_hardware_packages() {
         pipewire-pulse
         pipewire-audio
         pipewire-alsa
+        # UCM profiles are what make SOF/SoundWire laptops expose their devices;
+        # alsa-utils provides the mixer tools sensible-audio-check relies on.
+        alsa-ucm-conf
+        alsa-topology-conf
+        alsa-utils
         libspa-0.2-bluetooth
         bluez
         power-profiles-daemon
@@ -71,4 +80,20 @@ install_hardware_packages() {
     chroot ${MNT} systemctl enable fwupd.service \
         || record_warning "Firmware update service could not be enabled automatically."
     log_success "Hardware stack installed and configured."
+}
+
+# The live session runs the same kernel, firmware and audio packages the
+# installer copies, so a laptop that is silent here is silent after first boot
+# too. Record what sensible-audio-check finds for the completion summary instead
+# of letting the user discover it later. The check is read-only and never fatal:
+# an unusual live session must not block the install.
+record_audio_warnings() {
+    local checker="${SENSIBLE_AUDIO_CHECK:-/usr/local/bin/sensible-audio-check}"
+    [ -x "$checker" ] || return 0
+    local line
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        record_warning "Audio: ${line}"
+    done < <("$checker" --summary 2>/dev/null)
+    return 0
 }

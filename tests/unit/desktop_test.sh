@@ -93,8 +93,19 @@ assert_file_contains "clipboard only persists favorites" "${gnome_defaults}" "ca
 assert_file_contains "clipboard images are not persisted" "${gnome_defaults}" "cache-images=false"
 assert_file_contains "Vitals does not query public IP" "${gnome_defaults}" "include-public-ip=false"
 assert_contains "dconf db compiled" "$(cat "${MOCK_LOG}")" "dconf update"
+if diff -q "${CONFIG_DIR}/gnome-dconf-defaults" "${gnome_defaults}" >/dev/null; then
+    t_ok
+else
+    t_fail "installed defaults are the shared configs/gnome-dconf-defaults" "files differ"
+fi
 assert_file_contains "GDM autologin enabled" "${MNT}/etc/gdm3/daemon.conf" "AutomaticLoginEnable=True"
 assert_file_contains "GDM autologin user" "${MNT}/etc/gdm3/daemon.conf" "AutomaticLogin=alice"
+mock_teardown
+
+t_section "configure_login: missing shared GNOME defaults hard-fail instead of a bare desktop"
+mock_setup
+rc="$(run_exiting configure_login gnome false alice /nonexistent/configs)"
+assert_rc "aborts with exit 1" 1 "${rc}"
 mock_teardown
 
 t_section "configure_login: SDDM autologin + kscreenlocker defaults"

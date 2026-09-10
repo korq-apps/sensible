@@ -24,12 +24,15 @@
 │   Plymouth graphical unlock (LUKS only)                     │
 ├─────────────────────────────────────────────────────────────┤
 │ Layer 1: Live ISO (`live-build`)                            │
-│   Console / TUI only · firmware so Wi-Fi works in the live  │
-│   session · `sensible-install` (`lazydeb`) · hybrid UEFI ISO│
+│   Console installer (default) or "Try Sensible" desktop ·   │
+│   firmware so Wi-Fi works · `sensible-install` (`lazydeb`) ·│
+│   hybrid UEFI ISO                                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 The live image is an **installer appliance** carrying the complete target closure, including one desktop variant. Installation is offline; firmware and NetworkManager remain useful for hardware support and optional diagnostics, but reaching a mirror is not a prerequisite.
+
+The boot menu's default entry is the console installer, which the CI serial smoke test asserts. "Try Sensible" boots the same live root with `sensible.session=desktop systemd.unit=graphical.target`: the display manager auto-logs the throwaway live account into the baked desktop, `sensible-live-desktop.service` disables the idle lock for that account and pins an **Install Sensible** launcher (a `Terminal=true` entry running the same installer), and the installer strips the launcher, the unit and the live account from the target. Menu templates live in `live/config/bootloaders/`.
 
 ---
 
@@ -190,9 +193,9 @@ Facts to not relearn later:
 | Area | Packages / behavior |
 | :--- | :--- |
 | CPU | `intel-microcode`, `amd64-microcode` |
-| Firmware | `firmware-linux`, `firmware-misc-nonfree`, `firmware-iwlwifi`, `firmware-realtek`, `firmware-atheros`, `firmware-brcm80211`, `firmware-mediatek`, `firmware-sof-signed` |
+| Firmware | `firmware-linux`, `firmware-misc-nonfree`, `firmware-iwlwifi`, `firmware-realtek`, `firmware-atheros`, `firmware-brcm80211`, `firmware-mediatek`, `firmware-sof-signed`, `firmware-cirrus` (per-model CS35L41/CS35L56 speaker-amplifier tuning), `firmware-intel-sound` |
 | Wi-Fi / BT | NetworkManager, `iwd` or `wpa_supplicant`, BlueZ, `libspa-0.2-bluetooth` |
-| Audio | PipeWire, WirePlumber, `pipewire-pulse`, `pipewire-audio`, `pipewire-alsa` |
+| Audio | PipeWire, WirePlumber, `pipewire-pulse`, `pipewire-audio`, `pipewire-alsa`, `alsa-ucm-conf` (nothing in PipeWire depends on it; without the UCM profiles SOF and SoundWire laptops expose no device), `alsa-topology-conf`, `alsa-utils`; `sensible-audio-check` is baked as a read-only diagnostic with an opt-in `--unmute`, and the installer runs its `--summary` in the live session to record findings as completion warnings |
 | GPU | `mesa-vulkan-drivers`, `va-driver-all` (VDPAU comes from `mesa-libgallium` via mesa; `vdpau-driver-all` was removed from Testing); the offline closure includes `nvidia-driver`, while NVIDIA KMS configuration is enabled only when `lspci` sees matching hardware |
 | Power | `power-profiles-daemon` (not TLP — it fights PPD and both DEs) |
 | Biometrics | `fprintd`, `libpam-fprintd` (baked); BioPass optional — see §5 **(planned — post-install tool)** |
@@ -203,6 +206,8 @@ Facts to not relearn later:
 `firmware-broadcom` is not a Debian package name; Broadcom Wi-Fi is `firmware-brcm80211`. `firmware-linux-nonfree` is a leftover name — do not list it.
 
 NVIDIA: the proprietary stack is baked into the offline closure because installation cannot fetch it after the live root is copied. There is no nouveau-vs-proprietary prompt in v1. The installer adds `nvidia-drm.modeset=1` only when NVIDIA is detected — without KMS, GDM/KWin silently fall back to X11 on exactly the hardware being special-cased.
+
+Audio: the image can only be as new as Testing's firmware and kernel. Laptops with a Realtek HDA codec and Cirrus CS35L54/56/57 speaker amplifiers (the codec vendors list as ALC3306, ALC3287 and similar) need a per-model tuning file, `cirrus/cs35l56-*-dsp1-misc-<system name>*`, that linux-firmware adds model by model; the amplifier driver refuses to run without it because the BIOS leaves the DSP unpatched, so the internal speakers stay silent while headphones work until `firmware-cirrus` catches up (`apt full-upgrade`). The kernel side is generic since 6.12, which binds any CS35L54/56/57 found in ACPI, but brand-new models can still need a quirk for lesser features such as the mic-mute LED or a ghost AMD-DSP microphone. `sensible-audio-check` checks the tuning file directly, reports an unbound amplifier with the codec subsystem ID a report needs, and the weekly rebuilds pick up firmware and kernel as they migrate. Debian packages no AMD SOF DSP firmware, so boards that route the microphone through the AMD DSP keep it off. The installer deletes the live session's `/var/lib/alsa/asound.state` so the installed system initialises its mixer from the ALSA defaults rather than from the live console's levels.
 
 ---
 
@@ -216,7 +221,7 @@ Keep this list the single source of truth. README and the installer spec should 
 
 The default interactive shell uses Oh My Bash's `powerline-multiline` theme. Debian's `fonts-powerline` supplies separator glyphs; JetBrainsMono Nerd Font comes from a pinned nerd-fonts release for the prompt and LazyVim's broader icon set. The build verifies that the pinned Oh My Bash archive still contains the configured theme. UFW defaults to deny incoming / allow outgoing, with TCP/UDP 1714–1764 for GSConnect/KDE Connect and TCP/UDP 53317 for LocalSend on both editions. With Debian's IPv6-enabled UFW defaults these cover IPv4 and IPv6, across all interfaces/source addresses rather than only trusted networks. The manual documents that exposure. The Nerd Font is baked by `scripts/fetch-pins.sh` (pin + SHA256 in `live/pins.env`); the UFW hook writes rules while UFW is still disabled and flips `ENABLED=yes` in `/etc/ufw/ufw.conf` — never `ufw enable` in a chroot.
 
-The desktop-app slice adds Shotwell, Extension Manager and Tweaks on GNOME; digiKam, KDE Connect and Plasma System Monitor on KDE. The GNOME image enables Debian's GSConnect, AppIndicator, Caffeine, Dash to Dock and User Themes extensions plus checksum-pinned Vitals, Clipboard Indicator, Battery Time and Shotzy. A system dconf database supplies user-overridable extension, titlebar and privacy defaults; it does not lock settings. A build hook validates packages/assets against the installed Shell major, compiles upstream schemas and bridges Shotzy's `/usr/share/tessdata` expectation to Debian's versioned Tesseract data. Both editions gain LocalSend: its official amd64 `.deb` and license are pinned/verified during the build, then live-build's local package repository resolves dependencies. This adds no install-time download or external APT source. Pinned artifact updates require review; ordinary Debian updates do not update them. See [desktop profiles](DESKTOP_PROFILES.md) for provenance, maintenance and pending real-session acceptance.
+The desktop-app slice adds Shotwell, Extension Manager and Tweaks on GNOME; digiKam, KDE Connect and Plasma System Monitor on KDE. The GNOME image enables Debian's GSConnect, AppIndicator, Caffeine, Dash to Dock and User Themes extensions plus checksum-pinned Vitals, Clipboard Indicator, Battery Time and Shotzy. A system dconf database supplies user-overridable extension, titlebar and privacy defaults; it does not lock settings, and it is baked from `configs/gnome-dconf-defaults` by the build hook so the "Try Sensible" live desktop and the installed system share one profile. A build hook validates packages/assets against the installed Shell major, compiles upstream schemas and bridges Shotzy's `/usr/share/tessdata` expectation to Debian's versioned Tesseract data. Both editions gain LocalSend: its official amd64 `.deb` and license are pinned/verified during the build, then live-build's local package repository resolves dependencies. This adds no install-time download or external APT source. Pinned artifact updates require review; ordinary Debian updates do not update them. See [desktop profiles](DESKTOP_PROFILES.md) for provenance, maintenance and pending real-session acceptance.
 
 ### Default apps
 

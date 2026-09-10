@@ -96,8 +96,17 @@ sanitize_live_target() {
           "${MNT}/etc/profile.d/99-sensible-firmware-check.sh" \
           "${MNT}/usr/local/bin/sensible-install" \
           "${MNT}/usr/local/bin/lazydeb" \
+          "${MNT}/usr/local/bin/sensible-live-desktop" \
+          "${MNT}/usr/share/applications/sensible-install.desktop" \
+          "${MNT}/etc/systemd/system/sensible-live-desktop.service" \
+          "${MNT}/etc/systemd/system/graphical.target.wants/sensible-live-desktop.service" \
           "${MNT}/etc/issue.sensible"
     rm -rf "${MNT}/opt/sensible"
+    # alsa-utils stores mixer levels here (alsa-state.service) and restores
+    # them at boot. Levels captured from the live console session must not
+    # become the installed system's baseline; a fresh first boot initialises
+    # the mixer from the ALSA defaults instead.
+    rm -f "${MNT}/var/lib/alsa/asound.state"
     printf 'Debian GNU/Linux testing \\n \\l\n' > "${MNT}/etc/issue"
     printf 'Debian GNU/Linux testing\n' > "${MNT}/etc/issue.net"
     : > "${MNT}/etc/motd"
@@ -917,7 +926,7 @@ EOF
         fi
     fi
 
-    configure_login "$DESKTOP_CHOICE" "$ENABLE_AUTOLOGIN" "$USERNAME"
+    configure_login "$DESKTOP_CHOICE" "$ENABLE_AUTOLOGIN" "$USERNAME" "$CONFIG_DIR"
 
     CURRENT_STAGE="preparing installed applications"
     install_progress_update 8 "Preparing installed applications"
@@ -1028,6 +1037,8 @@ a reboot, with the installer gone."
         exit 1
     fi
     log_success "Post-install verification passed: kernel, initramfs, GRUB, and fstab are in place."
+
+    record_audio_warnings
 
     CURRENT_STAGE="finalizing the installer log"
     install_progress_update 12 "Finalizing the installation"

@@ -299,8 +299,10 @@ to a console with NetworkManager and the required live firmware available.
 - [x] `scripts/smoke-boot.sh` and CI boot the ISO in headless UEFI QEMU and assert a stable marker from the live serial autologin shell; this is an ISO-boot smoke, not an installed-disk test
 - [x] Artifact names: `sensible-gnome-debian-testing-amd64.iso` and `sensible-kde-debian-testing-amd64.iso`
 
-The live session boots to the console installer even though the selected GNOME
-or KDE target closure is baked into its squashfs for offline copying.
+The default live entry boots to the console installer. The boot menu's "Try
+Sensible" entry boots the baked GNOME or KDE closure as a live desktop with an
+**Install Sensible** launcher (`sensible-live-desktop.service`, templates in
+`live/config/bootloaders/`); the CI smoke covers only the console entry.
 
 ---
 
@@ -438,7 +440,7 @@ unsafe disk operation reliable.
 - [x] **Beginner install guide:** `docs/INSTALL.md` covers release download/checksum, trusted USB writing, requirements, destructive scope, offline flow, choices, first boot, updates, and honest support/log expectations
 - [x] **Automated install input (source/fixture evidence):** protected `--config answers.toml` input, shared validation, explicit `confirm_wipe = true`, unchanged disk revalidation and exit-only completion; all eight mocked config combinations and failure-path regressions. See [INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode). Real ISO execution remains part of the installed-disk gate below.
 - [ ] **Real QEMU installed-boot matrix:** install each GNOME/KDE release image onto fresh virtual disks for Btrfs/Ext4 × LUKS on/off, then boot from those installed disks under UEFI (not the ISO); verify expected partitions, mounts, `fstab`/`crypttab`, swap/resume arguments, desktop/login, and the LUKS prompt where applicable. Include an installed-system Secure Boot boot
-- [ ] **Physical hardware smoke:** install and first-boot the candidate on at least one Intel and one AMD amd64 UEFI machine; record disk selection, wired/Wi-Fi, graphics, audio input/output, suspend/resume, Secure Boot state, and `fwupd` detection. Document hardware unavailable for a check rather than silently treating it as passed
+- [ ] **Physical hardware smoke:** install and first-boot the candidate on at least one Intel and one AMD amd64 UEFI machine; record disk selection, wired/Wi-Fi, graphics, audio input/output (`sensible-audio-check` output, internal speakers and headphones separately), suspend/resume, Secure Boot state, and `fwupd` detection. Document hardware unavailable for a check rather than silently treating it as passed
 - [ ] **Release decision:** archive the candidate ISO checksum and matrix/hardware results, review all failures and warnings, then and only then set `SENSIBLE_RELEASE_READY` to `true` for the release tag
 
 Partial implementation does not earn a check. The remaining unchecked items
@@ -489,6 +491,7 @@ Architecture/spec sections mark them **(planned — post-install tool)**.
 - [x] git defaults: `configs/gitconfig` → `/etc/gitconfig` in the image. The installer still offers optional name/email for the user's `~/.gitconfig`; dropping those prompts is deferred to the first-boot/UI pass
 - [x] `ufw` enabled, deny incoming / allow outgoing (config-file enable, never `ufw enable` in chroot); both editions allow TCP/UDP 53317 for LocalSend and TCP/UDP 1714–1764 for GSConnect/KDE Connect. Debian's IPv6-enabled defaults generate IPv4/IPv6 rules across interfaces and source addresses, not only trusted networks — `live/config/hooks/live/0300-ufw.hook.chroot`
 - [x] Printing/scanning: `cups` + `ipp-usb` + `sane-airscan`; `simple-scan` (GNOME) / `skanlite` (KDE)
+- [x] Audio: `alsa-ucm-conf` (SOF/SoundWire laptops expose no device without it), `alsa-topology-conf`, `alsa-utils`, and explicit `firmware-cirrus`/`firmware-intel-sound` in the closure; `sensible-audio-check` baked and run by the installer so live-session findings reach the completion screen; live mixer state dropped from the target. Known limit: Realtek + Cirrus CS35L56 laptops newer than Testing's `firmware-cirrus` snapshot stay silent (headphones work) until their per-model tuning migrates, brand-new models can additionally wait for a kernel quirk, and Debian packages no AMD SOF DSP firmware
 
 **Move to the post-install tool** (`sensible-apps`, online, after first boot):
 
@@ -536,6 +539,7 @@ package closure from the live image and requires no network. See
   - drop the hardware/desktop/apps package stages, whose names are now fixed when the ISO is built
   - keep `validate_installed_boot` as the gate; it already asserts the artifacts this path must produce
 - [x] Branded console live session that launches straight into the installer
+- [x] "Try Sensible" live desktop boot entry with a pinned installer launcher; `ptyxis`/`konsole` named per edition so `Terminal=true` launchers and the manual's terminal recipes work
 - [x] Searchable Gum prompts with a branded welcome, detailed disk selection,
   filesystem and identity/locale choices, one destructive confirmation, and
   staged progress

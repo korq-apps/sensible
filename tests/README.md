@@ -88,7 +88,7 @@ and path confinement even for a known reference.
 | `config_test.sh` | Real protected TOML reader, strict schema/types, redacted diagnostics, permissions/ownership, symlinks/hardlinks/FIFO rejection, bounded secret input, checked-descriptor reads, semantic validation, parser exit propagation, attached-TTY error handling, literal rsync exclusions and CLI errors |
 | `disk_test.sh` | Partition naming, swap/minimum math, GPT layouts, LUKS2, Btrfs subvolumes and swapfile resume offset, Ext4, candidate filtering, stable disk-identity revalidation, mounted-disk rejection, and installer-owned cleanup |
 | `fstab_test.sh` | All four engine combinations (Btrfs/Ext4 x LUKS on/off): crypttab root by LUKS header UUID, swapfile lines inside root, `@swap` subvolume mounts, tmpfs, and blkid-empty abort guards |
-| `desktop_test.sh` | GNOME/KDE package sets, Plymouth spinner/breeze, gdm3/sddm enablement, keyd conf deployed from `configs/` (never generated — spec §11), hard-fail on missing conf, and GNOME's unlocked dconf extension/titlebar/privacy and Paper/Orchis defaults |
+| `desktop_test.sh` | GNOME/KDE package sets, Plymouth spinner/breeze, gdm3/sddm enablement, keyd conf deployed from `configs/` (never generated — spec §11), hard-fail on missing conf, and GNOME's unlocked dconf extension/titlebar/privacy and Paper/Orchis defaults copied verbatim from `configs/gnome-dconf-defaults` (hard-fail when missing) |
 | `desktop_apps_test.sh` | Real pin/theme staging with tiny cached artifacts: checksum/identity/compatibility/license/path/asset/compiler failures, Qogir/Matcha/Fluent/Graphite GTK 3/4 and Shell installation, Qogir alias overlay and light/dark recoloring, known CSS corrections, icon directory/link/index/fallback validation, cache reuse, GNOME/KDE cleanup and fixed local-deb paths; LocalSend/GNOME-profile/theme hooks, Shell-version/package/schema/OCR/icon-cache guards; static Flathub source/key and enabled-remote guards; both editions' firewall rules and edition ownership |
 | `apps_test.sh` | Canonical default app set (Architecture §7), Flathub, LazyVim skel + user copy + ownership, Brave official apt origin + signed keyring, quoted whiptail checklist matching, amberol/elisa per tag, no Slack/Zoom/Steam/Snapd |
 | `manual_test.sh` | Offline chapter assets/links, current app-list coverage, both build paths, missing payload rejection, launcher fallback/retry/idempotency, and scoped per-user autostart ownership |
@@ -97,6 +97,8 @@ and path confinement even for a known reference.
 | `diagnostics_test.sh` | Bounded read-only probes, missing tools/timeouts, archive metadata and allowlist, FIFO export/receive round trip, stalled export, corrupt/incomplete/oversized frames, private files and no extraction, QEMU launch arguments, ISO identity, installed-disk boot, preserved firmware variables and exit propagation |
 | `build_cache_test.sh` | Real stage-driver filesystem operations with mocked build commands: clean state, package-only cache restore, successful snapshot refresh, and preservation of the prior snapshot after failure |
 | `package_check_test.sh` | Native Testing-only APT configuration, host-state isolation, missing packages, archive refresh failures, and incomplete package collection |
+| `audio_test.sh` | Audio closure packages (UCM, ALSA tools, amplifier/DSP firmware) and their placement outside the documented app set; `sensible-audio-check` against fixture sysroots with mocked journal, PipeWire and ALSA: healthy Legion 7 15ASH11, per-model amplifier tuning missing from the firmware snapshot (log or codec-ID based, compressed files), CS35L41 generic-tuning note, unbound amplifier (missing kernel quirk), SoundWire board without an HDA codec, unreadable log, missing firmware files mapped to packages, no sound card, missing UCM/tools, session mute/zero/no-sink/inactive, mixer mute without the headphone switch, `--unmute` writes and the read-only default; the installer's warning helper |
+| `live_desktop_test.sh` | `sensible-live-desktop` against fixture roots: inert on the console entry, GNOME lock-off and dash pinning without duplicates, KDE lock-off, desktop icon and SDDM session completion, live username from the kernel command line, and degraded roots that never block the display manager |
 | `verify_test.sh` | Installed boot artifacts and extracted initramfs mapping/source identity, including stale UUIDs and literal mapping-name matching |
 
 ### Integration test (`tests/integration/installer_flow_test.sh`)
@@ -121,8 +123,9 @@ Assertions cover generated files (fstab, crypttab, hostname,
 locale, keyboard, grub `resume=` rules, keyd, brave origin), call sequences
 (partition types/sizes, LUKS format args, live keyboard setup,
 stable disk identity, group creation, sudo membership, offline closure checks, theme,
-bootloader, owned teardown, and preserved failure logs), plus success/abort exit
-codes.
+bootloader, owned teardown, and preserved failure logs), live ALSA mixer state
+removal, audio-check findings on the completion screen, and removal of the
+"Try Sensible" launcher and unit, plus success/abort exit codes.
 
 The same integration suite drives `main --config` using private caller-owned
 fixtures through all eight GNOME/KDE × Btrfs/Ext4 × LUKS on/off combinations.
@@ -152,6 +155,11 @@ All disk commands remain mocks: these are not real installed-disk boot results.
   boot smoke (`build-iso.yml`) asserts UEFI boot reaches a stable marker from
   the live serial autologin shell.
 - Plymouth graphical unlock and `systemctl` behavior of the installed system.
+- The "Try Sensible" boot entry: the serial smoke boots only the default
+  console entry, so display-manager autologin and the launcher are hand-tested.
+- Real audio hardware: whether the kernel binds a laptop's speaker amplifier or
+  PipeWire produces sound is only observable on hardware. The audio fixtures
+  cover parsing and messaging, not drivers.
 - Desktop app startup on real GNOME/KDE sessions, file-chooser/tray integration,
   phone pairing and LocalSend transfers with UFW enabled on IPv4/IPv6 networks.
   Mocked rule tests do not prove discovery or firewall behavior on hardware.

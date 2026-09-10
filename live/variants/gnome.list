@@ -10,6 +10,11 @@ gdm3
 gnome-software
 gnome-software-plugin-flatpak
 dconf-cli
+# GNOME's terminal. gnome-core depends on it in Testing today, but the
+# 2026-08-28 image had no terminal emulator at all; the manual, the live
+# desktop's "Install Sensible" launcher (Terminal=true) and every recipe in
+# the terminal-tools chapter need one, so name it.
+ptyxis
 
 # Applications
 firefox-esr

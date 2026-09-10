@@ -506,6 +506,13 @@ esac
         write(self.root / "usr/share/tesseract-ocr/5/tessdata/eng.traineddata", "fixture\n")
         write(self.root / "usr/share/doc/sensible-gnome-extensions/sources.txt", "fixture\n")
         write(self.root / "usr/share/common-licenses/GPL-2", "fixture\n")
+        write(self.root / "opt/sensible/configs/gnome-dconf-defaults",
+              (REPO / "configs/gnome-dconf-defaults").read_text())
+        write(self.bin / "dconf", '''#!/bin/sh
+printf '%s\\n' "$*" >> "${MOCK_DCONF_LOG}"
+[ "${MOCK_DCONF_FAIL:-0}" = 0 ]
+''', True)
+        self.env["MOCK_DCONF_LOG"] = str(self.root / "dconf.log")
         return script
 
     def test_gnome_profile_hook_validates_and_bridges_tessdata(self):
@@ -515,6 +522,28 @@ esac
         link = self.root / "usr/share/tessdata"
         self.assertTrue(link.is_symlink())
         self.assertEqual(os.readlink(link), "tesseract-ocr/5/tessdata")
+
+    def test_gnome_profile_hook_bakes_shared_dconf_defaults(self):
+        script = self.seed_gnome_profile_hook()
+        result = self.run_script(script)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        baked = self.root / "etc/dconf/db/local.d/00-sensible-desktop"
+        self.assertEqual(baked.read_text(), (REPO / "configs/gnome-dconf-defaults").read_text())
+        self.assertEqual((self.root / "etc/dconf/profile/user").read_text(), "user-db:user\nsystem-db:local\n")
+        self.assertFalse((self.root / "etc/dconf/db/local.d/locks").exists())
+        self.assertEqual((self.root / "dconf.log").read_text(), "update\n")
+        for needle in ("enabled-extensions=", "'dash-to-dock@micxgx.gmail.com'", "icon-theme='Paper'",
+                       "gtk-theme='Orchis'", "lock-enabled=true", "idle-delay=uint32 300"):
+            self.assertIn(needle, baked.read_text())
+        self.env["MOCK_DCONF_FAIL"] = "1"
+        result = self.run_script(script)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("could not compile the GNOME system dconf database", result.stderr)
+        del self.env["MOCK_DCONF_FAIL"]
+        (self.root / "opt/sensible/configs/gnome-dconf-defaults").unlink()
+        result = self.run_script(script)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("GNOME dconf defaults are missing", result.stderr)
 
     def test_gnome_profile_hook_rejects_missing_package_and_shell_jump(self):
         script = self.seed_gnome_profile_hook()

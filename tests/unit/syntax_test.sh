@@ -51,6 +51,8 @@ sh_files=(
     live/config/includes.chroot/etc/profile.d/99-sensible-firmware-check.sh
     live/config/includes.chroot/etc/profile.d/99-sensible-autostart.sh
     live/config/includes.chroot/usr/local/bin/lazydeb
+    live/config/includes.chroot/usr/local/bin/sensible-audio-check
+    live/config/includes.chroot/usr/local/bin/sensible-live-desktop
     scripts/run-qemu.sh
     scripts/smoke-boot.sh
     scripts/build-native.sh
@@ -71,6 +73,8 @@ sh_files=(
     tests/unit/diagnostics_test.sh
     tests/unit/build_cache_test.sh
     tests/unit/package_check_test.sh
+    tests/unit/audio_test.sh
+    tests/unit/live_desktop_test.sh
     tests/integration/installer_flow_test.sh
 )
 for f in "${sh_files[@]}"; do
@@ -124,6 +128,40 @@ if [ ! -s "${REPO_ROOT}/live/config/includes.chroot/etc/motd" ]; then t_ok; else
 auto_config="$(<"${REPO_ROOT}/live/auto/config")"
 assert_contains "ISO persists its desktop edition on the kernel command line" "${auto_config}" 'sensible.variant=${SENSIBLE_VARIANT}'
 assert_file_exists "graphical text banner is included in the live image" "${REPO_ROOT}/live/config/includes.chroot/usr/share/sensible/logo.txt"
+
+t_section "boot menu: console installer stays the default, Try Sensible boots the baked desktop"
+grub_template="$(<"${REPO_ROOT}/live/config/bootloaders/grub-pc/grub.cfg")"
+syslinux_template="$(<"${REPO_ROOT}/live/config/bootloaders/isolinux/live.cfg.in")"
+first_grub_entry="$(grep -m1 '^menuentry' "${REPO_ROOT}/live/config/bootloaders/grub-pc/grub.cfg")"
+assert_contains "GRUB entry 0 is the console installer (CI smoke depends on it)" "${first_grub_entry}" 'menuentry "Install Sensible"'
+assert_contains "GRUB offers the live desktop" "${grub_template}" $'menuentry "Try Sensible (live desktop, changes nothing on disk)" --hotkey=t {\n\tlinux\t@KERNEL_LIVE@ @APPEND_LIVE@ sensible.session=desktop systemd.unit=graphical.target'
+assert_contains "GRUB fail-safe entry uses the failsafe boot line" "${grub_template}" '@LB_BOOTAPPEND_LIVE_FAILSAFE@'
+assert_contains "GRUB template keeps live-build's console/timeout config" "${grub_template}" 'source /boot/grub/config.cfg'
+assert_not_contains "GRUB template does not expand the stock live entries twice" "${grub_template}" '@LINUX_LIVE@'
+# live-build also substitutes the bare placeholder words (KERNEL_LIVE and
+# friends) wherever they appear, so outside @...@ markers they must not occur.
+grub_prose="$(sed -E 's/@[A-Z_]+@//g' "${REPO_ROOT}/live/config/bootloaders/grub-pc/grub.cfg")"
+for word in KERNEL_LIVE INITRD_LIVE APPEND_LIVE LB_BOOTAPPEND_LIVE LINUX_LIVE; do
+    assert_not_contains "GRUB template only uses ${word} inside a marked placeholder" "${grub_prose}" "${word}"
+done
+assert_contains "syslinux default label is the console installer" "${syslinux_template}" $'label live-@FLAVOUR@\n\tmenu label ^Install Sensible\n\tmenu default'
+assert_contains "syslinux offers the live desktop" "${syslinux_template}" 'append @APPEND_LIVE@ sensible.session=desktop systemd.unit=graphical.target'
+assert_contains "syslinux menu still auto-boots the installer label" "$(<"${REPO_ROOT}/live/config/bootloaders/isolinux/menu.cfg")" 'ontimeout live-amd64'
+assert_contains "fail-safe boot line keeps the edition marker" "${auto_config}" '--bootappend-live-failsafe "boot=live components sensible.variant=${SENSIBLE_VARIANT}'
+assert_contains "live desktop unit is enabled in the image" "$(<"${REPO_ROOT}/live/config/hooks/live/0100-sensible-setup.hook.chroot")" 'systemctl enable sensible-live-desktop.service'
+live_unit="$(<"${REPO_ROOT}/live/config/includes.chroot/etc/systemd/system/sensible-live-desktop.service")"
+assert_contains "live desktop unit only fires on the Try entry" "${live_unit}" 'ConditionKernelCommandLine=sensible.session=desktop'
+assert_contains "live desktop unit runs before the display manager" "${live_unit}" 'Before=display-manager.service'
+assert_contains "live desktop unit runs after live-config created the user" "${live_unit}" 'After=live-config.service'
+launcher="$(<"${REPO_ROOT}/live/config/includes.chroot/usr/share/applications/sensible-install.desktop")"
+assert_contains "launcher runs the console installer wrapper" "${launcher}" 'Exec=/usr/local/bin/sensible-install'
+assert_contains "launcher opens a terminal for the TUI" "${launcher}" 'Terminal=true'
+assert_file_contains "GNOME edition names its terminal for Terminal=true launchers" "${REPO_ROOT}/live/variants/gnome.list" 'ptyxis'
+assert_file_contains "KDE edition names its terminal for Terminal=true launchers" "${REPO_ROOT}/live/variants/kde.list" 'konsole'
+for live_file in usr/local/bin/sensible-live-desktop usr/share/applications/sensible-install.desktop \
+    etc/systemd/system/sensible-live-desktop.service etc/systemd/system/graphical.target.wants/sensible-live-desktop.service; do
+    assert_contains "installer strips ${live_file} from the target" "$(<"${REPO_ROOT}/installer/sensible-install.sh")" "\"\${MNT}/${live_file}\""
+done
 ui_source="$(<"${REPO_ROOT}/installer/lib/ui.sh")"
 setup_source="$(<"${REPO_ROOT}/installer/lib/setup-form.sh")"
 assert_not_contains "UI TTY check does not redirect the fd it is testing" "${ui_source}" '[ -t 2 ] 2>/dev/null'

@@ -51,3 +51,9 @@ firmware-atheros
 firmware-brcm80211
 firmware-mediatek
 firmware-sof-signed
+# Audio amplifier and DSP firmware. Both currently arrive as dependencies of
+# firmware-linux, but speakers behind Cirrus CS35L41/CS35L56 amplifiers
+# (Lenovo/Dell/HP "ALC3306"-class laptops) are silent without
+# firmware-cirrus, so the closure names them explicitly.
+firmware-cirrus
+firmware-intel-sound

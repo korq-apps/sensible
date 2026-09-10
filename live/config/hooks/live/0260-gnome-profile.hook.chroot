@@ -1,6 +1,6 @@
 #!/bin/sh
-# Validate the GNOME extension closure and prepare its local OCR data path.
-# Fresh-user activation/defaults are written by installer/lib/desktop.sh.
+# Validate the GNOME extension closure, prepare its local OCR data path and
+# bake the GNOME profile defaults (configs/gnome-dconf-defaults) into the image.
 set -eu
 
 if ! VARIANT="$(cat /etc/sensible/variant 2>/dev/null)"; then
@@ -137,5 +137,25 @@ done
 source_manifest=/usr/share/doc/sensible-gnome-extensions/sources.txt
 if [ ! -s "${source_manifest}" ] || [ ! -s /usr/share/common-licenses/GPL-2 ]; then
     echo "Error: pinned GNOME extension source or license records are incomplete." >&2
+    exit 1
+fi
+
+# Bake the profile (extensions, appearance, titlebar buttons, idle lock) as an
+# unlocked system dconf database, so the "Try Sensible" live desktop shows the
+# same profile the installed system gets. The installer re-applies this exact
+# file from /opt/sensible/configs, so there is one source for both.
+dconf_defaults=/opt/sensible/configs/gnome-dconf-defaults
+if [ ! -s "${dconf_defaults}" ]; then
+    echo "Error: GNOME dconf defaults are missing at ${dconf_defaults}." >&2
+    exit 1
+fi
+mkdir -p /etc/dconf/profile /etc/dconf/db/local.d
+printf 'user-db:user\nsystem-db:local\n' > /etc/dconf/profile/user
+if ! install -m 0644 "${dconf_defaults}" /etc/dconf/db/local.d/00-sensible-desktop; then
+    echo "Error: could not stage the GNOME dconf defaults." >&2
+    exit 1
+fi
+if ! dconf update; then
+    echo "Error: could not compile the GNOME system dconf database." >&2
     exit 1
 fi
