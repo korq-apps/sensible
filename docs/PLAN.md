@@ -14,18 +14,24 @@ than asked, and third-party software leaves the install path entirely.
 | Phase 7.2 copy install | **done** |
 | Phase 7.3-7.5 live session, guided prompts, KDE | **done** |
 | Phase 7.6 post-install app tool | planned |
-| Unattended input (#4) | implemented on the feature branch; protected TOML/secret files and config-driven mocked integration tests; real ISO execution pending |
-| Release gate | blocked on real installed-disk tests and physical-hardware evidence; new config path needs image-level acceptance |
+| Unattended input (#4) | merged in PR #17 (`553ad1d`); protected TOML/secret files and config-driven integration coverage; real `--config` acceptance belongs to #5 |
+| Installer/VM diagnostics | merged in PR #17; bounded pre-cleanup evidence and host export, original failure preserved; real guest failure/export acceptance remains |
+| Live desktop and audio | merged in PR #18 (`aa1c44e`); user confirms Try Sensible works as expected; specific installed-security and physical-audio checks remain separate |
+| Release gate | blocked on the full installed-disk matrix and physical-hardware evidence; one user-reported install/boot succeeded, not the whole matrix |
 | Phase 6 extras | re-scoped below: baked into the ISO, or moved to the post-install tool |
 | Desktop profiles | PR #16 merged; both ISO builds/live UEFI smoke checks pass; GNOME and KDE validation reported successful by the user; targeted acceptance and native KDE configuration remain; see [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md) |
 | Offline first-login manual | implemented from PR #2 on the current installer; real desktop first-login validation remains pending |
 
-**Current feature PR:** validated unattended installer input
-([#4](https://github.com/korq-apps/sensible/issues/4)), implemented on
-`codex/unattended-installer` with parser and mocked full-flow regression coverage.
-After review and image validation, it unblocks the real
-GNOME/KDE × Btrfs/Ext4 × LUKS on/off installed-disk matrix in #5. Do not start
-that matrix by bypassing prompts or disabling destructive-device checks.
+**Priority decision (2026-09-10):** park further unattended-install work and
+the next automation/harness slice. The existing #4 implementation and diagnostic
+transport stay in place. The user confirms Try Sensible works as expected; do
+not schedule another generic live-desktop validation pass as the next feature.
+
+**Recommended next feature, pending selection:** hybrid ZRAM plus the existing
+disk swapfile ([#11](https://github.com/korq-apps/sensible/issues/11)), coordinated
+with hibernation guidance (#8). User-facing work need not wait for the #5 harness.
+Required feature validation can be performed manually on identified VM/hardware
+images; parking automation does not mark the release acceptance gates complete.
 
 **Desktop roadmap:** the GNOME profile, complete global theme/icon collection,
 Flathub and ONLYOFFICE replacement are merged, not another implementation slice.
@@ -40,19 +46,34 @@ The agreed scope and evidence are in [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md).
 ## Reconciled priorities
 
 This queue governs the next work; the numbered phases below also retain
-implementation history. Updated **2026-09-08** after PR #16 merged into `main`
-as `c7015b4`. The final PR head `5c702c8` passed the unit/integration job and
-both edition ISO/live UEFI smoke jobs in
-[CI run 34102104112](https://github.com/korq-apps/sensible/actions/runs/34102104112).
-The release-publication job was skipped; this is build evidence, not a release.
-GitHub issues #4–#9, #11 and #13 remain open as checked on this date. This
-reconciliation updates repository plans only, not GitHub ticket states.
+implementation history. Updated **2026-09-10** after
+[PR #17](https://github.com/korq-apps/sensible/pull/17) (`553ad1d`) and
+[PR #18](https://github.com/korq-apps/sensible/pull/18) (`aa1c44e`) merged into
+`main`. Each PR passed unit/integration tests and both edition ISO/live UEFI
+smoke jobs: [#17 CI](https://github.com/korq-apps/sensible/actions/runs/34508025362),
+[#18 CI](https://github.com/korq-apps/sensible/actions/runs/34499641262).
+Release publication was skipped. The combined `main` build
+[34514968804](https://github.com/korq-apps/sensible/actions/runs/34514968804)
+was still running at reconciliation: its unit/integration and GNOME ISO/smoke
+jobs had passed, the KDE job had not finished. Separate PR builds are not proof
+of a completed post-merge image build or graphical-session acceptance.
+GitHub issues #4–#9, #11 and #13 remain open as checked on this date. The
+user-requested planning pass adds #19–#27 for previously unticketed scopes and
+[#28: prioritization index](https://github.com/korq-apps/sensible/issues/28).
+No existing issue was closed or relabeled. #4's
+implementation is merged; its ticket needs a closure/evidence update linking
+PR #17, with the real install/boot matrix retained in #5 rather than reopening
+the input implementation.
 
 ### Validation snapshot (updated 2026-09-10)
 
 | Evidence | What it establishes | Still outstanding |
 | :--- | :--- | :--- |
 | PR #16 merged; final PR CI successful | GNOME/KDE ISOs build and reach the live UEFI smoke marker; automated regression suite passes | Installed-disk boots and Secure Boot matrix (#5), physical hardware records (#6) |
+| PR #17 merged; PR CI successful | Validated unattended input, controlled disk-path rejection, failure bundles, QEMU export and optional Git metadata are in `main`; both images pass live console smoke | Real `--config` runs, detached-ISO boots and a controlled guest failure/export check in #5 |
+| PR #18 merged; PR CI successful | Try Sensible entry/launcher, shared image/installed GNOME defaults, audio closure and `sensible-audio-check` are in `main`; both images pass console smoke | Graphical live sessions and installer launch on both editions, installed lock/autologin isolation, and physical speakers/headphones/microphone evidence; earlier desktop feedback does not establish these new checks |
+| User: Try Sensible works as expected (2026-09-10) | Positive validation of the new live-desktop experience; no generic retest is scheduled as the next work item | Specific installed-security and physical-audio scenarios remain independently tracked; no unreported scenario is inferred |
+| Local regression run on combined `main` (`aa1c44e`, 2026-09-10) | All 18 suites pass, including 675 installer-flow assertions | Commands/disks in the integration suite are mocked; this does not replace a post-merge ISO build or real session |
 | User: latest GNOME build works as expected with the recent changes | Positive GNOME feature smoke/acceptance feedback for this desktop slice | Exact tested ISO checksum/session context and itemized edge-case results were not supplied; do not infer them |
 | User: KDE validation done, OK | Positive KDE validation feedback; general validation reported successful for both editions | Exact artifact and itemized results were not supplied; specific release scenarios remain separately tracked |
 | User: QEMU installation retry completed and the installed system booted (2026-09-10) | Positive install/boot validation for the tested scenario; the earlier `/boot` mount failure did not recur | Root cause remains unconfirmed. ISO checksum, exact configuration and interactive versus `--config` mode were not recorded for this retry; this does not complete #5's matrix or validate diagnostic export on a real failure |
@@ -63,49 +84,55 @@ without a reported regression. Keep #13 as the owner of the remaining itemized
 GNOME evidence, not an unstarted configuration project. Broad positive feedback
 does not assert that every device, file format or security scenario was tested.
 
-### Delivery order
+### Proposed user-facing delivery order
+
+This replaces the previous infrastructure-first recommendation. The user has
+parked unattended automation; the ordering below is a recommendation, not
+authorization to implement every item or preinstall new AI clients.
+The [GitHub roadmap (#28)](https://github.com/korq-apps/sensible/issues/28)
+groups the existing and new issues by readiness, dependencies and proposed
+priority. New tickets contain explicit scope, acceptance and exclusions; the
+relative effort/risk notes are planning aids, not delivery estimates or dates.
 
 | Order | Bounded change | Completion evidence / existing owner |
 | :--- | :--- | :--- |
-| 1 | Validated `--config` input, sharing interactive validation | #4: strict data parsing, protected secrets, no prompts, explicit wipe permission, unchanged disk revalidation, deterministic completion and failure tests |
-| 2 | Build provenance and footprint reporting | Manifest inside both images, matching external metadata/package lists, ISO/squashfs sizes and comparable per-edition summaries; no invented size budget |
-| 3 | Complete offline payload validation and a non-destructive image check | #9: one shared validator used before wipe and by a no-target-disk smoke mode; missing packages/assets and variant mismatches fail explicitly |
-| 4 | Installed-system and remaining desktop acceptance | #5: eight installs and detached-ISO boots, including installed Secure Boot; #13: targeted GNOME checks beyond the reported successful smoke. General GNOME/KDE validation is reported successful; remaining targeted desktop and #6 hardware evidence can be collected independently |
-| 5 | Editor neutrality, native KDE profile and reversible customization, in separate small PRs | Include Vim and Neovim without forcing an editor; keep LazyVim opt-in. Preserve user overrides and security settings while completing the existing desktop scope |
-| 6 | Curated optional-app catalog and AI manual, then approved CLI additions | One `sensible-apps` backend, a small first catalog, official optional recipes, and the unresolved AI delivery decision in [AI_TOOLS.md](AI_TOOLS.md) |
-| 7 | Storage/recovery and broader optional capabilities | #11 hybrid ZRAM/swap, Btrfs Snapper recovery and personal backups are distinct slices; use the installed-disk harness and require restore/hibernate evidence |
+| Bugfix lane | Wallet/keyring first use and login integration | [#29](https://github.com/korq-apps/sensible/issues/29): reproduce KDE GPG setup failure, verify password-backed/PAM behavior on both desktops, preserve credentials; ahead of cosmetic #27 work, with boot-secret reuse evaluated separately |
+| 1 | Hybrid ZRAM + persistent swap, coordinated with hibernation guidance | #11 and #8: explicit priorities, unchanged disk-backed resume target, fallback if ZRAM fails, measured memory pressure and shutdown/hibernate validation; explain supported/unknown hibernation state honestly |
+| 2 | Consistent installer Back/Cancel | #7: repeated previous-step navigation without lost answers, stale derived state or accidental disk writes; Gum and fallback tests |
+| 3 | Complete offline pre-wipe protection | #9: derive required packages/assets from maintained inputs; fail before wiping on missing or invalid payloads; keep target-side checks |
+| 4 | Btrfs snapshots and recovery | [#19](https://github.com/korq-apps/sensible/issues/19): Snapper policy, retention and layout-aware restore; prove recovery with separate `/boot`; do not combine with #11 |
+| 5 | Native KDE profile and editor neutrality, in separate small PRs | [#27 KDE](https://github.com/korq-apps/sensible/issues/27): review useful native defaults; [#26 editors](https://github.com/korq-apps/sensible/issues/26): agreed independent quick win, both Vim/Neovim with LazyVim opt-in |
+| 6 | Curated AI/CLI manual and optional-app catalog | [#23 manual](https://github.com/korq-apps/sensible/issues/23), [#25 CLI usability](https://github.com/korq-apps/sensible/issues/25), [#24 catalog](https://github.com/korq-apps/sensible/issues/24); [#22 AI delivery](https://github.com/korq-apps/sensible/issues/22) remains decision-gated |
 
-Orders 2 and 3 support acceptance without changing desktop choices. They do not
-replace #4–#6 or authorize release publication. #7 back-navigation and #8
-hibernation messaging retain their existing scopes; fix discovered safety
-failures before release rather than waiting for their position in this queue.
-Manual-only curation can proceed without committing to AI preinstallation or
-blocking release tests on an app catalog, diagnostics suite or new UI framework.
+Build provenance/footprint reporting ([#20](https://github.com/korq-apps/sensible/issues/20)) and the #5 automation harness are deferred
+infrastructure, not prerequisites for every user-facing PR. #5/#6 remain release
+evidence requirements; manual runs can supply evidence while automation is
+parked. Discovered safety failures take precedence over this suggested ordering.
+Personal-file backups ([#21](https://github.com/korq-apps/sensible/issues/21))
+remain a separate design-first workflow from root snapshots. Small editor/manual
+changes may land independently rather than wait for a storage project.
 
 ### Immediate handoff
 
-1. **Finish the current #4 implementation PR.** Complete review and image-level
-   validation of the implemented protected-secret, validated TOML and exit-only
-   contract. Retain the invalid/unauthorized pre-wipe regression coverage and
-   working interactive flow; no desktop additions or app-catalog work in this PR.
-2. **Alongside it: capture remaining desktop evidence.** General GNOME/KDE
-   validation is reported successful. Record known-good ISO identities when
-   available and itemized office open/save/print, first-login manual lifecycle
-   and remaining lock/override checks. Keep failures
-   attached to the tested image rather than treating every new Testing build
-   as the same candidate. This work does not depend on unattended input.
-3. **Next small infrastructure slices: provenance/footprint and #9.** Reuse the
-   existing package/asset guards; add persistent build identity and a shared
-   read-only pre-wipe/image validator. No arbitrary image-size cap or package cuts.
-4. **Once #4 lands: start #5's eight installed-disk cases.** Do not postpone the
-   matrix for a new diagnostics UI, an app catalog or further theme additions.
-   Record #6 physical checks whenever machines are available.
-
-After that safety/test foundation, deliver editor neutrality (Vim + Neovim,
-Debian-selected editor, optional LazyVim), a native KDE profile, and the optional
-app/AI manual in separate PRs. ZRAM plus hibernation swap (#11), Btrfs Snapper
-recovery and personal-file backup/restore remain distinct later slices. No new
-AI preinstallation decision or storage-policy change is made here.
+1. **Keep the accepted baseline.** Unattended input is merged and parked;
+   Try Sensible has positive user validation. No new harness or generic desktop
+   retest is the immediate assignment.
+2. **Recommend #11 as the next bounded feature.** Retain the current swapfile,
+   size rules and resume parameters; add explicit ZRAM configuration/priorities,
+   graceful fallback, tests and manual tips. Coordinate #8's wording, without
+   assuming ZRAM solves Secure Boot limitations. Before default enablement,
+   record memory-pressure, shutdown and applicable hibernate/resume results.
+3. **Keep the other useful scopes visible.** #7 navigation, #9 pre-wipe safety,
+   Snapper recovery, KDE defaults and the AI manual are distinct follow-ups.
+   The reported KDE wallet error now has a separate cross-desktop bugfix scope
+   in #29, ahead of cosmetic KDE work; it is not evidence that autologin can
+   safely decrypt stored secrets without a supported unlock mechanism.
+   These scopes now have linked GitHub tickets in #28; use the existing issues
+   rather than creating duplicates when a slice is selected.
+4. **Maintain evidence without blocking development on automation.** Record
+   targeted #13/#6 checks as available and retain the release gate. No issue
+   closures, release publication or feature implementation are performed by
+   this planning update; issue creation only makes the backlog actionable.
 
 ### Recommendations: adopt, narrow or defer
 
@@ -115,7 +142,7 @@ The external recommendations are proposals, not evidence of prior decisions.
 | :--- | :--- |
 | System-level switches for defaults | Adopt the reversibility goal, not one universal switch. Shell defaults are copied into skel; Git already uses `/etc/gitconfig`, and GNOME already uses unlocked system dconf defaults. Separate optional styling from idle/resume locking before adding opt-outs. |
 | `sensible-doctor` | Adopt incrementally after shared validators/provenance exist. Start with read-only evidence, explicit unknown states and redacted JSON; do not make a large diagnostic framework a prerequisite for #5. |
-| Build provenance / `sensible-info` | Adopt early, paired with footprint reporting. Distinguish the baked build inventory from the installed system's later package state. |
+| Build provenance / `sensible-info` | Retain as deferred infrastructure, paired with footprint reporting. Distinguish the baked build inventory from the installed system's later package state. |
 | Declarative `sensible-apps` | Adopt a small common catalog; reconcile Brave Origin, Audacious, developer tools and optional AI entries. BioPass needs separate PAM/removal validation; LazyVim is an opt-in configuration for the included Neovim, not a reason to remove Neovim. |
 | Save interactive answers | Adopt a sanitized export follow-up to #4, not automatic replay authorization. Omit secrets and target disk, clear wipe confirmation, and require fresh inputs/revalidation. |
 | Pin Debian archive snapshots | Evaluate after provenance is available. Use one archive selection for the package gate and build; keep a rolling Testing canary or reviewed bump builds. Snapshotting only the target archive is not complete ISO reproducibility. |
@@ -127,10 +154,11 @@ The external recommendations are proposals, not evidence of prior decisions.
 
 ### Small follow-up contracts
 
-#### Current feature slice: validated unattended input (#4)
+#### Merged contract: validated unattended input (#4, PR #17)
 
-Scope: add an input adapter to the existing installer, not a second installation
-engine. The implemented v1 contract is in
+The following contract is implemented and merged, not a new feature proposal.
+It adds an input adapter to the existing installer, not a second installation
+engine. The v1 specification is in
 [INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode-planned--release-test-infrastructure).
 
 1. **Parser and schema:** parse TOML without shell evaluation; reject unknown
@@ -159,8 +187,9 @@ engine. The implemented v1 contract is in
    post-wipe failures. Existing interactive tests must remain green.
 6. **Documentation and handoff:** ship a non-secret example with wipe permission
    disabled, document safe secret provisioning and the exit contract, and update
-   the test guide. This PR establishes #4's adapter and fixture evidence; actual
-   QEMU installs and detached-ISO boots belong to #5 immediately afterward.
+   the test guide. PR #17 established #4's adapter and fixture evidence; actual
+   QEMU installs and detached-ISO boots belong to #5; further automation is
+   currently parked by user decision.
 
 The VM investigation also adds bounded pre-cleanup failure bundles and a dedicated
 QEMU guest-to-host log channel; see [diagnostic export](INSTALL.md#qemu-testing-and-diagnostic-export).
@@ -173,12 +202,37 @@ Not included: profile export, a general dry-run/diagnostics tool, the expanded
 
 #### Later follow-up contracts
 
-**Sanitized profile export:** follow independently after #4; allowlist non-secret
+**Desktop credentials (#29, bugfix lane):** distinguish KDE's GPG-key setup
+error from a missing password for wallet decryption. Verify actual package/PAM
+integration, provide a supported password-backed fresh-user path and preserve
+existing encrypted stores. Test password login, autologin, available biometrics,
+password changes/resets and live-to-installed isolation. Evaluate upstream GDM
+disk-secret reuse separately; package configuration alone is not boot evidence.
+Keep safe fallback prompts rather than blank passwords, disabled secret storage
+or persistent plaintext credentials. No new auth mechanism is implemented by
+this plan. See [Architecture](ARCHITECTURE.md#desktop-wallets-and-saved-credentials).
+
+**Installed-disk harness (#5, parked):** retain this contract for when automation
+resumes; it is not the immediate next PR. Accept an explicit ISO and record its checksum;
+create fresh disposable QCOW2 disks in a private run directory, never accept a
+host block device as the destructive target. Provision temporary config/secrets
+without passwords in command lines, serial output or published artifacts. Use
+the existing `--config` path, with deterministic install/boot markers, bounded
+timeouts and failure bundles. A successful installer exit is only the end of
+the install phase: detach the ISO, retain firmware variables, unlock LUKS where
+applicable and validate the installed root, mounts, crypttab/fstab, swap/resume
+configuration and desktop/login. Keep encrypted unlock input private. Record
+each case as pass/fail/blocked with the reason; unavailable Secure Boot or session
+checks must not silently pass. The first one-case PR builds the harness, not
+completion of #5; expand to eight storage/edition cases plus installed Secure
+Boot and archive evidence before closing that release gate.
+
+**Sanitized profile export:** follow independently of merged #4; allowlist non-secret
 preferences, omit disk identifiers and password hashes as well as passwords,
 write with restrictive permissions, and make `confirm_wipe = false` explicit.
 An export is an incomplete template, not a ready-to-run destructive command.
 
-**Provenance and footprint:** record schema/build ID, source commit and dirty
+**Provenance and footprint (#20, deferred):** record schema/build ID, source commit and dirty
 state, UTC build time, variant/architecture, builder image digest or native
 toolchain versions, effective source configuration, the actual signed
 InRelease/Release identities used, hook/pin digests and package versions.
@@ -219,7 +273,7 @@ user overrides, and document per-component disable/re-enable behavior in the
 manual instead of starting another overlapping opinions document.
 See [GNOME's system-defaults guidance](https://help.gnome.org/system-admin-guide/dconf-custom-defaults.html).
 
-**One optional-app catalog:** start with noninteractive `list`/`status` and one
+**One optional-app catalog (#24):** start with noninteractive `list`/`status` and one
 Debian-backed install/remove path; add source adapters only for approved entries.
 Store rationale, source identity, verification, dependencies, license, update
 owner, removal behavior and network/first-run requirements as data, not shell
@@ -246,7 +300,7 @@ consistency and byte-for-byte reproducibility are separate claims. A snapshot
 constrains Debian input versions; it does not by itself guarantee a solvable
 package set or byte-identical ISO outputs. [Debian snapshot documentation](https://snapshot.debian.org/).
 
-**Editor decision (confirmed):** include both `vim` and `neovim`; let Debian's
+**Editor decision (#26, confirmed):** include both `vim` and `neovim`; let Debian's
 normal editor selection and user preferences apply. Remove Sensible's exported
 `EDITOR=nvim` / `VISUAL=nvim`, do not force a replacement value or a Git editor,
 and do not call `update-alternatives --set editor` to choose either editor.
@@ -496,13 +550,13 @@ Architecture/spec sections mark them **(planned — post-install tool)**.
 **Move to the post-install tool** (`sensible-apps`, online, after first boot):
 
 - [ ] Developer tools: `docker.io` + `docker-compose` + `lazygit` + `gh`; user **not** added to the docker group (root-equivalent). Was an installer checkbox, which is exactly the kind of question the offline rework removes, and these cost nothing to add after first boot
-- [ ] BioPass face login: pinned `.deb` + SHA256 from [TickLabVN/biopass](https://github.com/TickLabVN/biopass), PAM via `pam-auth-update`. Third-party and young, so it does not belong in the offline image; biometrics never unlock LUKS and fingerprint login leaves the keyring locked — both must be stated where it is offered
+- [ ] BioPass face login: pinned `.deb` + SHA256 from [TickLabVN/biopass](https://github.com/TickLabVN/biopass), PAM via `pam-auth-update`. Third-party and young, so it does not belong in the offline image. This desktop PAM integration does not unlock LUKS; biometric authentication alone supplies no wallet/keyring decryption password, so access may still prompt unless another supported unlock path applies (see #29). State both limitations where it is offered.
 - [x] Brave Origin is documented as a curated optional online app with its official installer; it is not preinstalled.
 - [ ] One declarative post-install catalog for Brave Origin, Audacious and
   approved developer/AI tools, introduced through the small backend/adapters
   described in the reconciled queue above; Flathub itself is already configured.
 
-**AI and CLI follow-ups (planned, selection pending):**
+**AI and CLI follow-ups (planned, tracked in #22–#25; AI delivery decision pending):**
 
 - [ ] [Curated AI manual](AI_TOOLS.md): tool-selection rationale, safe usage,
   official optional installation/update/removal recipes, and current Linux
@@ -595,7 +649,10 @@ Worth taking, not yet taken:
 
 ---
 
-## Later (not v1)
+## Storage and recovery follow-ups
+
+These are user-facing candidates in the proposed queue, not gated on building
+an unattended harness first. Their own real-system acceptance is still required.
 
 - **Hybrid ZRAM and disk swap ([#11](https://github.com/korq-apps/sensible/issues/11)).**
   Evaluate compressed RAM swap ahead of the persistent RAM-sized swapfile, not
@@ -603,7 +660,7 @@ Worth taking, not yet taken:
   issue's memory-pressure, fallback, shutdown and hibernate/resume tests across
   the existing storage matrix. Coordinate Secure Boot messaging with #8. This
   is independent of Btrfs snapshots; do not combine both storage changes in one PR.
-- **Separate follow-up after desktop apps: Btrfs snapshots and recovery.**
+- **Separate follow-up after desktop apps: Btrfs snapshots and recovery ([#19](https://github.com/korq-apps/sensible/issues/19)).**
   Configure Snapper only when Btrfs is selected; leave Ext4 unchanged. Reuse the
   existing mounted `@snapshots` layout safely rather than blindly running
   `snapper create-config /` over `/.snapshots`. Include snapshot creation policy
@@ -616,7 +673,10 @@ Worth taking, not yet taken:
   `update-grub` as sufficient for this layout. Require installed-disk reboot and
   restore evidence with LUKS on/off. Home, logs and swap are separate subvolumes;
   root snapshots do not replace personal-file backups. No target-time source
-  cloning/builds or snapshot tooling added by the current desktop-app slice.
+  cloning/builds; snapshot tooling is not yet implemented.
+
+## Later (not v1)
+
 - TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis + `clevis-initramfs`); with biometrics this completes the Windows Hello flow — PCR policy must account for the unencrypted `/boot`, and Secure Boot in v1 strengthens the measurements
 - FIDO2 hardware keys for sudo/polkit (`libpam-u2f`, enrollment via `pamu2fcfg`)
 - GUI NVIDIA/MOK enrollment (unsigned NVIDIA module is rejected under Secure Boot lockdown)

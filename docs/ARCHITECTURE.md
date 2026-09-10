@@ -168,10 +168,36 @@ open. The user's password is still set (sudo, keyring, screen unlock).
 Idle screen lock is always enforced, independent of the choice: GNOME gets
 system dconf defaults (`idle-delay=300`, `lock-enabled`, `lock-delay=0`), KDE
 gets `/etc/xdg/kscreenlockerrc` with `Autolock` + `LockOnResume` (resume from
-suspend is covered). Known tradeoffs: logout logs back in immediately; the
-keyring is not unlocked by autologin. SDDM autologin requires `Session=`
+suspend is covered). Known tradeoffs: logout logs back in immediately;
+autologin alone does not supply a wallet/keyring decryption password, so secret
+access may still prompt. SDDM autologin requires `Session=`
 alongside `User=` — the installer writes `Session=plasma` (the Wayland
 session file name); with only `User=` autologin never engages.
+
+### Desktop wallets and saved credentials
+
+Session authentication and decrypting saved secrets are separate operations.
+Password login can unlock a matching password-backed wallet/keyring through
+the desktop's PAM integration; this needs image-level verification, not just
+package presence. KDE's GPG wallet backend instead requires an encryption-capable
+OpenPGP key. The reported KDE live-session error on 2026-09-10 is consistent
+with that missing-key case, not proof of a biometric or PAM failure.
+[KDE backend guidance](https://docs.kde.org/stable_kf6/en/kwalletmanager/kwalletmanager/introduction.html).
+
+The correction is planned in [#29](https://github.com/korq-apps/sensible/issues/29),
+not implemented by this documentation: prefer a supported password-backed
+first-use path, verify Debian PAM integration on both desktops, preserve existing
+wallets and keep live-user credential state out of installed accounts. Do not
+silently generate private keys, remove wallet passwords or disable secret storage.
+
+There is a supported upstream mechanism worth testing before declaring all
+autologin unlock impossible: [GDM's pam_gdm](https://github.com/GNOME/gdm/blob/main/pam_gdm/pam_gdm.c)
+can pass a cached cryptsetup password into PAM. The inspected Debian
+`gdm3_50.2-1` build-cache package includes `pam_gdm.so` followed by
+`pam_gnome_keyring.so` in `gdm-autologin`. This is configuration evidence only;
+the actual initramfs cache, matching secrets and successful session unlock are
+unverified. KDE/SDDM needs an independent assessment. Preserve a safe unlock
+prompt when the secret is unavailable; no custom persistent password handoff.
 
 ### Biometric login
 
@@ -183,7 +209,7 @@ Two tiers, because fingerprint and face have very different maturity on Debian:
 Facts to not relearn later:
 
 - **Biometrics never unlock LUKS.** The Plymouth passphrase dialog at boot is untouched; face/fingerprint cover session login, lock screen, `sudo`, and polkit only.
-- **Fingerprint login leaves the GNOME Keyring locked** (the keyring is encrypted with the password), so the first secret access after a biometric login still prompts. Known papercut — documented, not "fixed". Same class of caveat as autologin above.
+- **Biometric authentication does not itself decrypt a password-protected wallet.** Without another supported source of the unlock secret, first access may prompt. This differs from biometric screen unlock when the session's wallet is already open; wallet locking policy still applies. See [GNOME's archived PAM explanation](https://wiki.gnome.org/Projects/GnomeKeyring/Pam) and the cross-desktop acceptance work in #29.
 - Landscape check (2026): Howdy is face-only and semi-maintained, `howdy-next` and `authFace` are young and face-only. BioPass is the only serious multi-modal candidate.
 
 ---

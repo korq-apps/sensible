@@ -129,6 +129,12 @@ sudo fwupdmgr update</code></pre>
             <li><strong>Resume Lock:</strong> KDE explicitly locks on resume; GNOME follows its desktop defaults.</li>
             <li><strong>Automatic Login:</strong> If selected during an encrypted installation, automatic desktop login engages after unlocking the LUKS2 disk at boot. Unencrypted installs always require password login.</li>
           </ul>
+
+          <h3 id="desktop-credentials">Saved Passwords: KDE Wallet &amp; GNOME Keyring</h3>
+          <p>These stores protect saved application credentials separately from your disk and screen lock. With working login integration, typing your account password can unlock a matching wallet/keyring. Autologin or fingerprint/face authentication alone does not supply that decryption password, so saved-secret access may still prompt. Unlocking an already-running session is different: its wallet may already be open. Further prompts depend on the wallet's locking settings.</p>
+          <p><strong>KDE first-use error:</strong> “No keys suitable for encryption” refers to the GPG wallet backend. For a <em>new</em> ordinary password-backed wallet, go back and select the password-based option (currently labelled <strong>Blowfish</strong>), rather than GPG. Use a non-empty password; matching your account password allows password-login integration when configured. Existing wallets must not be deleted or replaced to bypass an error. <a href="https://docs.kde.org/stable_kf6/en/kwalletmanager/kwalletmanager/introduction.html" target="_blank" rel="noopener noreferrer">KDE explains the two backends</a>.</p>
+          <p><strong>Keep credentials protected:</strong> do not remove the wallet password, disable secret storage, or save your login password in a script merely to avoid prompts. A wallet password can differ from your current account password, especially after an administrator resets the account password. Treat Try Sensible as a temporary session, not a place to keep valuable credentials.</p>
+          <p>Cross-desktop first-use and unlock improvements are <a href="https://github.com/korq-apps/sensible/issues/29" target="_blank" rel="noopener noreferrer">planned in issue #29</a>. A disk-unlock-to-keyring path must be tested before Sensible promises it; no such new integration is shipped by this documentation update.</p>
         </section>
 
         <section id="installing-software">

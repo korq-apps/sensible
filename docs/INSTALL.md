@@ -167,6 +167,15 @@ in the live session for diagnostics.
   log in with the username and user password created during installation.
 - Without encryption, there is no disk-unlock prompt; log in normally.
 
+Skipping desktop login does not guarantee that saved application passwords are
+already unlocked. KDE Wallet or GNOME Keyring may ask for its password on first
+use after autologin or biometric login. A wallet/keyring password can differ
+from the account password; do not delete the store if an unlock fails. The
+[manual's saved-credentials guidance](../manual/index.html#desktop-credentials)
+also explains KDE's GPG-key setup error. Cross-desktop integration improvements
+are tracked in [#29](https://github.com/korq-apps/sensible/issues/29); automatic
+reuse of the disk-unlock secret is not yet a verified Sensible guarantee.
+
 Connect to the network, then install Debian updates in a terminal:
 
 ```bash
