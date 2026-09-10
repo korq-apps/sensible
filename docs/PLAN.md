@@ -84,10 +84,10 @@ blocking release tests on an app catalog, diagnostics suite or new UI framework.
 
 ### Immediate handoff
 
-1. **Next implementation PR: #4 only.** Implement the proposed protected-secret
-   and exit-only contract with validated TOML input through the existing path,
-   and prove invalid/unauthorized configurations cannot reach a wipe. Keep the
-   interactive flow working; no desktop additions or app-catalog work in this PR.
+1. **Finish the current #4 implementation PR.** Complete review and image-level
+   validation of the implemented protected-secret, validated TOML and exit-only
+   contract. Retain the invalid/unauthorized pre-wipe regression coverage and
+   working interactive flow; no desktop additions or app-catalog work in this PR.
 2. **Alongside it: capture remaining desktop evidence.** General GNOME/KDE
    validation is reported successful. Record known-good ISO identities when
    available and itemized office open/save/print, first-login manual lifecycle

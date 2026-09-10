@@ -7,6 +7,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -221,6 +222,32 @@ capture_install_diagnostics 32
         run = subprocess.run(["bash", str(ROOT / "scripts/run-qemu.sh"), "--installed", str(self.root / "absent")],
                              env=env, capture_output=True, text=True)
         self.assertNotEqual(run.returncode, 0)
+
+        env.pop("QEMU_FIXTURE_RC")
+        git = bin_dir / "git"
+        for scenario in ("git-unavailable", "status-failure", "source-archive"):
+            with self.subTest(scenario=scenario):
+                launcher = ROOT / "scripts/run-qemu.sh"
+                if scenario == "source-archive":
+                    git.unlink()
+                    launcher = self.root / "unpacked/scripts/run-qemu.sh"
+                    launcher.parent.mkdir(parents=True)
+                    shutil.copyfile(ROOT / "scripts/run-qemu.sh", launcher)
+                else:
+                    body = "exit 127\n" if scenario == "git-unavailable" else (
+                        'if [ "$3" = rev-parse ]; then echo fixture-revision; exit 0; fi\nexit 128\n')
+                    git.write_text("#!/bin/bash\n" + body)
+                    git.chmod(0o755)
+                previous_runs = set((self.root / "logs").iterdir())
+                run = subprocess.run(["bash", str(launcher), "--installed", str(disk)],
+                                     env=env, capture_output=True, text=True)
+                self.assertEqual(run.returncode, 0, run.stderr)
+                directory, = set((self.root / "logs").iterdir()) - previous_runs
+                metadata = (directory / "host.txt").read_text()
+                self.assertIn("Repository status: unavailable", metadata)
+                self.assertIn("Repository commit: " + (
+                    "fixture-revision" if scenario == "status-failure" else "unavailable"), metadata)
+                self.assertIn("qemu-fixture", (directory / "qemu.log").read_text())
 
 
 if __name__ == "__main__":

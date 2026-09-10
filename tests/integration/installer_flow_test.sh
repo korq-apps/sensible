@@ -858,7 +858,7 @@ done
 unset SENSIBLE_VARIANT
 
 t_section "Unattended rejection before wipe"
-for config_bad in unauthorized malformed wrong-type unsafe-secret short-secret invalid-user invalid-locale invalid-zone invalid-keyboard invalid-identity missing-disk mounted undersized readonly live changed; do
+for config_bad in unauthorized malformed wrong-type unsafe-secret short-secret invalid-user invalid-locale invalid-zone invalid-keyboard invalid-identity missing-disk unresolvable-disk mounted undersized readonly live changed; do
     write_config_answers
     printf 'config-$ecret-123\n' > "$CONFIG_SECRET"
     chmod 600 "$CONFIG_SECRET"
@@ -874,6 +874,7 @@ for config_bad in unauthorized malformed wrong-type unsafe-secret short-secret i
         invalid-keyboard) sed -i 's/keyboard = "us"/keyboard = "missing-layout"/' "$CONFIG_ANSWERS" ;;
         invalid-identity) printf 'full_name = "bad:name"\n' >> "$CONFIG_ANSWERS" ;;
         missing-disk) write_config_answers btrfs true true /dev/not-selected ;;
+        unresolvable-disk) write_config_answers btrfs true true /dev/null/disk ;;
         mounted|undersized|readonly|live|changed) MOCK_UNSAFE_DISK="$config_bad" ;;
     esac
     run_flow --config "$CONFIG_ANSWERS"
@@ -884,6 +885,10 @@ for config_bad in unauthorized malformed wrong-type unsafe-secret short-secret i
     assert_not_contains "$config_bad does not change live keyboard" "$(log_text)" setupcon
     assert_not_contains "$config_bad never prompts" "$(log_text)" UNEXPECTED_PROMPT
     assert_not_contains "$config_bad never leaks secret" "$(output_text)$(log_text)" 'config-$ecret-123'
+    if [ "$config_bad" = unresolvable-disk ]; then
+        assert_file_contains "resolution failure has a controlled diagnostic" "$INSTALL_LOG" \
+            'Configured disk path could not be resolved; no disk was changed.'
+    fi
 done
 
 t_section "Unattended retains live closure and post-wipe failure guards"

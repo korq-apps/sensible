@@ -539,7 +539,10 @@ main() {
     local TARGET_DISK=""
     local NO_DISK_TEXT NO_DISK_CHOICE
     if [ "$SENSIBLE_UNATTENDED" = true ]; then
-        TARGET_DISK=$(readlink -f -- "${UNATTENDED_FIELDS[0]}")
+        if ! TARGET_DISK=$(readlink -f -- "${UNATTENDED_FIELDS[0]}" 2>/dev/null); then
+            log_err "Configured disk path could not be resolved; no disk was changed."
+            exit 1
+        fi
         local -a eligible_disks=()
         local eligible=false i
         mapfile -t eligible_disks < <(list_candidate_disks)

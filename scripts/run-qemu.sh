@@ -158,9 +158,16 @@ QEMU_ARGS=("${KVM_OPT[@]}" "${BIOS_OPT[@]}" -m "$RAM" -smp "$CPUS"
 {
     date -u '+UTC: %Y-%m-%dT%H:%M:%SZ'
     qemu-system-x86_64 --version
-    printf 'Repository commit: '
-    git -C "$REPO_ROOT" rev-parse HEAD
-    git -C "$REPO_ROOT" status --short
+    if revision=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null); then
+        printf 'Repository commit: %s\n' "$revision"
+    else
+        printf 'Repository commit: unavailable\n'
+    fi
+    if repository_status=$(git -C "$REPO_ROOT" status --short 2>/dev/null); then
+        printf 'Repository status: %s\n' "${repository_status:-clean}"
+    else
+        printf 'Repository status: unavailable\n'
+    fi
     if [ -n "$ISO_PATH" ]; then sha256sum -- "$ISO_PATH"; fi
     sha256sum -- "$OVMF_CODE"
     printf 'Command: qemu-system-x86_64'
