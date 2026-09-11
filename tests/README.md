@@ -116,6 +116,9 @@ function mock that records its invocation. Asserts, per scenario:
 - Ext4 + no LUKS on the raw root partition
 - Live-copy deploy path: API mountpoints remain available while live-only installer artifacts are removed
 - Completion: stay-live, successful reboot request, and failed reboot fallback
+- ZRAM: a failed `zramswap.service` enablement on the target reaches the
+  completion summary as a warning while the install, swapfile and resume
+  configuration complete normally
 - Aborts: undersized/no-disk, failed partition-table reread, missing partition devices before formatting, surviving live initramfs diversion, missing cryptsetup closure, declined destructive confirmation, and a mandatory post-wipe failure
 - Boot-mount failure: exact arguments captured before teardown; successful, failed and timed-out diagnostics all preserve exit code 32. The full-flow fixture mocks the collector so it never probes the host.
 - Re-prompts: invalid username rejected, valid accepted

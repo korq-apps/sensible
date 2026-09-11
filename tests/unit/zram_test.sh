@@ -13,8 +13,11 @@ TMP_DIR="$(mktemp -d /tmp/sensible-zram-test.XXXXXX)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
 t_section "zram-tools is part of the offline target closure"
-assert_file_contains "zram-tools listed" "$TARGET_LIST" "zram-tools"
-assert_file_contains "bc dependency listed explicitly" "$TARGET_LIST" "bc"
+# Match whole uncommented records: the explanatory comments above the entries
+# also mention the package names and must not satisfy this check.
+package_records="$(grep -vE '^\s*(#|$)' "$TARGET_LIST")"
+grep -qx 'zram-tools' <<< "$package_records"; assert_rc "zram-tools is an uncommented package record" 0 $?
+grep -qx 'bc' <<< "$package_records"; assert_rc "bc dependency is an uncommented package record" 0 $?
 # Packages between the app marker and the dconf marker must be documented in
 # the manual's application chapters; system swap tooling belongs before them.
 apps_section="$(awk '/^# Apps — default set/{p=1} /^# dconf-cli/{p=0} p' "$TARGET_LIST")"

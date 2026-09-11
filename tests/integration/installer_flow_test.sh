@@ -254,6 +254,9 @@ chroot() {
         return 1
     fi
     if [ "${1:-}" = "id" ] && [ "${2:-}" = "-nG" ]; then echo "sudo audio video plugdev netdev bluetooth"; fi
+    if [ "${1:-}" = "systemctl" ] && [ "${2:-}" = "enable" ] && [ "${3:-}" = "zramswap.service" ]; then
+        return "${MOCK_ZRAM_ENABLE_RC:-0}"
+    fi
     if [ "${1:-}" = "dpkg-query" ]; then
         local queried_package="${4:-}"
         if [ "${MOCK_MISSING_PACKAGE:-}" = "${queried_package}" ]; then return 1; fi
@@ -662,6 +665,18 @@ assert_file_not_exists "unencrypted KDE has no live SDDM override" "${MNT}/etc/s
 assert_file_not_exists "unencrypted KDE has no autologin drop-in" "${MNT}/etc/sddm.conf.d/autologin.conf"
 assert_file_contains "unencrypted KDE still locks on idle" "${MNT}/etc/xdg/kscreenlockerrc" "Autolock=true"
 unset SENSIBLE_VARIANT
+
+t_section "ZRAM service enablement failure degrades to a warning, never an abort"
+SENSIBLE_VARIANT=gnome
+MOCK_ZRAM_ENABLE_RC=1
+build_answers yes
+run_flow
+MOCK_ZRAM_ENABLE_RC=0
+assert_rc "installation completes although zramswap.service could not be enabled" 0 "${RC}"
+assert_contains "enablement was attempted on the target" "$(log_text)" "systemctl enable zramswap.service"
+assert_contains "ZRAM enablement failure reaches the completion summary" "$(output_text)" "- ZRAM swap service could not be enabled; the disk swapfile still works."
+assert_file_contains "disk swapfile stays configured as the fallback" "${MNT}/etc/fstab" "/swap/swapfile none swap sw,pri=10 0 0"
+assert_file_contains "resume target unaffected by the ZRAM failure" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTFS-FS-UUID-5555 resume_offset=38400"
 
 t_section "Live-copy deploy path: excludes keep API dirs, mountpoints exist (offline skips apt)"
 build_answers no
