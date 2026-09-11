@@ -188,11 +188,14 @@ default without a key, not a biometric or PAM failure.
 
 Evidence from the 2026-09-10 KDE image (`kwallet6 6.28.0-1`,
 `libpam-kwallet5 6.7.4-3`): `pam-auth-update` enables `pam_kwallet5.so` in
-`common-auth` and `common-session`, and the daemon creates a Blowfish
-`kdewallet` from the PAM hash when none exists, so a password login is
-designed to create and unlock the wallet without any dialog. `sddm-autologin`
-authenticates with `pam_permit.so` only, so autologin sessions, including
-Try Sensible, reach the dialog instead. kwallet-pam 6.7.x has no cached
+`common-auth` and `common-session`; `pam_kwallet5` derives a salted key from
+the typed login password and hands it to the daemon over a private socket,
+and the daemon creates a Blowfish `kdewallet` from that key when none exists,
+so a password login is designed to create and unlock the wallet without any
+dialog. `sddm-autologin` authenticates with `pam_permit.so` only, so an
+autologin session receives no key: with no wallet yet, as in Try Sensible,
+the first request opens the new-wallet dialog; an existing wallet is asked
+for its password instead. kwallet-pam 6.7.x has no cached
 disk-passphrase source comparable to GDM's `pam_gdm`. Real-session
 verification is still owed to #29.
 
