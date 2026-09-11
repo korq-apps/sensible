@@ -180,9 +180,24 @@ Session authentication and decrypting saved secrets are separate operations.
 Password login can unlock a matching password-backed wallet/keyring through
 the desktop's PAM integration; this needs image-level verification, not just
 package presence. KDE's GPG wallet backend instead requires an encryption-capable
-OpenPGP key. The reported KDE live-session error on 2026-09-10 is consistent
-with that missing-key case, not proof of a biometric or PAM failure.
+OpenPGP key, and the KDE Wallet Service new-wallet dialog preselects GPG
+(`knewwalletdialogintro.ui`, kwallet 6.28.0). The KDE live-session error
+reported on 2026-09-10 is therefore the expected result of accepting that
+default without a key, not a biometric or PAM failure.
 [KDE backend guidance](https://docs.kde.org/stable_kf6/en/kwalletmanager/kwalletmanager/introduction.html).
+
+Evidence from the 2026-09-10 KDE image (`kwallet6 6.28.0-1`,
+`libpam-kwallet5 6.7.4-3`): `pam-auth-update` enables `pam_kwallet5.so` in
+`common-auth` and `common-session`; `pam_kwallet5` derives a salted key from
+the typed login password and hands it to the daemon over a private socket,
+and the daemon creates a Blowfish `kdewallet` from that key when none exists,
+so a password login is designed to create and unlock the wallet without any
+dialog. `sddm-autologin` authenticates with `pam_permit.so` only, so an
+autologin session receives no key: with no wallet yet, as in Try Sensible,
+the first request opens the new-wallet dialog; an existing wallet is asked
+for its password instead. kwallet-pam 6.7.x has no cached
+disk-passphrase source comparable to GDM's `pam_gdm`. Real-session
+verification is still owed to #29.
 
 The correction is planned in [#29](https://github.com/korq-apps/sensible/issues/29),
 not implemented by this documentation: prefer a supported password-backed
