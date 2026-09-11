@@ -35,7 +35,7 @@ assert_file_contains "fstab subvol=@home"         "${MNT}/etc/fstab" "subvol=@ho
 assert_file_contains "fstab subvol=@snapshots"    "${MNT}/etc/fstab" "subvol=@snapshots"
 assert_file_contains "fstab subvol=@var_log"      "${MNT}/etc/fstab" "subvol=@var_log"
 assert_file_contains "fstab @swap subvolume"      "${MNT}/etc/fstab" "UUID=ROOTFS-FS-UUID-5555  /swap        btrfs  noatime,subvol=@swap"
-assert_file_contains "fstab swapfile on encrypted root" "${MNT}/etc/fstab" "/swap/swapfile none swap sw 0 0"
+assert_file_contains "fstab swapfile on encrypted root" "${MNT}/etc/fstab" "/swap/swapfile none swap sw,pri=10 0 0"
 assert_file_contains "fstab /boot"                "${MNT}/etc/fstab" "UUID=BOOT-FS-UUID-2222     /boot        ext4   noatime"
 assert_file_contains "fstab EFI umask=0077"       "${MNT}/etc/fstab" "UUID=EFI-FS-UUID-1111      /boot/efi    vfat   umask=0077"
 assert_file_contains "fstab tmpfs /tmp"           "${MNT}/etc/fstab" "tmpfs                /tmp         tmpfs  defaults,nosuid,nodev"
@@ -46,7 +46,7 @@ generate_crypttab_and_fstab /dev/sda3 /dev/sda2 /dev/sda1 "" /dev/sda3 ext4 fals
 assert_file_contains "crypttab placeholder only" "${MNT}/etc/crypttab" "# /etc/crypttab: No encrypted volumes configured."
 # Swap is a swapfile in the root filesystem in both modes now, so an
 # unencrypted install must not reference a swap partition either.
-assert_file_contains "fstab swapfile, not a partition" "${MNT}/etc/fstab" "/swapfile none swap sw 0 0"
+assert_file_contains "fstab swapfile, not a partition" "${MNT}/etc/fstab" "/swapfile none swap sw,pri=10 0 0"
 assert_file_not_contains "no swap partition UUID" "${MNT}/etc/fstab" "UUID=SWAP-FS-UUID-3333"
 assert_file_contains "fstab root uses partition fs UUID" "${MNT}/etc/fstab" "UUID=ROOTPART-FS-UUID-4444  /            ext4   noatime,errors=remount-ro,discard                                     0 1"
 assert_file_not_contains "no btrfs subvols"      "${MNT}/etc/fstab" "subvol="
@@ -54,7 +54,7 @@ assert_file_not_contains "no btrfs subvols"      "${MNT}/etc/fstab" "subvol="
 t_section "Btrfs + no LUKS keeps the swapfile line and the subvols"
 ENABLE_LUKS=false
 generate_crypttab_and_fstab /dev/sda3 /dev/sda2 /dev/sda1 "" /dev/sda3 btrfs false
-assert_file_contains "btrfs swapfile on @swap" "${MNT}/etc/fstab" "/swap/swapfile none swap sw 0 0"
+assert_file_contains "btrfs swapfile on @swap" "${MNT}/etc/fstab" "/swap/swapfile none swap sw,pri=10 0 0"
 assert_file_not_contains "no swap partition UUID" "${MNT}/etc/fstab" "UUID=SWAP-FS-UUID-3333"
 assert_file_not_contains "no mapper swap" "${MNT}/etc/fstab" "cryptswap"
 assert_file_contains "subvol=@ kept" "${MNT}/etc/fstab" "subvol=@home"
@@ -63,7 +63,7 @@ t_section "Ext4 + LUKS (swapfile at encrypted root)"
 ENABLE_LUKS=true
 generate_crypttab_and_fstab /dev/mapper/cryptroot /dev/sda2 /dev/sda1 "" /dev/sda3 ext4 true
 assert_file_not_contains "no cryptswap" "${MNT}/etc/crypttab" "cryptswap"
-assert_file_contains "fstab swapfile at root" "${MNT}/etc/fstab" "/swapfile none swap sw 0 0"
+assert_file_contains "fstab swapfile at root" "${MNT}/etc/fstab" "/swapfile none swap sw,pri=10 0 0"
 assert_file_not_contains "no @swap line for ext4" "${MNT}/etc/fstab" "/swap        btrfs"
 assert_file_not_contains "no subvols for ext4" "${MNT}/etc/fstab" "subvol="
 

@@ -18,6 +18,7 @@ than asked, and third-party software leaves the install path entirely.
 | Installer/VM diagnostics | merged in PR #17; bounded pre-cleanup evidence and host export, original failure preserved; real guest failure/export acceptance remains |
 | Live desktop and audio | merged in PR #18 (`aa1c44e`); user confirms Try Sensible works as expected; specific installed-security and physical-audio checks remain separate |
 | Release gate | blocked on the full installed-disk matrix and physical-hardware evidence; one user-reported install/boot succeeded, not the whole matrix |
+| Hybrid ZRAM swap (#11) | implemented on `feat/zram-swap`: `zram-tools`, explicit `/etc/default/zramswap`, swapfile `pri=10`, service enablement, tests and manual; the issue's memory-pressure, failure-injection and hibernate/resume evidence is still required before it ships by default |
 | Phase 6 extras | re-scoped below: baked into the ISO, or moved to the post-install tool |
 | Desktop profiles | PR #16 merged; both ISO builds/live UEFI smoke checks pass; GNOME and KDE validation reported successful by the user; targeted acceptance and native KDE configuration remain; see [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md) |
 | Offline first-login manual | implemented from PR #2 on the current installer; real desktop first-login validation remains pending |
@@ -655,8 +656,8 @@ These are user-facing candidates in the proposed queue, not gated on building
 an unattended harness first. Their own real-system acceptance is still required.
 
 - **Hybrid ZRAM and disk swap ([#11](https://github.com/korq-apps/sensible/issues/11)).**
-  Evaluate compressed RAM swap ahead of the persistent RAM-sized swapfile, not
-  instead of it. Retain the disk-backed hibernation target and require the
+  Implemented on `feat/zram-swap` as compressed RAM swap ahead of the persistent
+  RAM-sized swapfile, not instead of it; merge waits for the issue's evidence. Retain the disk-backed hibernation target and require the
   issue's memory-pressure, fallback, shutdown and hibernate/resume tests across
   the existing storage matrix. Coordinate Secure Boot messaging with #8. This
   is independent of Btrfs snapshots; do not combine both storage changes in one PR.

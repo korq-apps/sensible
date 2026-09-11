@@ -43,12 +43,15 @@ EOF
 
     # Swap is a swapfile inside the root filesystem in both modes, so the entry
     # never references a partition. Under LUKS that file is encrypted with the
-    # root; the layout is otherwise identical either way.
+    # root; the layout is otherwise identical either way. pri=10 keeps it
+    # below the ZRAM device (priority 100 in /etc/default/zramswap): memory
+    # pressure fills compressed RAM first and spills here; hibernation still
+    # uses only this file (resume= / resume_offset= are unchanged).
     local SWAP_FSTAB_LINE
     if [ "$fs_type" = "btrfs" ]; then
-        SWAP_FSTAB_LINE="/swap/swapfile none swap sw 0 0"
+        SWAP_FSTAB_LINE="/swap/swapfile none swap sw,pri=10 0 0"
     else
-        SWAP_FSTAB_LINE="/swapfile none swap sw 0 0"
+        SWAP_FSTAB_LINE="/swapfile none swap sw,pri=10 0 0"
     fi
 
     log_info "Generating /etc/fstab..."

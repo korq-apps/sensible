@@ -245,8 +245,12 @@ sudo flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/
             <li><strong>Ext4:</strong> Traditional single root filesystem with <code>fast_commit</code> enabled.</li>
           </ul>
 
-          <h3>Swapfile &amp; Hibernation</h3>
+          <h3>Swap, Compressed RAM &amp; Hibernation</h3>
           <p>Swap is configured as a dedicated swapfile inside root (matching RAM capacity). When LUKS is enabled, the swapfile is located inside the encrypted container and is protected at rest.</p>
+          <p>Ahead of that file, Sensible enables compressed RAM swap (<code>zram</code>, sized at half of physical RAM, <code>lz4</code> compression, priority 100). The kernel fills it first and only spills to the disk swapfile (priority 10) when it is full, so routine memory pressure costs little disk I/O. The logical size is not the RAM it uses: the compressed footprint is what counts. Hibernation is different: the memory image is written only to the disk swapfile, which is why that file stays RAM-sized. If the ZRAM service ever fails, the system still boots and swaps to the file.</p>
+          <pre><code>swapon --show          # /dev/zram0 above the swapfile, with priorities
+zramctl                # compressed vs. uncompressed data in RAM
+systemctl status zramswap</code></pre>
           <div class="callout warn">
             <div class="callout-title">Secure Boot &amp; Hibernation</div>
             The installer configures hibernation resume parameters regardless of Secure Boot state. Kernel lockdown under Secure Boot blocks the unverified hibernation image; the restriction is in the kernel, not an installer configuration switch. With Secure Boot disabled, successful hibernation still depends on hardware and drivers and must be tested on your machine.

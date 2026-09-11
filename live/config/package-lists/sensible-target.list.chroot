@@ -42,6 +42,12 @@ fwupd
 bluez
 wireless-regdb
 
+# Memory: compressed RAM swap ahead of the hibernation swapfile (#11).
+# zram-tools ships zramswap.service; includes.chroot/etc/default/zramswap
+# pins ALGO/PERCENT/PRIORITY explicitly. bc is its only dependency.
+zram-tools
+bc
+
 # Boot / plymouth (desktop.sh)
 plymouth
 plymouth-themes

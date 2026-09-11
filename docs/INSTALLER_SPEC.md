@@ -44,7 +44,7 @@ suite (`tests/`) can run the full flow unprivileged against a temp directory.
 | Target disk | none | Show path/size/model; record major:minor, byte size, serial and WWN; exclude every in-use disk and revalidate before wipe |
 | Filesystem | Btrfs | Choose Btrfs (subvolumes/compression) or Ext4 (traditional single root) |
 | LUKS2 | Yes | If yes: passphrase twice, min 8 characters |
-| Swap | Swapfile inside root, mirroring RAM | Shown, not editable in v1 |
+| Swap | ZRAM (50% of RAM, lz4, priority 100) ahead of a swapfile inside root mirroring RAM (priority 10) | Shown, not editable in v1; only the swapfile can hold a hibernation image |
 | Desktop | Build variant | GNOME or KDE Plasma release image; shown, not prompted |
 | Mac clipboard (`keyd`) | On for GNOME, off for KDE | Fixed by build variant; Super+C/V/X only |
 | Hostname | `debian` | RFC 1123 syntax and maximum 63 bytes for the Linux static hostname. Stay `debian` — the box is Debian, not a derivative. |
@@ -211,6 +211,17 @@ chmod 600 "$SWAPFILE"; mkswap "$SWAPFILE"
 #   Ext4:  filefrag -v "$SWAPFILE" | first extent physical start
 ```
 
+Compressed RAM swap runs ahead of that file (issue #11). The image ships
+`zram-tools` with an explicit `/etc/default/zramswap` (`ALGO=lz4`,
+`PERCENT=50`, `PRIORITY=100`), and the installer enables `zramswap.service`
+on the target. The swapfile's fstab entry carries `pri=10`, so the kernel
+fills `/dev/zram0` first and spills to disk only when it is full. Hibernation
+writes to one swap area, the swapfile selected by `resume=`/`resume_offset=`,
+which are unchanged; ZRAM capacity is never counted as persistent swap and
+does not reduce the minimum disk size. `zramswap.service` is a oneshot wanted
+by `multi-user.target`: a failed ZRAM setup leaves the swapfile active and is
+visible in `systemctl status zramswap`. Writeback is not configured.
+
 ### Btrfs
 
 ```bash
@@ -322,11 +333,11 @@ UUID=<ROOT_FS_UUID>  /var/log     btrfs  noatime,compress=zstd:1,space_cache=v2,
 UUID=<ROOT_FS_UUID>  /swap        btrfs  noatime,subvol=@swap                                                   0 0
 UUID=<BOOT_UUID>     /boot        ext4   noatime                                                               0 2
 UUID=<EFI_UUID>      /boot/efi    vfat   umask=0077                                                            0 2
-/swap/swapfile       none         swap   sw                                                                    0 0
+/swap/swapfile       none         swap   sw,pri=10                                                             0 0
 tmpfs                /tmp         tmpfs  defaults,nosuid,nodev                                                 0 0
 ```
 
-Ext4 + LUKS: one `/` line (`ext4  noatime,errors=remount-ro,discard  0 1`), same boot/efi/tmpfs, swap line is `/swapfile none swap sw 0 0`.
+Ext4 + LUKS: one `/` line (`ext4  noatime,errors=remount-ro,discard  0 1`), same boot/efi/tmpfs, swap line is `/swapfile none swap sw,pri=10 0 0`.
 
 No LUKS, either filesystem: the swap line is identical to the encrypted case —
 `/swapfile` on Ext4, `/swap/swapfile` on Btrfs — because swap is a file inside

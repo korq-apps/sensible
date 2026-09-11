@@ -89,8 +89,8 @@ The rule, as implemented:
 
 | Root encryption | Swap | Hibernation |
 | :--- | :--- | :--- |
-| Off | Swapfile inside the plain root (`@swap` on Btrfs), `resume=UUID=<rootfs> resume_offset=<n>` | Enabled* |
-| On | Swapfile **inside the LUKS root** (`@swap` subvol on Btrfs / `/swapfile` on Ext4), `resume=UUID=<rootfs> resume_offset=<n>` | Enabled* |
+| Off | `/dev/zram0` (priority 100) ahead of a swapfile inside the plain root (`@swap` on Btrfs, priority 10), `resume=UUID=<rootfs> resume_offset=<n>` | Enabled* |
+| On | `/dev/zram0` (priority 100) ahead of a swapfile **inside the LUKS root** (`@swap` subvol on Btrfs / `/swapfile` on Ext4, priority 10), `resume=UUID=<rootfs> resume_offset=<n>` | Enabled* |
 
 `*` The installer writes resume configuration in both modes without a Secure
 Boot condition. Hibernation writes an unverified resume image, so the kernel
@@ -103,6 +103,14 @@ Why the swapfile design wins:
 - The initramfs unlocks `cryptroot` first (crypttab + Plymouth), so the kernel can then read the swapfile and resume. `resume_offset` (4K pages) comes from `btrfs inspect-internal map-swapfile -r` (Btrfs) or `filefrag -v` (Ext4) at install time.
 - The dedicated `@swap` subvolume keeps the swapfile out of any future snapshot set (a snapshotted swapfile breaks resume consistency).
 - Plain swap next to a LUKS root would leak memory — that design is gone.
+
+Hybrid ZRAM in front of that file (issue #11):
+
+- `zram-tools` is in the offline closure; `/etc/default/zramswap` states `ALGO=lz4`, `PERCENT=50`, `PRIORITY=100` explicitly rather than relying on package defaults. The installer enables `zramswap.service` on the target.
+- The swapfile keeps `pri=10` in fstab: routine memory pressure is absorbed by compressed RAM, the disk sees swap I/O only after ZRAM is full. `swapon --show` lists `/dev/zram0` above the file.
+- Hibernation uses exactly one swap area, the swapfile named by `resume=`/`resume_offset=`. ZRAM contents are part of the memory image, so they survive a successful resume, and the swapfile must still hold the whole image; its RAM-sized allocation and the minimum-disk rule are unchanged.
+- Failure mode: the service is a oneshot wanted by `multi-user.target`. If `modprobe zram` or the device setup fails, boot continues on the swapfile and `systemctl status zramswap` shows the reason. No ZRAM writeback is configured; the swapfile already plays that role.
+- Measured memory-pressure, shutdown and hibernate/resume behaviour on installed systems is acceptance evidence for #11, not something the fixture tests can show.
 
 ---
 
