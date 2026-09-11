@@ -558,7 +558,7 @@ build_answers yes yes alice reboot
 LIVE_ROOT_SENTINEL="${WORK}"
 MOCK_NVIDIA=0
 run_flow
-assert_contains "autologin prompt explains keyring first use" "$(output_text)" "does not unlock GNOME Keyring: it may ask for its own password"
+assert_contains "autologin prompt explains keyring first use" "$(output_text)" "does not unlock GNOME Keyring: it may ask for its own password the first time a program saves or reads a password."
 assert_common_success
 assert_contains "reboot action flushes pending writes" "$(log_text)" "sync"
 assert_contains "chosen completion action requests reboot" "$(log_text)" "systemctl reboot"
@@ -639,7 +639,7 @@ SENSIBLE_VARIANT=kde
 build_answers yes
 run_flow
 assert_rc "encrypted KDE installation succeeds" 0 "${RC}"
-assert_contains "autologin prompt names KDE Wallet" "$(output_text)" "does not unlock KDE Wallet: it may ask for its own password"
+assert_contains "autologin prompt names KDE Wallet" "$(output_text)" "does not unlock KDE Wallet: it may ask for its own password the first time a program saves or reads a password."
 assert_file_contains "KDE also gets first-login manual" "${MNT}/home/alice/.config/autostart/sensible-manual.desktop" '--first-login'
 assert_file_not_exists "live SDDM main config cannot override installed-user autologin" "${MNT}/etc/sddm.conf"
 assert_file_contains "KDE autologin targets the installed account" "${MNT}/etc/sddm.conf.d/autologin.conf" "User=alice"
