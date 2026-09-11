@@ -591,7 +591,11 @@ x = C-x
 With LUKS enabled the installer offers autologin (default **on**): the boot
 passphrase unlocks the disk, the desktop starts without a login prompt, and
 the password remains set for sudo, screen unlock, and the keyring. Without
-LUKS the prompt is never shown.
+LUKS the prompt is never shown. The prompt also states that the edition's
+saved-password store, KDE Wallet or GNOME Keyring, will ask for its own
+password the first time a program uses it: autologin passes no password to
+PAM, so the store is neither created nor unlocked at login (see #29 and
+[Architecture: desktop wallets](ARCHITECTURE.md#desktop-wallets-and-saved-credentials)).
 
 Screen lock defaults are written for both desktops regardless of the choice:
 
