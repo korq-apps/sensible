@@ -49,11 +49,24 @@ never a partition, so encryption does not change the layout.
 └── p3  rest     8309/8300        /              LUKS2             plain
 ```
 
-Sizes are fixed for v1: EFI **1024 MiB**, BOOT **1024 MiB**, ROOT **remainder**,
+Current fixed sizes: EFI **1024 MiB**, BOOT **1024 MiB**, ROOT **remainder**,
 with a swapfile inside root **mirroring detected RAM**. Keeping swap in a file
 means it inherits the root's encryption without a key of its own, can be resized
 without touching the partition table, and leaves the layout identical either
 way. 1 GiB `/boot` is enough for a few Testing kernels plus initramfs; we are not leaving this as a 1–2 GiB range in the installer.
+
+Partitioning and filesystem writes target the selected disk: `sgdisk --zap-all`
+and `wipefs` run against that device, and GRUB uses its mounted ESP.
+`grub-install --bootloader-id=debian` also updates shared UEFI NVRAM and normally
+puts the Debian entry first. This is not a guarantee that all existing boot
+entries stay unchanged, particularly for another installation using the same
+`debian` identifier. The image does not request `os-prober` or configure Windows
+chainloading. Start a separate Windows disk through Windows Boot Manager in the
+firmware menu; changing the boot path or firmware policy can trigger BitLocker
+recovery. The [install guide](INSTALL.md#7-windows-on-a-second-disk) covers
+recovery-key preparation, clock settings and Fast Startup. Separate disks must
+also have independent boot files; preserving a Windows data partition cannot
+preserve an ESP erased on the selected disk.
 
 ### Btrfs
 
@@ -67,7 +80,7 @@ Subvolumes, then mount with `noatime,compress=zstd:1,space_cache=v2,discard=asyn
 | `@var_log` | `/var/log` |
 | `@swap` | `/swap` (swapfile host; never snapshotted) |
 
-Ready for Snapper or Timeshift. Those tools are **not** installed in v1.
+Ready for Snapper or Timeshift. Those tools are **not currently installed**.
 
 ### Ext4
 
@@ -130,6 +143,27 @@ Secure Boot is supported by both the **live installer ISO** and the **installed 
 - Target (installed system): `shim-signed` + `grub-efi-amd64-signed` (always installed). `grub-install` lays down the signed chain and grub's own module tree under `/EFI/debian`, so the signed GRUB finds its config and modules. Shim falls through transparently when SB is off, so there is no prompt and no downside.
 - Live ISO: built with live-build's native `--uefi-secure-boot enable` support, which supplies Debian's signed shim/GRUB chain. Sensible also stages the redirect config required at GRUB's embedded `/EFI/debian` prefix. The Secure Boot smoke path uses OVMF Secure Boot firmware with Microsoft keys and must reach the live session, proving that unsigned fallback code did not boot.
 - Kernel and firmware updates stay bootable: everything in the installed chain is Debian-signed; no MOK enrollment needed for stock packages.
+- Firmware trust is a precondition for both paths: firmware must accept the
+  certificate signing the image's shim, and revocation policy must permit its
+  boot chain. [Debian's `shim-signed` 1.51 sources](https://sources.debian.org/src/shim-signed/1.51/)
+  include Microsoft 2011 and 2023 signed inputs. This is package-source evidence,
+  not a boot test of every ISO on 2023-only firmware; retain the package version
+  and exact image when recording such a result. Recorded result: the 2026-09-09
+  GNOME image (`.disk/info` stamp `20260909-15:00`) carries shim-signed
+  1.51+16.1-2, and `sbverify --list` on its `EFI/boot/bootx64.efi` shows both
+  the Microsoft Corporation UEFI CA 2011 and the Microsoft UEFI CA 2023
+  signature; its `grubx64.efi` (grub2 2.14-3) is Debian-CA signed with SBAT
+  `grub,5`, the latest published `SbatLevel` generation. A Lenovo laptop whose
+  `db` held only the Windows, Lenovo and Option ROM certificates rejected that
+  shim until the third-party CA was enabled, and booted with Secure Boot on
+  afterwards.
+- Some Windows PCs disable Microsoft's third-party CA by default. Lenovo
+  documents **Allow Microsoft 3rd Party UEFI CA** for its
+  [Secured-core PCs](https://download.lenovo.com/pccbbs/mobiles_pdf/Enable_Secure_Boot_for_Linux_Secured-core_PCs.pdf).
+  Firmware updates/resets can change that policy. Enabling the appropriate
+  trust setting can restore boot with Secure Boot enabled; the installer cannot
+  repair a pre-GRUB firmware rejection. See the install guide for BitLocker
+  preparation before firmware changes.
 
 Caveats (documented, not solved): the proprietary **NVIDIA** module is unsigned, so with SB on the kernel's lockdown rejects it — disable SB or enroll a MOK for DKMS. Lockdown also blocks **hibernation** (see §3).
 
@@ -151,7 +185,7 @@ Gestures, overview, dynamic workspaces. The GNOME image enables **Mac clipboard*
 | Super+V | Shift+Insert | Paste in GUI and terminals |
 | Super+X | Ctrl+X | Cut in GUI; inert in most terminals |
 
-Super tap alone stays with the DE (GNOME Overview). We do **not** map Super+A / Super+Z in v1: those become Ctrl+A / Ctrl+Z and break terminals (beginning-of-line / SIGTSTP). Same class of bug as Super+C → SIGINT.
+Super tap alone stays with the DE (GNOME Overview). We do **not** map Super+A / Super+Z: those become Ctrl+A / Ctrl+Z and break terminals (beginning-of-line / SIGTSTP). Same class of bug as Super+C → SIGINT.
 
 ### KDE Plasma (Windows-oriented)
 
@@ -219,13 +253,16 @@ prompt when the secret is unavailable; no custom persistent password handoff.
 Two tiers, because fingerprint and face have very different maturity on Debian:
 
 - **Fingerprint — always installed.** `fprintd` + `libpam-fprintd` (Debian main). Enrollment lives in GNOME Settings / Plasma System Settings; nothing to configure at install time, dormant without a supported reader.
-- **Face (and unified face + fingerprint UX) — installer checkbox, default off.** [BioPass](https://github.com/TickLabVN/biopass) (MIT): PAM module plus GUI enrollment, local models (YOLO-Face detection, EdgeFace recognition, MiniFASv2/MobileNetV3 anti-spoofing), polkit prompts, PAM wiring via `pam-auth-update`. Installed as a **pinned `.deb` with a recorded SHA256** — same third-party policy as Brave and the AI CLIs. Off by default because the project is young, models are fetched at first run, and real anti-spoofing wants an IR camera. Enrollment happens post-install in the BioPass app; the installer only installs.
+- **Face — planned post-install opt-in, not shipped.** BioPass is the candidate
+  for face/fingerprint enrollment. Package provenance, model downloads, PAM
+  integration, removal and real authentication behavior need validation before
+  adoption. There is no BioPass installer checkbox; see the acceptance scope
+  in [PLAN.md](PLAN.md).
 
 Facts to not relearn later:
 
 - **Biometrics never unlock LUKS.** The Plymouth passphrase dialog at boot is untouched; face/fingerprint cover session login, lock screen, `sudo`, and polkit only.
 - **Biometric authentication does not itself decrypt a password-protected wallet.** Without another supported source of the unlock secret, first access may prompt. This differs from biometric screen unlock when the session's wallet is already open; wallet locking policy still applies. See [GNOME's archived PAM explanation](https://wiki.gnome.org/Projects/GnomeKeyring/Pam) and the cross-desktop acceptance work in #29.
-- Landscape check (2026): Howdy is face-only and semi-maintained, `howdy-next` and `authFace` are young and face-only. BioPass is the only serious multi-modal candidate.
 
 ---
 
@@ -246,7 +283,7 @@ Facts to not relearn later:
 
 `firmware-broadcom` is not a Debian package name; Broadcom Wi-Fi is `firmware-brcm80211`. `firmware-linux-nonfree` is a leftover name — do not list it.
 
-NVIDIA: the proprietary stack is baked into the offline closure because installation cannot fetch it after the live root is copied. There is no nouveau-vs-proprietary prompt in v1. The installer adds `nvidia-drm.modeset=1` only when NVIDIA is detected — without KMS, GDM/KWin silently fall back to X11 on exactly the hardware being special-cased.
+NVIDIA: the proprietary stack is baked into the offline closure because installation cannot fetch it after the live root is copied. There is no nouveau-vs-proprietary prompt. The installer adds `nvidia-drm.modeset=1` only when NVIDIA is detected — without KMS, GDM/KWin silently fall back to X11 on exactly the hardware being special-cased.
 
 Audio: the image can only be as new as Testing's firmware and kernel. Laptops with a Realtek HDA codec and Cirrus CS35L54/56/57 speaker amplifiers (the codec vendors list as ALC3306, ALC3287 and similar) need a per-model tuning file, `cirrus/cs35l56-*-dsp1-misc-<system name>*`, that linux-firmware adds model by model; the amplifier driver refuses to run without it because the BIOS leaves the DSP unpatched, so the internal speakers stay silent while headphones work until `firmware-cirrus` catches up (`apt full-upgrade`). The kernel side is generic since 6.12, which binds any CS35L54/56/57 found in ACPI, but brand-new models can still need a quirk for lesser features such as the mic-mute LED or a ghost AMD-DSP microphone. `sensible-audio-check` checks the tuning file directly, reports an unbound amplifier with the codec subsystem ID a report needs, and the weekly rebuilds pick up firmware and kernel as they migrate. Debian packages no AMD SOF DSP firmware, so boards that route the microphone through the AMD DSP keep it off. The installer deletes the live session's `/var/lib/alsa/asound.state` so the installed system initialises its mixer from the ALSA defaults rather than from the live console's levels.
 
@@ -406,7 +443,7 @@ Steam, Slack, WhatsApp, Zoom, Discord, Spotify, Snapd, any SaaS “default clien
 
 ## 8. Scope
 
-**In v1:** amd64, UEFI only, single-disk wipe, Btrfs or Ext4 with LUKS on/off, separate GNOME and KDE images, selectable locales, and working Wi-Fi/audio/GPU on common laptops.
+**Implemented baseline:** amd64, UEFI only, single-disk wipe, Btrfs or Ext4 with LUKS on/off, separate offline GNOME and KDE images, console installation or Try Sensible with an installer launcher, selectable locales, desktop profiles, offline help and hardware enablement. Hardware coverage and release acceptance remain bounded by the evidence in [PLAN.md](PLAN.md); the original v1 boundary no longer describes the feature set.
 
 **Unattended input:** `--config` is an adapter to the same offline installer,
 not a separate execution engine. A Python `tomllib` helper reads protected
@@ -421,4 +458,4 @@ does not replace installed-disk acceptance. See [INSTALLER_SPEC.md](INSTALLER_SP
 
 **Later:** Btrfs Snapper and evaluated `grub-btrfs` recovery integration (a separate follow-up after desktop apps; see the layout/restore acceptance requirements in [PLAN.md](PLAN.md)), TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis; PCR policy must account for the unencrypted `/boot`), FIDO2 keys for sudo/polkit (`libpam-u2f`), GUI NVIDIA/MOK enrollment flow, Calamares if someone wants a GUI, other arches.
 
-**Never (Sensible):** LVM as the guided path, dual-DE live ISO, shipping commercial apps, pretending this is not Debian.
+**Scope boundaries:** LVM as the guided path, dual-DE live ISO and bundling proprietary service clients remain outside the current design. The installed system remains Debian.

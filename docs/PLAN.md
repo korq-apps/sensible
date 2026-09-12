@@ -2,6 +2,20 @@
 
 ## Where we are
 
+**Scope reconciliation (2026-09-12, baseline `71b5b38`):** the implementation
+has moved beyond the original v1 plan. “v1” (initial installer) and “v2”
+(offline rework) were planning labels; neither defines today's feature boundary
+or establishes a completed release. Current scope includes offline GNOME/KDE
+images, Try Sensible and its installer launcher, desktop profiles, the offline
+manual, validated unattended input and diagnostic export. Try Sensible is an
+implemented capability, not a non-goal. Installed-disk and hardware acceptance
+remain separately tracked below.
+
+This reconciliation describes this checkout's merged baseline. ZRAM and
+additional autologin-prompt wording visible on separate feature branches are
+not part of that baseline yet. The dated CI/issue snapshots below remain
+historical evidence, not a fresh claim about remote status.
+
 Phases 1-5 are implemented. The project has since pivoted to an **offline
 installer** (Phase 7, design record in [OFFLINE_REWORK.md](OFFLINE_REWORK.md)),
 which supersedes parts of the earlier phases: the installer no longer resolves
@@ -158,8 +172,8 @@ The external recommendations are proposals, not evidence of prior decisions.
 
 The following contract is implemented and merged, not a new feature proposal.
 It adds an input adapter to the existing installer, not a second installation
-engine. The v1 specification is in
-[INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode-planned--release-test-infrastructure).
+engine. The current specification is in
+[INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode).
 
 1. **Parser and schema:** parse TOML without shell evaluation; reject unknown
    CLI options/keys, duplicate or mistyped fields and missing required values.
@@ -177,7 +191,7 @@ engine. The v1 specification is in
 4. **No hidden interaction:** config mode must work without a controlling TTY.
    Skip welcome/forms, repair shells and completion/failure menus. Preserve
    logging and owned-resource cleanup; return success only after verification
-   and teardown. V1 exits to its caller; the future VM harness owns poweroff,
+   and teardown. Config mode exits to its caller; the future VM harness owns poweroff,
    media detachment and booting the installed disk.
 5. **Regression evidence:** add parser/secret tests and config-driven integration
    cases for both editions and all filesystem/encryption combinations. Prove
@@ -329,6 +343,7 @@ CI, container checks and user-reported feedback. None of these alone means the
 release is ready or that a mocked installer flow proves a real disk can boot.
 
 ```
+Original sequence (historical; current priorities are above):
 Phase 1  Build harness (live-build ISO, TUI live session)
     → Phase 2  Installer engine (disk + chroot + boot)
         → Phase 3  Hardware packages (firmware, PipeWire, GPU, fwupd)
@@ -576,7 +591,9 @@ These do not supersede the installer/release gate or desktop acceptance work.
 
 ---
 
-## Phase 7 — Offline rework (v2)
+<a id="phase-7--offline-rework-v2"></a>
+
+## Phase 7 — Offline rework (implemented baseline)
 
 The former installer resolved packages at install time against a moving
 Testing archive, which is how `vdpau-driver-all` aborted the hardware stage
@@ -675,9 +692,11 @@ an unattended harness first. Their own real-system acceptance is still required.
   root snapshots do not replace personal-file backups. No target-time source
   cloning/builds; snapshot tooling is not yet implemented.
 
-## Later (not v1)
+<a id="later-not-v1"></a>
 
-- TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis + `clevis-initramfs`); with biometrics this completes the Windows Hello flow — PCR policy must account for the unencrypted `/boot`, and Secure Boot in v1 strengthens the measurements
+## Deferred capabilities
+
+- TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis + `clevis-initramfs`); with biometrics this completes the Windows Hello flow — PCR policy must account for the unencrypted `/boot`, and Secure Boot contributes to the measured boot policy
 - FIDO2 hardware keys for sudo/polkit (`libpam-u2f`, enrollment via `pamu2fcfg`)
 - GUI NVIDIA/MOK enrollment (unsigned NVIDIA module is rejected under Secure Boot lockdown)
 - GUI installer
