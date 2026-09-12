@@ -439,6 +439,39 @@ sensible_prompt_locale() {
     done
 }
 
+# ── Autologin choice (encrypted installs only) ──
+
+# Autologin passes no typed password to PAM, so the edition's saved-password
+# store is not unlocked by skipping the login prompt. Whether GDM's cached
+# disk-passphrase path (pam_gdm) unlocks GNOME Keyring on real hardware is
+# unverified, hence "may ask" (issue #29).
+autologin_secret_store_note() { # desktop
+    local store="GNOME Keyring"
+    [ "$1" = "kde" ] && store="KDE Wallet"
+    printf '%s' "Skipping the login prompt does not unlock ${store}: it may ask for its own password the first time a program saves or reads a password."
+}
+
+# Separate so unit tests can exercise the Gum branch without a controlling TTY.
+_autologin_confirm_gum() { # question
+    gum confirm --affirmative "Yes, skip login" --negative "No, ask for login" "$1" 2>/dev/tty
+}
+
+# Returns 0 when the user chooses autologin, 1 otherwise. Both renderers carry
+# the same saved-password note.
+sensible_prompt_autologin() { # desktop username
+    local note
+    note=$(autologin_secret_store_note "$1")
+    if _setup_use_gum; then
+        clear_logo; ui_blank
+        say "The disk passphrase at boot will unlock the system."
+        say "$note"
+        ui_blank
+        _autologin_confirm_gum "Boot straight into the desktop (no login password)?"
+    else
+        ui_yesno "Skip Login Password" "Boot straight into the desktop as $2 (no login password)?\n\nThe disk passphrase at boot stays required, the screen still locks on idle,\nand the password is kept for sudo and screen unlock.\n${note}\nWithout LUKS this is not offered." "yes"
+    fi
+}
+
 sensible_prompt_identity() {
     # Optional full name / email for git + GECOS (can be skipped)
     local name_input email_input

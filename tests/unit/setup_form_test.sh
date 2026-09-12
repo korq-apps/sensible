@@ -116,4 +116,34 @@ printf 'de\n' | _prompt_searchable "Keyboard" "Search" "us" \
     "list_keyboard_layout_options" "validate_fixture_choice" "Invalid" "Enter layout:" >/dev/null 2>&1
 assert_rc "text fallback accepts the same stable value" 0 $?
 
+t_section "autologin prompt carries the saved-password note in both renderers"
+say_calls="${fixture}/say-calls"; confirm_calls="${fixture}/confirm-calls"
+: > "$say_calls"; : > "$confirm_calls"
+# Gum branch: the styled lines and the confirm question are captured at the
+# renderer boundary, so no controlling TTY is needed.
+_setup_use_gum() { return 0; }
+clear_logo() { :; }
+ui_blank() { :; }
+say() { printf '%s\n' "$*" >> "$say_calls"; }
+_autologin_confirm_gum() { printf '%s\n' "$1" >> "$confirm_calls"; return "${MOCK_CONFIRM_RC:-0}"; }
+MOCK_CONFIRM_RC=0
+sensible_prompt_autologin kde alice; assert_rc "gum confirm yes selects autologin" 0 $?
+assert_contains "gum path renders the KDE Wallet note" "$(<"$say_calls")" "does not unlock KDE Wallet: it may ask for its own password the first time a program saves or reads a password."
+assert_contains "gum path keeps the disk-passphrase line" "$(<"$say_calls")" "The disk passphrase at boot will unlock the system."
+assert_contains "gum path asks the skip-login question" "$(<"$confirm_calls")" "Boot straight into the desktop (no login password)?"
+: > "$say_calls"; MOCK_CONFIRM_RC=1
+sensible_prompt_autologin gnome alice; assert_rc "gum confirm no keeps password login" 1 $?
+assert_contains "gum path renders the GNOME Keyring note" "$(<"$say_calls")" "does not unlock GNOME Keyring: it may ask for its own password the first time a program saves or reads a password."
+# Text branch: ui_yesno receives the user name and the same note.
+_setup_use_gum() { return 1; }
+yesno_calls="${fixture}/yesno-calls"; : > "$yesno_calls"
+ui_yesno() { printf '%s\n%s\n' "$1" "$2" >> "$yesno_calls"; return "${MOCK_YESNO_RC:-0}"; }
+MOCK_YESNO_RC=0
+sensible_prompt_autologin kde alice; assert_rc "text yes selects autologin" 0 $?
+assert_contains "text prompt names the account" "$(<"$yesno_calls")" "Boot straight into the desktop as alice (no login password)?"
+assert_contains "text prompt carries the note" "$(<"$yesno_calls")" "does not unlock KDE Wallet: it may ask for its own password the first time a program saves or reads a password."
+MOCK_YESNO_RC=1
+sensible_prompt_autologin gnome alice; assert_rc "text no keeps password login" 1 $?
+assert_eq "note names the edition's store" "GNOME Keyring" "$(autologin_secret_store_note gnome | sed -nE 's/.*unlock (GNOME Keyring|KDE Wallet):.*/\1/p')"
+
 t_summary

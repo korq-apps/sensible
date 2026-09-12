@@ -703,17 +703,10 @@ virtual disk, or less RAM."
         ENABLE_AUTOLOGIN=${UNATTENDED_FIELDS[3]}
         UNATTENDED_FIELDS=()
     elif [ "$ENABLE_LUKS" = "true" ]; then
-        if command -v gum >/dev/null 2>&1 && [ -t 0 ]; then
-            clear_logo; ui_blank
-            say "The disk passphrase at boot will unlock the system."
-            ui_blank
-            if gum confirm --affirmative "Yes, skip login" --negative "No, ask for login" "Boot straight into the desktop (no login password)?" 2>/dev/tty; then
-                ENABLE_AUTOLOGIN="true"
-            fi
-        else
-            if ui_yesno "Skip Login Password" "Boot straight into the desktop as ${USERNAME} (no login password)?\n\nThe disk passphrase at boot stays required, the screen still locks on idle,\nand the password is kept for sudo and screen unlock. Without LUKS this is not offered." "yes"; then
-                ENABLE_AUTOLOGIN="true"
-            fi
+        # Prompt text and the saved-password note live in setup-form.sh
+        # (sensible_prompt_autologin), where both renderers are unit-tested.
+        if sensible_prompt_autologin "$DESKTOP_CHOICE" "$USERNAME"; then
+            ENABLE_AUTOLOGIN="true"
         fi
     else
         log_info "Autologin is only offered with full disk encryption."
