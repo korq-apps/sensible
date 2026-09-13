@@ -258,6 +258,7 @@ systemctl status zramswap</code></pre>
 
           <h3>Unencrypted <code>/boot</code> &amp; Secure Boot Chain</h3>
           <p><code>/boot</code> is unencrypted; Plymouth unlocks the root filesystem during boot. The installer stages Debian's signed shim and GRUB for Secure Boot. Signature enforcement depends on Secure Boot being enabled in firmware; it does not encrypt the files in <code>/boot</code>.</p>
+          <p>With Secure Boot enabled, the firmware must trust the certificate signing Debian's shim. Some Windows PCs disable Microsoft's third-party UEFI CA by default; Lenovo documents <em>Allow Microsoft 3rd Party UEFI CA</em> for its <a href="https://download.lenovo.com/pccbbs/mobiles_pdf/Enable_Secure_Boot_for_Linux_Secured-core_PCs.pdf">Secured-core PCs</a>. Firmware updates or resets can change that trust. This also matters after installation; see <a href="#secure-boot-refused">Troubleshooting</a>.</p>
         </section>
 
         <section id="hardware">
@@ -323,6 +324,19 @@ sudo sensible-audio-check</code></pre>
           </ul>
           <p>If the newest kernel still leaves the speakers silent, open an issue with the complete <code>sensible-audio-check</code> output and the lines from <code>sudo journalctl -k | grep -iE 'cs35l|tas2|sof|hda'</code>; the codec subsystem ID in the report is what a kernel quirk is keyed on. Redact anything private first.</p>
 
+          <h3 id="secure-boot-refused">Sensible No Longer Boots After a Firmware Reset or BIOS Update</h3>
+          <p>A Secure Boot violation or return to the firmware menu before GRUB can indicate missing trust for Microsoft's third-party UEFI CA. Before changing firmware on a Windows machine, save its BitLocker recovery key and suspend protection if enabled, as described below. On supported Lenovo models, check Security → Secure Boot → <em>Allow Microsoft 3rd Party UEFI CA</em>; other models may use different names. Factory keys do not necessarily enable third-party CAs. If the setting is already enabled, check the image/media and vendor firmware guidance; revoked loaders and other boot failures can produce similar symptoms.</p>
+          <p>Temporarily disabling Secure Boot can help isolate the issue. Re-enable it after correcting trust if you want signature enforcement. A text scan of firmware certificate names cannot establish whether a loader passes signature and revocation checks.</p>
+
+          <h3 id="windows-second-disk">Windows on a Second Disk</h3>
+          <p>The installer targets the selected disk and also updates shared firmware boot entries, normally placing <em>debian</em> first. Windows on another disk can remain usable if its EFI boot files are also on a disk you keep. Start it through <em>Windows Boot Manager</em> in the firmware menu. Sensible does not configure Windows in GRUB; using a different boot chain can trigger BitLocker recovery depending on Windows policy. Another Linux installation using the same <em>debian</em> identifier can have its firmware entry affected.</p>
+          <ul>
+            <li><strong>BitLocker preparation:</strong> Before firmware changes, save the matching 48-digit recovery key off the machine. It may be in the <a href="https://account.microsoft.com/devices/recoverykey">Microsoft account used to set up Windows</a>, held by your work/school administrator, or in a saved backup. In administrator PowerShell, use <code>manage-bde -status C:</code> and <code>manage-bde -protectors -get C:</code> to inspect the drive and its existing protectors. Keep this output private. <strong>Protection Off does not mean decrypted</strong>; check Conversion Status and Percentage Encrypted too.</li>
+            <li><strong>Suspend and resume:</strong> For an encrypted, protected Windows system drive, run <code>Suspend-BitLocker -MountPoint "C:" -RebootCount 0</code> before changing firmware. After the changes, boot Windows directly and promptly run <code>Resume-BitLocker -MountPoint "C:"</code>, then verify Protection On with <code>manage-bde -status C:</code>. Suspension temporarily bypasses normal TPM protection and this command leaves it suspended until you resume it. See <a href="https://learn.microsoft.com/en-us/troubleshoot/windows-client/windows-security/suspend-bitlocker-protection-non-microsoft-updates">Microsoft's instructions</a>. A recurring recovery prompt needs investigation; entering the key once is not a universal fix.</li>
+            <li><strong>Wrong time in Windows:</strong> Windows normally treats the hardware clock as local time and Sensible uses UTC. To align Windows with UTC, run <code>reg add "HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation" /v RealTimeIsUniversal /t REG_DWORD /d 1 /f</code> in administrator PowerShell and restart Windows. Using <code>sudo timedatectl set-local-rtc 1</code> on Sensible instead can cause timezone/daylight-saving problems.</li>
+            <li><strong>Windows disk mounts read-only or not at all:</strong> Fast Startup can leave NTFS hibernated. Disable it in Windows (Power Options → <em>Choose what the power buttons do</em>) and shut down fully. <code>powercfg /h off</code> also disables Windows hibernation. This does not unlock BitLocker-encrypted volumes.</li>
+          </ul>
+
           <div class="callout warn">
             <div class="callout-title">Log Sanitization Reminder</div>
             When sharing diagnostic outputs online, always redact usernames, Wi-Fi networks, MAC addresses, and private file names. Never post passwords or encryption passphrases.
@@ -339,10 +353,10 @@ sudo sensible-audio-check</code></pre>
 
         <section id="planned-features">
           <h2>11. Roadmap and Validation Still Pending</h2>
-          <p>The application baseline and GNOME profile are configured in the image sources. The following work is not yet complete or proven in a release image:</p>
+          <p>The offline GNOME/KDE images, Try Sensible session, application baseline and GNOME profile are implemented, and both desktops have positive user feedback. The following work is not yet complete or proven in a release image:</p>
           <ul>
             <li><strong><code>sensible-apps</code>:</strong> An interactive post-install tool for installing developer toolchains (Docker, GitHub CLI), additional browsers, and media software with verified signatures.</li>
-            <li><strong>Desktop Profiles:</strong> Native KDE profile tuning remains planned. The GNOME extension set still needs full ISO and real-session checks for activation, login/lock/reboot behavior, OCR/QR, battery and multi-monitor behavior, and preservation of user changes.</li>
+            <li><strong>Desktop Profiles:</strong> Native KDE profile tuning remains planned. Both editions have passed ISO builds and console boot smoke. Targeted real-session checks remain for activation, login/lock/reboot behavior, OCR/QR, battery and multi-monitor behavior, and preservation of user changes.</li>
             <li><strong>Face Recognition:</strong> Optional BioPass enrollment remains future work; fingerprint support is already included.</li>
             <li><strong>Backups &amp; Appearance:</strong> GNOME uses Paper icons and the Orchis GTK 3 theme, with <a href="applications.html#themes">offline alternatives and reset instructions</a>. Native KDE appearance choices and a validated backup workflow remain follow-ups.</li>
           </ul>

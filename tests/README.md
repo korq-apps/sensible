@@ -128,8 +128,9 @@ locale, keyboard, grub `resume=` rules, keyd, brave origin), call sequences
 (partition types/sizes, LUKS format args, live keyboard setup,
 stable disk identity, group creation, sudo membership, offline closure checks, theme,
 bootloader, owned teardown, and preserved failure logs), live ALSA mixer state
-removal, audio-check findings on the completion screen, and removal of the
-"Try Sensible" launcher and unit, plus success/abort exit codes.
+removal, audio-check findings on the completion screen, the autologin prompt's
+saved-password note, and removal of the "Try Sensible" launcher and unit, plus
+success/abort exit codes.
 
 The same integration suite drives `main --config` using private caller-owned
 fixtures through all eight GNOME/KDE × Btrfs/Ext4 × LUKS on/off combinations.
