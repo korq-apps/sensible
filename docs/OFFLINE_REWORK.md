@@ -1,12 +1,17 @@
-# Offline install rework (v2)
+<a id="offline-install-rework-v2"></a>
 
-Design record for the pivot away from a network installer. The implemented
-flow is described below and in [PLAN.md](PLAN.md) and
+# Offline install rework
+
+Design record for the pivot away from a network installer, originally called
+“v2” in planning. This is an architectural milestone, not a release version.
+The implemented flow is described below and in [PLAN.md](PLAN.md) and
 [INSTALLER_SPEC.md](INSTALLER_SPEC.md).
 
-The original graphical live-session and GNOME first-boot account proposals
-are superseded: both images boot into the console installer, and both create
-the account, hostname, timezone, and locale during installation.
+Both images default to the console installer and also offer **Try Sensible**,
+the graphical live session with an **Install Sensible** launcher merged in
+PR #18. Its earlier exclusion is superseded. GNOME first-boot account delegation
+remains superseded: both editions create the account, hostname, timezone and
+locale during installation.
 
 ## Why
 
@@ -34,7 +39,7 @@ wiped disk on the user's.
 | :--- | :--- | :--- |
 | Offline model | Copy the live root | Deploy with `rsync`, then purge live-only packages locally with `dpkg`; no package downloads |
 | Variants | Two ISOs: GNOME (base), KDE (alternative) | Parameterised build, two artifacts, two CI builds; the installer never asks which desktop |
-| Live session | Branded console installer | The selected desktop is carried in the image and starts on the installed system |
+| Live session | Console installer by default; optional Try Sensible desktop | The image's desktop can be tried before installation; its launcher runs the same TUI installer |
 | Identity setup | Shared installer forms for GNOME and KDE | Account, hostname, timezone, and locale are configured before first boot |
 | Third-party setup | No online setup in the installer | Brave Origin stays optional/online. Flathub's source and key are now preconfigured as static image data; only browsing/installing Flatpak apps needs network. Debian's Chromium and Flatpak packages remain baked into the ISO |
 | TUI toolkit | `gum` | In Testing `main`, depends only on `libc6` (~21 MB) |
@@ -57,7 +62,7 @@ The ISO carries a complete, ready-to-run system. Installation copies it.
 
 ```
 build:    live-build (variant=gnome|kde) -> full desktop squashfs + firmware
-boot:     branded console installer
+boot:     branded console installer (default) or Try Sensible desktop + launcher
 setup:    keyboard -> account -> disk -> filesystem -> encryption -> confirm
 install:  partition -> format -> rsync live root -> de-live -> configure target
           -> GRUB -> update-initramfs -> verify -> reboot
@@ -75,6 +80,7 @@ The live root is not a target root. The copy must remove, in the chroot:
 - autologin drop-ins for `getty@tty1` and `serial-getty@ttyS0`
 - `/etc/machine-id` (truncate; systemd regenerates on first boot)
 - the live session's display-manager autologin
+- the live desktop preparation unit, installer launcher and live user's settings
 
 and must add or regenerate:
 
@@ -102,7 +108,7 @@ are fully offline and use packages already carried by the image.
 
 ## Build system
 
-`live/auto/config` becomes variant-aware, selected by an environment variable
+`live/auto/config` is variant-aware, selected by an environment variable
 so CI and local builds share one path:
 
 - `SENSIBLE_VARIANT=gnome` (default) or `kde`
@@ -120,17 +126,20 @@ validate every desktop package or staged asset.
 
 - Unit and integration suites continue to cover installer logic with the
   copy path mocked.
-- `scripts/smoke-boot.sh` gains a variant argument and boots both ISOs
-  (`uefi` and `sb` firmware modes already exist).
+- `scripts/smoke-boot.sh` boots the selected edition; CI covers both ISOs
+  under `uefi` and `sb` firmware modes. These checks cover the console entry.
+- Try Sensible has positive user feedback recorded in PLAN.md. This does not
+  establish installed lock/autologin isolation or every physical audio path.
 - Planned release-blocking acceptance checks install to scratch disks in QEMU and boot the
   *installed* system, not just the live medium. `validate_installed_boot`
   already asserts the artifacts; this proves them against real firmware.
 
 ## Phasing
 
-Original sequencing, retained as history. Items 3 and 4 were superseded by
-the console/shared-account flow above. Release readiness is governed by the
-unchecked acceptance gates in PLAN.md, not by completion of these steps.
+Original sequencing, retained as history. Item 3 was initially deferred and
+then implemented in PR #18 alongside the console default. Item 4's first-boot
+delegation was replaced by shared installer forms. Release readiness is governed
+by the unchecked acceptance gates in PLAN.md, not by completion of these steps.
 
 1. **Variant build** — parameterise `live-build`, produce the GNOME ISO with a
    full desktop, keep the existing TTY installer. Adds the build-time package
@@ -145,12 +154,14 @@ unchecked acceptance gates in PLAN.md, not by completion of these steps.
    alternatives. Update (2026-09-06): Flathub remote/key configuration is now
    static image data, not a network-dependent post-install task.
 
-## Open questions
+## Settled decisions and remaining work
 
 - ~~Swap.~~ **Settled:** no swap partition. Swap is a swapfile inside the root
   filesystem in both modes, sized to mirror RAM, so it is encrypted with the
   root when LUKS is on and the partition layout is identical either way. The
   minimum disk stays RAM-dependent (~30 GiB at 8 GiB RAM), so **test VMs need
   ~40 GiB**.
-- First-boot identity delegation and a graphical "try without installing"
-  session are outside the current console-installer design.
+- **Live desktop implemented:** Try Sensible is part of the current baseline.
+  First-boot identity delegation remains outside the installer design.
+- **Still planned:** the post-install app tool and outstanding acceptance in
+  [PLAN.md](PLAN.md); the completed offline rework does not close those gates.

@@ -8,6 +8,14 @@ Debian Testing (Forky), a few clear choices, working hardware, no vendor bloat. 
 
 ---
 
+## Current scope
+
+Sensible has grown beyond the original v1 plan: offline GNOME/KDE images,
+**Try Sensible**, desktop profiles, the offline manual and unattended input are
+implemented. The old v1/v2 planning labels describe history, not release
+readiness. The [plan](docs/PLAN.md#where-we-are) separates implemented features
+from pending installed-system and hardware acceptance.
+
 ## Why this exists
 
 Debian itself is excellent. Getting to a usable desktop is not:
@@ -17,7 +25,7 @@ Debian itself is excellent. Getting to a usable desktop is not:
 3. **Hardware is half-enabled.** Wi-Fi firmware, SOF laptop audio, Bluetooth codecs, GPU decode, and power profiles are extra work.
 4. **Switching from macOS or Windows feels alien.** Shortcuts, app stores, and “where is Slack?” are the usual friction — not a reason to ship Basecamp.
 
-Sensible is a **reproducible live ISO** plus a **TUI installer**. The boot menu offers **Install Sensible** (the console installer, default) and **Try Sensible** (the baked GNOME or KDE desktop as a live session that changes nothing on disk, with the same installer one click away). It partitions the disk the way people actually want and turns on firmware and PipeWire. Separate GNOME and KDE release images provide the chosen desktop; the installer does not download or switch desktops. Third-party apps stay on Flatpak. Nothing commercial is baked in. The machine you get is Debian.
+Sensible is a **reproducible live ISO** plus a **TUI installer**. The boot menu offers **Install Sensible** (the console installer, default) and **Try Sensible** (the baked GNOME or KDE desktop as a live session without starting an installation, with the same installer one click away). It partitions the disk the way people actually want and turns on firmware and PipeWire. Separate GNOME and KDE release images provide the chosen desktop; the installer does not download or switch desktops. Selected third-party packages are pinned at build time; additional apps can come from Flathub after installation. The machine you get is Debian.
 
 ---
 
@@ -125,20 +133,22 @@ Make as much hardware work as Debian Testing allows, on first boot:
 - Audio / BT: PipeWire + WirePlumber + `libspa-0.2-bluetooth`, plus `alsa-ucm-conf` (no PipeWire package depends on it, yet Intel SOF and SoundWire laptops expose no audio device without it), `alsa-utils` and the Cirrus/TI speaker-amplifier firmware. `sensible-audio-check` names the cause of a silent laptop (muted output, missing firmware file, or a speaker amplifier the running kernel has no quirk for) and the fix; the installer runs it in the live session and shows the findings on the completion screen
 - Power: `power-profiles-daemon`
 - Device firmware updates: `fwupd` + LVFS
-- Secure Boot: shim + Debian-signed GRUB chain on the **installed system** (NVIDIA module and hibernation are blocked under lockdown — documented in Architecture). Secure Boot on the live installer ISO is enabled via live-build (`--uefi-secure-boot enable`) and verified under OVMF with Microsoft keys (`SMOKE_FIRMWARE=sb scripts/smoke-boot.sh`): the kernel reports `secureboot: Secure boot enabled` and loads the Debian Secure Boot CA.
+- Secure Boot: shim + Debian-signed GRUB chain on the **installed system** (NVIDIA module and hibernation are blocked under lockdown — documented in Architecture). Secure Boot on the live installer ISO is enabled via live-build (`--uefi-secure-boot enable`) and verified under OVMF with Microsoft keys (`SMOKE_FIRMWARE=sb scripts/smoke-boot.sh`): the kernel reports `secureboot: Secure boot enabled` and loads the Debian Secure Boot CA. Firmware must trust the certificate signing the image's shim; some Windows PCs disable Microsoft's third-party UEFI CA by default. See the [install guide](docs/INSTALL.md#3-boot-the-live-installer) for firmware settings and BitLocker preparation.
 - Biometrics: fingerprint via `fprintd` + `libpam-fprintd` (baked; dormant without a reader). Printing/scanning (CUPS driverless + `sane-airscan`) is baked too. BioPass face login is a planned post-install opt-in.
 
-First target is **amd64 + UEFI**. Legacy BIOS and other arches are out of scope for v1.
+The current target is **amd64 + UEFI**. Legacy BIOS and other architectures are unsupported.
 
 Two audio limits sit outside the image's control, and `sensible-audio-check` names both. Laptops with a Realtek HDA codec and Cirrus CS35L56 speaker amplifiers (Lenovo, Dell and HP list the codec as ALC3306 and similar) need a per-model amplifier tuning file that linux-firmware adds after the laptop ships; the amplifier driver refuses to run without it, so on a laptop newer than the `firmware-cirrus` snapshot in the image the internal speakers stay silent while headphones work. A routine `apt full-upgrade` clears it once Debian packages the newer snapshot (the Lenovo Legion 7 15ASH11's files arrived in firmware-nonfree 20260519-1, which Debian stable does not have; the image tracks Testing). Kernel quirks for brand-new models lag the same way. Debian also packages no AMD SOF DSP firmware, so a board that routes its microphone through the AMD DSP keeps it off.
 
 ---
 
-## Non-goals (v1)
+<a id="non-goals-v1"></a>
 
-- LVM, RAID, dual-boot, or manual partition editing
+## Current scope boundaries
+
+- LVM, RAID, preserving another OS on the selected disk, or manual partition editing (Windows on a separate disk needs independent boot files; see the [install guide](docs/INSTALL.md#7-windows-on-a-second-disk))
 - Shipping GNOME **and** KDE on the live ISO
-- Snaps, Steam, or any vendor/SaaS client in the base image
+- Snaps, Steam, or proprietary service clients in the base image
 - Encrypted `/boot` / `GRUB_ENABLE_CRYPTODISK`
 - Supporting non-UEFI machines
 
@@ -159,17 +169,22 @@ The installed system hostname defaults to `debian`. The UEFI boot entry stays **
 
 ---
 
-## Repository layout (planned)
+<a id="repository-layout-planned"></a>
+
+## Repository layout
 
 ```
 .
 ├── docs/
 │   ├── ARCHITECTURE.md     # layers, disk, boot, swap/LUKS decision
 │   ├── PLAN.md             # phases and milestones
+│   ├── INSTALL.md          # download through first boot and troubleshooting
 │   └── INSTALLER_SPEC.md   # installer prompts and exact commands
 ├── live/                   # live-build config (Dockerfile, hooks, package lists)
 ├── installer/              # sensible-install.sh + lib/ modules
 ├── configs/                # keyd, omb-bashrc + gitconfig (baked into the image)
+├── manual/                 # offline HTML help and application recipes
+├── packaging/manual/       # manual launcher and first-login integration
 ├── scripts/                # run-qemu.sh — boot the built ISO in UEFI QEMU
 └── tests/                  # unit + integration suites (tests/run-tests.sh)
 ```
@@ -181,7 +196,10 @@ The installed system hostname defaults to `debian`. The UEFI boot entry stays **
 - [Architecture](docs/ARCHITECTURE.md) — layers, disk, boot, swap/LUKS, software
 - [Installation guide](docs/INSTALL.md) — download, verify, write USB, install, and first boot
 - [Installer spec](docs/INSTALLER_SPEC.md) — prompts, partitioning, chroot
-- [Plan](docs/PLAN.md) — implementation order
+- [Plan](docs/PLAN.md) — current priorities, implementation history and acceptance gates
+- [Offline rework](docs/OFFLINE_REWORK.md) — design history and the current offline flow
+- [Desktop profiles](docs/DESKTOP_PROFILES.md) — defaults, provenance and targeted acceptance
+- [Offline manual](manual/index.html) — installed-system help
 
 Build: `./live/build.sh` (podman/docker) or `sudo ./scripts/build-native.sh` (containerless, on Debian) produces `sensible-$SENSIBLE_VARIANT-debian-testing-amd64.iso` (`SENSIBLE_VARIANT=gnome`, the default, or `kde`). Verify it the way CI does with `./scripts/smoke-boot.sh` (headless UEFI boot assertion), or launch it interactively with `./scripts/run-qemu.sh`. Tests: `tests/run-tests.sh` — no root, no network.
 

@@ -6,9 +6,16 @@ amd64 Debian Testing installer that uses the whole selected disk.
 ## Before you start
 
 > **Back up anything you need. The installer permanently erases the entire
-> selected disk.** It does not preserve another operating system, create a
-> dual-boot setup, or offer manual partitioning. Disconnect drives you do not
-> intend to erase if practical.
+> selected disk.** It does not preserve another operating system on that
+> disk, create a dual-boot setup, or offer manual partitioning. Disconnect
+> drives you do not intend to erase if practical.
+
+The installer targets only the selected disk, but also updates the computer's
+firmware boot entries. A computer with two drives can keep Windows on one and
+install Sensible on the other if Windows has its own boot files. Read
+[Windows on a second disk](#7-windows-on-a-second-disk) first: Windows may use
+BitLocker/device encryption, and boot or firmware changes can require its
+recovery key even when the Windows disk is not erased.
 
 You need:
 
@@ -87,9 +94,28 @@ the writer reports success, eject the USB safely.
 1. Leave the USB connected and restart the computer.
 2. Open the firmware boot menu (commonly F12, F10, Esc, or Option on startup).
 3. Choose the USB entry marked `UEFI`. Do not choose a Legacy or CSM entry.
-4. Secure Boot is supported by the live ISO and installed system, so it can
-   remain enabled. If the USB is not listed, confirm that UEFI boot is enabled
-   and Legacy/CSM is disabled before changing Secure Boot settings.
+4. Secure Boot is supported through Debian's signed shim/GRUB chain. Firmware
+   must trust the certificate used by the image's shim. If the USB is not
+   listed, confirm that UEFI boot is enabled and Legacy/CSM is disabled.
+5. A Secure Boot violation, or a return to the firmware menu before GRUB,
+   can mean the firmware does not trust Microsoft's third-party UEFI CA.
+   Lenovo documents this default on Windows-preinstalled
+   [Secured-core PCs](https://download.lenovo.com/pccbbs/mobiles_pdf/Enable_Secure_Boot_for_Linux_Secured-core_PCs.pdf).
+   In their firmware setup, open Security → Secure Boot and enable
+   **Allow Microsoft 3rd Party UEFI CA**, then save and retry. Other models
+   may use different names or policies; check their firmware documentation.
+   **Before changing firmware settings on a Windows machine, save its BitLocker
+   recovery key and suspend protection if enabled**; see
+   [Windows on a second disk](#7-windows-on-a-second-disk).
+
+Temporarily disabling Secure Boot can help isolate a trust problem, but does
+not diagnose every black screen or boot failure. Re-enable it after resolving
+trust if you want signature enforcement. Both the ISO and installed system
+need a trusted boot chain. Firmware resets and *Restore factory keys* can
+change that trust; factory defaults do not necessarily enable third-party CAs.
+If the switch is already enabled, recheck the image checksum and consult the
+vendor's firmware guidance: damaged media, revoked loaders and firmware bugs
+can also prevent boot.
 
 The boot menu offers two ways in:
 
@@ -98,16 +124,19 @@ The boot menu offers two ways in:
   then choose the keyboard layout before entering any password. If you leave
   the installer for diagnostics, start it again with `sensible-install`.
 - **Try Sensible**: the same live system booted into the GNOME or KDE desktop
-  of the edition you downloaded, without touching any disk. Wi-Fi, audio and
-  the bundled applications behave as they will after installation, so this is
-  the place to check your hardware first (`sensible-audio-check` works here
+  of the edition you downloaded, without starting an installation. It uses
+  the image's kernel, firmware and applications, so it is useful for checking
+  hardware before installing (`sensible-audio-check` works here
   too). The live account is `user` with the password `live`. When ready, open
   **Install Sensible** from the dash (GNOME) or from the desktop icon and
   application menu (KDE); it runs the same installer in a terminal window.
   Keep that window open until the installer reports completion: closing it
   mid-install interrupts a partially erased disk. A disk you opened in the
   file manager is mounted and therefore excluded from installation until you
-  unmount it.
+  unmount it. The normal live session is temporary; save anything you want
+  to keep elsewhere before rebooting. Opening a disk and editing files on it
+  can still change that disk. Live autologin and lock settings differ from the
+  installed user's settings, so a successful trial does not test installed login.
 
 Installation is offline in both modes and does not wait for a Debian mirror.
 Networking can be configured with `nmtui` from the console or from the
@@ -119,7 +148,8 @@ Read every screen rather than accepting choices blindly:
 
 - **Target disk:** the whole selected disk will be erased. Match its path,
   capacity, model, existing volumes, filesystem labels, and mount points to the
-  intended drive. Stop if anything is uncertain.
+  intended drive. Stop if anything is uncertain. Other disks, including a
+  Windows disk, are not written.
 - **Filesystem:** choose Btrfs for compression, subvolumes, and future snapshot
   tooling, or Ext4 for a traditional single root filesystem. Both choices use
   a swapfile inside root and support optional LUKS encryption and hibernation.
@@ -202,10 +232,93 @@ sudo fwupdmgr update
 
 Not every device exposes firmware updates through LVFS.
 
+## 7. Windows on a second disk
+
+Sensible does not preserve Windows on the disk selected for installation.
+A Windows installation on another disk can remain usable, provided its EFI boot
+files are also on a disk you keep. Windows sometimes puts boot files on a
+different disk from `C:`; if practical, confirm it boots with the intended
+Sensible disk disconnected before erasing that disk.
+
+- **Boot order:** the installer registers a `debian` firmware entry and normally
+  puts it first. Use **Windows Boot Manager** in the firmware boot menu for
+  Windows, or adjust the order in firmware setup. Sensible does not configure
+  a Windows entry in GRUB. Chainloading Windows through GRUB can trigger
+  BitLocker recovery depending on its validation policy; direct firmware boot
+  is the documented route. Existing Linux entries named `debian` can be affected
+  by GRUB registration even when their disks are not selected.
+- **BitLocker/device encryption:** check its state before changing firmware.
+  Firmware policy and boot-manager changes can cause a recovery prompt; the
+  result depends on the machine's BitLocker configuration. See Microsoft's
+  [recovery overview](https://learn.microsoft.com/en-us/windows/security/operating-system-security/data-protection/bitlocker/recovery-overview).
+  Save the 48-digit recovery key off the machine. It may be in the
+  [Microsoft account used to set up Windows](https://account.microsoft.com/devices/recoverykey),
+  with your work/school administrator, or in your saved backup. From an
+  administrator PowerShell in Windows, inspect status and existing protectors:
+
+  ```powershell
+  manage-bde -status C:
+  manage-bde -protectors -get C:
+  ```
+
+  Confirm that you have the recovery password matching the drive's key ID;
+  do not post this output. **Protection Off does not mean decrypted**: it can
+  mean protection is suspended while the data remains encrypted. Check
+  Conversion Status and Percentage Encrypted as well. Microsoft documents the
+  distinction in [GetProtectionStatus](https://learn.microsoft.com/en-us/windows/win32/secprov/getprotectionstatus-win32-encryptablevolume).
+
+  For an encrypted, protected system drive, suspend protection before firmware
+  changes. The following keeps it suspended across the required restarts:
+
+  ```powershell
+  Suspend-BitLocker -MountPoint "C:" -RebootCount 0
+  ```
+
+  Once firmware changes are complete, boot Windows directly through Windows
+  Boot Manager and **resume protection promptly**:
+
+  ```powershell
+  Resume-BitLocker -MountPoint "C:"
+  manage-bde -status C:
+  ```
+
+  Verify Protection On. Suspension temporarily leaves the encryption key
+  available without normal TPM protection; `-RebootCount 0` stays suspended
+  until you resume it. See Microsoft's
+  [suspend/resume instructions](https://learn.microsoft.com/en-us/troubleshoot/windows-client/windows-security/suspend-bitlocker-protection-non-microsoft-updates).
+- **Clock:** Windows normally treats the hardware clock as local time, while
+  Sensible uses UTC. If switching systems produces a time offset, make Windows
+  use UTC from an administrator PowerShell:
+
+  ```powershell
+  reg add "HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation" /v RealTimeIsUniversal /t REG_DWORD /d 1 /f
+  ```
+
+  Restart Windows. The alternative, `sudo timedatectl set-local-rtc 1` on
+  Sensible, uses local time but can cause timezone/daylight-saving problems;
+  [systemd recommends UTC](https://manpages.debian.org/testing/systemd/timedatectl.1.en.html).
+- **Reading the Windows disk from Sensible:** Fast Startup can leave NTFS
+  hibernated, preventing safe read-write access. Disable Fast Startup in Windows
+  (Power Options → *Choose what the power buttons do*) and shut it down fully.
+  `powercfg /h off` in an administrator terminal also disables Windows
+  hibernation. These steps do not unlock BitLocker-encrypted volumes.
+
 ## Troubleshooting and support
 
 - **No UEFI USB entry:** rewrite the image with a supported tool, disable
   Legacy/CSM, and try another USB port. Recheck the SHA256 first.
+- **UEFI USB entry present, but Secure Boot refuses it:** check third-party CA
+  trust as described in [Boot the live installer](#3-boot-the-live-installer).
+  A firmware certificate-name scan is not a signature or revocation check and
+  cannot prove that a particular loader is trusted. If using a multi-boot USB
+  tool, retry a direct write of the Sensible ISO to isolate its extra boot chain.
+- **Windows asks for a BitLocker recovery key:** use the matching saved key
+  and boot Windows through Windows Boot Manager. Firmware or boot-policy changes
+  are possible causes, not the only ones. If prompts recur, investigate the
+  cause in Windows before suspending/resuming protection; do not assume entering
+  the key once resolves every case. See [Windows on a second disk](#7-windows-on-a-second-disk).
+- **Windows shows the wrong time after Sensible ran:** hardware clock
+  convention; see [Windows on a second disk](#7-windows-on-a-second-disk).
 - **No install disk:** the disk may be read-only, in use as the live medium, or
   below the RAM-dependent minimum. The installer lists why detected devices
   were rejected.
