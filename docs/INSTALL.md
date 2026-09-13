@@ -214,6 +214,12 @@ Not every device exposes firmware updates through LVFS.
   failed install left the old system recoverable.
 - **Encryption passphrase fails after reboot:** check Caps Lock and the keyboard
   layout used during installation. There is no passphrase recovery mechanism.
+- **Black screen after hibernation in QEMU/KVM:** the tested virtio-GPU setup
+  (QEMU 11.1.1, guest kernel `7.1.13+deb14-amd64`) restored the hibernation image
+  but stalled in the graphics driver. Standard VGA restored KDE successfully
+  with unchanged swap sizing and resume configuration. Select VGA for a fresh
+  cold boot before repeating the test (`-vga std` in a manual QEMU command).
+  Do not change virtual hardware while a hibernation image is awaiting resume.
 - **Secure Boot with proprietary NVIDIA:** Debian's stock boot chain remains
   signed, but the proprietary NVIDIA module may require disabling Secure Boot
   or separately enrolling a Machine Owner Key.

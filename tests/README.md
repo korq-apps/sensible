@@ -15,6 +15,19 @@ python3 -c 'import sys, tarfile, tomllib; sys.exit(0 if sys.version_info >= (3, 
 ```
 
 No third-party Python packages are needed for the fixture tests.
+The setup-form suite includes Linux PTY checks for static styling followed by
+hostname/password input, preserved typeahead and non-fatal styling failure.
+Its Gum double models the stdout-terminal background query; for an additional
+check against the Gum 0.17 binary extracted from the ISO package, run:
+
+```bash
+SENSIBLE_TEST_GUM=/absolute/path/to/extracted/usr/bin/gum python3 tests/lib/check_terminal.py
+```
+
+This does not replace a live Konsole/console retest. The mitigation routes only
+static `gum style` output through a pipe, without changing `TERM`, discarding
+pending input, or filtering characters from answers.
+
 Theme fixture tests double `sassc`; real theme builds require the builder's
 `sassc` package as well as Python.
 

@@ -116,4 +116,8 @@ printf 'de\n' | _prompt_searchable "Keyboard" "Search" "us" \
     "list_keyboard_layout_options" "validate_fixture_choice" "Invalid" "Enter layout:" >/dev/null 2>&1
 assert_rc "text fallback accepts the same stable value" 0 $?
 
+t_section "static styling does not query the terminal or consume prompt input"
+PYTHONDONTWRITEBYTECODE=1 python3 "${REPO_ROOT}/tests/lib/check_terminal.py"
+assert_rc "PTY styling and following input remain isolated" 0 $?
+
 t_summary
