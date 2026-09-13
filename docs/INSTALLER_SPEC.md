@@ -1,13 +1,13 @@
 # Installer specification
 
-Blueprint for `installer/sensible-install.sh`. On the live ISO the command is `sensible-install` (alias `lazydeb`). Behavior must match [Architecture](ARCHITECTURE.md). This file is the command-level source of truth.
+Current implementation contract for `installer/sensible-install.sh`. On the live ISO the command is `sensible-install` (alias `lazydeb`). Behavior must match [Architecture](ARCHITECTURE.md). This file is the command-level source of truth.
 
 ---
 
 ## 1. Constraints
 
 - **UEFI only.** Exit if `/sys/firmware/efi` is missing.
-- **One disk, full wipe.** No dual-boot, no custom partition editor in v1.
+- **One disk, full wipe.** No dual-boot on the target disk, no custom partition editor. Partitioning and filesystem writes are confined to the selected disk; GRUB registration also updates shared UEFI NVRAM. Separate-disk boot considerations are in the [install guide](INSTALL.md#7-windows-on-a-second-disk).
 - **Minimum disk:** `2048 + SWAP_MIB + 20480` MiB (1 GiB EFI + 1 GiB BOOT + swap + 20 GiB root). Refuse smaller disks.
 - The live image contains the complete target system plus `cryptsetup`, `btrfs-progs`, `e2fsprogs`, `dosfstools`, `gdisk`, NetworkManager, and firmware. There is no thin/debootstrap fallback.
 - **Offline installation.** The release image contains the complete target closure. NetworkManager remains available for diagnostics, but no mirror check or download is required before the wipe.
@@ -43,8 +43,8 @@ suite (`tests/`) can run the full flow unprivileged against a temp directory.
 | :--- | :--- | :--- |
 | Target disk | none | Show path/size/model; record major:minor, byte size, serial and WWN; exclude every in-use disk and revalidate before wipe |
 | Filesystem | Btrfs | Choose Btrfs (subvolumes/compression) or Ext4 (traditional single root) |
-| LUKS2 | Yes | If yes: passphrase twice, min 8 characters |
-| Swap | ZRAM (50% of RAM, lz4, priority 100) ahead of a swapfile inside root mirroring RAM (priority 10) | Shown, not editable in v1; only the swapfile can hold a hibernation image |
+| LUKS2 | Yes | Uses the account password entered twice, min 8 characters; no separate encryption password prompt |
+| Swap | ZRAM (50% of RAM, lz4, priority 100) ahead of a swapfile inside root mirroring RAM (priority 10) | Shown, not editable; only the swapfile can hold a hibernation image |
 | Desktop | Build variant | GNOME or KDE Plasma release image; shown, not prompted |
 | Mac clipboard (`keyd`) | On for GNOME, off for KDE | Fixed by build variant; Super+C/V/X only |
 | Hostname | `debian` | RFC 1123 syntax and maximum 63 bytes for the Linux static hostname. Stay `debian` — the box is Debian, not a derivative. |
@@ -74,12 +74,12 @@ variant-native utilities are always installed — not checkboxes.
 
 `sensible-install --config answers.toml` reads every prompt from a file and asks nothing. Same validation as interactive mode; any missing or invalid key aborts **before** partitioning. `confirm_wipe = true` is still required as explicit destructive authorization, without making interactive users retype a device they selected and confirmed. Primary consumer is CI: running LUKS on/off for each desktop release image end-to-end in QEMU.
 
-Implemented in the feature-branch sources for #4, with rootless parser and
-mocked full-flow evidence; real image installation/boot validation follows in #5.
+Merged in PR #17 for #4, with rootless parser and mocked full-flow evidence;
+real image installation/boot validation remains in #5.
 Use an image containing this implementation, not an earlier release.
 The Python 3.11+ standard-library `tomllib` reader parses data and rejects
-unsupported keys; optional applications belong to `sensible-apps`, not this
-file. V1 preserves the current
+unsupported keys; optional applications belong to the planned post-install
+catalog, not this file. Config mode preserves the current
 unified password contract and reads the secret from a separate protected file,
 not inline TOML, command-line arguments or environment variables. The same
 password sets the user/root recovery password and, when enabled, LUKS.
@@ -102,7 +102,7 @@ locale          = "en_US.UTF-8"
 keyboard        = "us"
 ```
 
-V1 safety and completion contract:
+Unattended safety and completion contract:
 
 - Require all displayed fields except `full_name` and `email`; those default to
   empty strings. Types are strict; reject unknown keys, inline password fields,
@@ -128,7 +128,7 @@ V1 safety and completion contract:
 - No prompts, repair shells or terminal requirement, including on failure.
   Return `0` after installation verification, log finalization and owned-resource
   teardown succeed; return nonzero on failure with a clear stage diagnostic.
-  V1 does not reboot or power off: the caller handles media removal and boot.
+  Config mode does not reboot or power off: the caller handles media removal and boot.
 - [The checked-in example](../configs/answers.example.toml) is non-secret and
   has `confirm_wipe = false`. Neither this example nor a saved preference file
   authorizes an erase without explicit editing. `python3` is in the live
@@ -602,7 +602,13 @@ x = C-x
 With LUKS enabled the installer offers autologin (default **on**): the boot
 passphrase unlocks the disk, the desktop starts without a login prompt, and
 the password remains set for sudo, screen unlock, and the keyring. Without
-LUKS the prompt is never shown.
+LUKS the prompt is never shown. The prompt also states that skipping the
+login prompt does not unlock the edition's saved-password store, KDE Wallet
+or GNOME Keyring, which may ask for its own password the first time a program
+uses it. Autologin passes no typed password to PAM; whether GDM's cached
+disk-passphrase path unlocks GNOME Keyring on real hardware is unverified, so
+the wording promises neither outcome (see #29 and
+[Architecture: desktop wallets](ARCHITECTURE.md#desktop-wallets-and-saved-credentials)).
 
 Screen lock defaults are written for both desktops regardless of the choice:
 
