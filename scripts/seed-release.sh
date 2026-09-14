@@ -55,7 +55,10 @@ import json, sys
 data = json.load(sys.stdin)
 torrents = data.get("arguments", {}).get("torrents", [])
 sys.exit(0 if data.get("result") == "success" and len(torrents) == 1
-         and torrents[0].get("percentDone") == 1
+         and torrents[0].get("totalSize", 0) > 0
+         and torrents[0].get("haveValid") == torrents[0].get("totalSize")
+         and torrents[0].get("haveUnchecked") == 0
+         and torrents[0].get("leftUntilDone") == 0
          and torrents[0].get("status") == 6
          and torrents[0].get("error") == 0 else 1)
 ' <<< "$status"; then

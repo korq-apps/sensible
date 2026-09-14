@@ -22,7 +22,7 @@ cat > "$fixture/bin/transmission-remote" <<'MOCK'
 printf '%s\n' "$*" >> "$SEED_TEST_LOG"
 [[ ${SEED_TEST_RPC_FAIL:-0} == 0 ]] || exit 1
 if [[ $1 == --json ]]; then
-    printf '%s\n' '{"result":"success","arguments":{"torrents":[{"percentDone":1,"status":6,"error":0}]}}'
+    printf '%s\n' '{"result":"success","arguments":{"torrents":[{"totalSize":100,"haveValid":100,"haveUnchecked":0,"leftUntilDone":0,"status":6,"error":0}]}}'
 fi
 MOCK
 chmod +x "$fixture/bin/"*
