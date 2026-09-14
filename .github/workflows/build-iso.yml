@@ -217,11 +217,38 @@ jobs:
           archive: false
           retention-days: 14
 
+      - name: Retain and seed tagged release ISO
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          bash scripts/seed-release.sh \
+            "sensible-${{ matrix.variant }}-debian-testing-amd64.iso" "$RELEASE_TAG"
+
+      - name: Upload Torrent Artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v7
+        with:
+          path: sensible-${{ matrix.variant }}-debian-testing-amd64.iso.torrent
+          if-no-files-found: error
+          archive: false
+          retention-days: 14
+
+      - name: Upload Magnet Artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v7
+        with:
+          path: sensible-${{ matrix.variant }}-debian-testing-amd64.iso.magnet.txt
+          if-no-files-found: error
+          archive: false
+          retention-days: 14
+
   # Publication is isolated in its own job so that `contents: write` exists only
   # on tag pushes and never in a run that builds PR-controlled code. Keep
-  # SENSIBLE_RELEASE_READY unset/false until the real installed-disk matrix and
-  # documented release gate pass; enabling it is the final publication switch.
-  # This job consumes the direct-file build artifacts rather than rebuilding.
+  # SENSIBLE_RELEASE_READY unset/false until publication is prepared under the
+  # documented release decision in docs/RELEASE.md. The first beta accepts
+  # maintainer hardware testing; the exhaustive matrix is follow-up coverage.
+  # This job publishes torrent/checksum metadata for the verified seeded ISOs.
   release:
     name: Publish Release Assets
     needs: build
@@ -231,10 +258,15 @@ jobs:
       contents: write
 
     steps:
-      - name: Download built ISO artifacts
+      - name: Checkout release tooling and notes
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download release metadata artifacts
         uses: actions/download-artifact@v8
         with:
-          pattern: sensible-*-debian-testing-amd64.iso*
+          pattern: sensible-*-debian-testing-amd64.iso.*
           merge-multiple: true
 
       - name: Verify complete release asset set
@@ -242,9 +274,11 @@ jobs:
         run: |
           set -euo pipefail
           expected_assets=(
-            "sensible-gnome-debian-testing-amd64.iso"
+            "sensible-gnome-debian-testing-amd64.iso.torrent"
+            "sensible-gnome-debian-testing-amd64.iso.magnet.txt"
             "sensible-gnome-debian-testing-amd64.iso.sha256"
-            "sensible-kde-debian-testing-amd64.iso"
+            "sensible-kde-debian-testing-amd64.iso.torrent"
+            "sensible-kde-debian-testing-amd64.iso.magnet.txt"
             "sensible-kde-debian-testing-amd64.iso.sha256"
           )
           missing=0
@@ -261,20 +295,30 @@ jobs:
           for variant in gnome kde; do
             iso="sensible-${variant}-debian-testing-amd64.iso"
             checksum="${iso}.sha256"
-            actual_checksum="$(sha256sum "$iso")"
-            if [ "$(<"$checksum")" != "$actual_checksum" ]; then
-              echo "::error file=${checksum}::Checksum does not match ${iso}."
+            read -r hash filename < "$checksum"
+            if [[ ! "$hash" =~ ^[a-f0-9]{64}$ ]] || [[ "$filename" != "$iso" ]]; then
+              echo "::error file=${checksum}::Invalid checksum record for ${iso}."
               exit 1
             fi
           done
 
+      - name: Verify release notes exist
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: test -s "docs/releases/${RELEASE_TAG}.md"
+
       - name: Publish Release Assets
         uses: softprops/action-gh-release@v2
         with:
+          name: Sensible ${{ github.ref_name }}
+          body_path: docs/releases/${{ github.ref_name }}.md
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
-            sensible-gnome-debian-testing-amd64.iso
+            sensible-gnome-debian-testing-amd64.iso.torrent
+            sensible-gnome-debian-testing-amd64.iso.magnet.txt
             sensible-gnome-debian-testing-amd64.iso.sha256
-            sensible-kde-debian-testing-amd64.iso
+            sensible-kde-debian-testing-amd64.iso.torrent
+            sensible-kde-debian-testing-amd64.iso.magnet.txt
             sensible-kde-debian-testing-amd64.iso.sha256
           fail_on_unmatched_files: true
         env:

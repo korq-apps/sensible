@@ -11,10 +11,14 @@ Debian Testing (Forky), a few clear choices, working hardware, no vendor bloat. 
 ## Current scope
 
 Sensible has grown beyond the original v1 plan: offline GNOME/KDE images,
-**Try Sensible**, desktop profiles, the offline manual and unattended input are
-implemented. The old v1/v2 planning labels describe history, not release
-readiness. The [plan](docs/PLAN.md#where-we-are) separates implemented features
-from pending installed-system and hardware acceptance.
+**Try Sensible**, desktop profiles, the offline manual, unattended input and
+hybrid ZRAM/disk swap are implemented. The project is now preparing its **first
+official beta**, with the feature scope frozen around the merged baseline.
+The maintainer has completed the necessary checks on a Dell XPS 15 (2020),
+Lenovo Legion 7 15ASH11, and a Ryzen 7 7800X3D desktop with 64 GB RAM and
+Radeon RX 7800 XT. The [beta checklist and draft notes](docs/RELEASE.md) record
+that acceptance and the remaining publication steps. Broader test coverage
+is follow-up work in the [plan](docs/PLAN.md#where-we-are).
 
 ## Why this exists
 
@@ -197,6 +201,7 @@ The installed system hostname defaults to `debian`. The UEFI boot entry stays **
 - [Installation guide](docs/INSTALL.md) — download, verify, write USB, install, and first boot
 - [Installer spec](docs/INSTALLER_SPEC.md) — prompts, partitioning, chroot
 - [Plan](docs/PLAN.md) — current priorities, implementation history and acceptance gates
+- [First release](docs/RELEASE.md) — selected scope, candidate checklist and draft release notes
 - [Offline rework](docs/OFFLINE_REWORK.md) — design history and the current offline flow
 - [Desktop profiles](docs/DESKTOP_PROFILES.md) — defaults, provenance and targeted acceptance
 - [Offline manual](manual/index.html) — installed-system help

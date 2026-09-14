@@ -1,6 +1,10 @@
 # Desktop profiles: GNOME and KDE
 
-Status, reconciled **2026-09-10**: **PRs #16–#18 are merged; both editions passed
+Status, reconciled **2026-09-14**: **first-beta scope is frozen around the
+merged desktop baseline.** The maintainer accepts completed checks on the three
+owned machines recorded in [RELEASE.md](RELEASE.md). Remaining targeted tests
+are follow-up coverage, not beta blockers; native KDE styling, editor neutrality
+and backup features follow the beta. **PRs #16–#18 are merged; both editions passed
 each PR's ISO build and live console smoke.** Earlier user feedback confirms
 successful GNOME and KDE validation, and the user now confirms Try Sensible
 works as expected. This does not assert every hardware/audio scenario passed.
@@ -14,8 +18,8 @@ those are implemented and the live-desktop experience has positive validation.
 Issue #13 remains open for targeted GNOME acceptance; preserve the successful
 user smoke report without treating it as evidence for every checklist item.
 The [shared priority queue](PLAN.md#reconciled-priorities) now parks further
-unattended automation and prioritizes user-facing features; release evidence
-remains required, but a new harness is not a prerequisite. General validation of both
+unattended automation and prioritizes beta publication preparation; further
+testing and a new harness are not prerequisites for this beta. General validation of both
 desktops is reported successful. Historical entries below
 retain their original dates and test scope; the current evidence is recorded in
 [Merged desktop slice and user feedback](#merged-desktop-slice-and-user-feedback-2026-09-08)
@@ -363,7 +367,7 @@ substitute for that review. Uniform libadwaita/Flatpak styling is not promised.
 - Review clipboard history limits, persistence and clearing behavior. Do not
   promise that a clipboard manager can reliably recognize every secret.
 - Paper/Orchis are explicitly selected GNOME defaults in the implementation;
-  release acceptance still requires readability, contrast, GTK/Qt behavior and
+  follow-up session coverage includes readability, contrast, GTK/Qt behavior and
   update compatibility checks. Keep Shell/GDM stock and offer clear reset paths.
 - Record package/extension versions in build artifacts so a broken Testing
   upgrade can be reproduced and diagnosed.
@@ -477,6 +481,11 @@ to this profile or replace the outstanding session acceptance checks above.
 
 ## Acceptance checklist
 
+For the first beta, the maintainer's completed checks on owned hardware are
+accepted. Unchecked entries below preserve detailed follow-up scopes rather
+than imposing an additional beta test campaign. They are not inferred as passed
+from the general hardware report.
+
 - [x] Selected package/artifact sources, license notices, extension UUIDs and pins
       recorded; final release corresponding-source/redistribution audit remains separate.
 - [x] Build hooks reject missing/incompatible pinned desktop assets and required dependencies.
@@ -506,10 +515,10 @@ to this profile or replace the outstanding session acceptance checks above.
 - [ ] Verify office document round trips, PDF export/printing, file associations,
       normal shutdown and user overrides in real sessions on both editions.
 
-These checks supplement, not replace, the release blockers in
-[PLAN.md](PLAN.md): merged [automated input #4](https://github.com/korq-apps/sensible/issues/4),
-[installed-disk matrix #5](https://github.com/korq-apps/sensible/issues/5), and
-[physical hardware evidence #6](https://github.com/korq-apps/sensible/issues/6).
+These checks complement the follow-up coverage in [PLAN.md](PLAN.md):
+[installed-disk matrix #5](https://github.com/korq-apps/sensible/issues/5) and
+[expanded hardware records #6](https://github.com/korq-apps/sensible/issues/6).
+[Automated input #4](https://github.com/korq-apps/sensible/issues/4) is implemented.
 The expanded asset set also belongs in
 [complete offline validation #9](https://github.com/korq-apps/sensible/issues/9).
 GNOME extension activation and fresh-user defaults, including the titlebar

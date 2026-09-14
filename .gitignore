@@ -94,3 +94,7 @@ live/config/package-lists/desktop.list.chroot
 # Python bytecode from the test helpers
 __pycache__/
 *.pyc
+
+# Generated torrent release metadata
+/*.iso.torrent
+/*.iso.magnet.txt

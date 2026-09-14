@@ -164,6 +164,15 @@ All disk commands remain mocks: these are not real installed-disk boot results.
 - `LIVE_KEYBOARD_FILE` and `INSTALL_LOG` redirect live-only state into the test
   workspace.
 
+## Release seeding
+
+`seed_release_test.sh` checks immutable per-tag ISO storage, checksum rejection,
+repeat seeding, daemon failures and metadata export with Transmission doubles.
+Real tag builds additionally wait for complete, error-free seeding. GitHub holds
+the torrent, magnet and checksum files; intact ISOs stay on the seed host outside
+the runner checkout. Its persistent directory and Transmission must be prepared
+for every runner eligible to execute the tag build.
+
 ## Not covered here (future work)
 
 - **E2E installed-disk boot**: boot the ISO in QEMU, drive the real

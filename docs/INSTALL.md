@@ -35,8 +35,14 @@ You need:
 ## 1. Download and verify
 
 Open the official [Sensible Releases page](https://github.com/korq-apps/sensible/releases)
-and choose either the GNOME or KDE edition. Download its ISO and matching
-checksum from the same release, for example:
+and choose either the GNOME or KDE edition. The first beta provides a `.torrent`
+for each edition, seeded by the project. Open it in a BitTorrent client to
+download the intact ISO, and download its matching `.iso.sha256` from the same
+GitHub release. No joining or extraction is needed. A `.magnet.txt` attachment
+also contains a magnet link that can be added to a torrent client. Future direct
+HTTP mirrors, when available, will be linked from the release notes.
+
+After the download, you should have these files, for example:
 
 - `sensible-gnome-debian-testing-amd64.iso`
 - `sensible-gnome-debian-testing-amd64.iso.sha256`

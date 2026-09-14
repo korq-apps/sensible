@@ -2,19 +2,29 @@
 
 ## Where we are
 
-**Scope reconciliation (2026-09-12, baseline `71b5b38`):** the implementation
-has moved beyond the original v1 plan. “v1” (initial installer) and “v2”
+**Scope reconciliation (2026-09-14, baseline `58b1d02`):** the implementation
+has moved beyond the original v1 plan and is entering **first-beta release
+preparation**. The maintainer confirms all necessary checks are complete on
+owned hardware: Dell XPS 15 (2020), Lenovo Legion 7 15ASH11, and a custom
+Ryzen 7 7800X3D desktop with 64 GB RAM and Radeon RX 7800 XT.
+**Beta acceptance is complete by maintainer decision.** The exhaustive matrix
+and expanded hardware/desktop checklist are follow-up coverage, not beta
+publication blockers. This supersedes the earlier release-gate requirements.
+Freeze the feature scope around the merged baseline and prepare publication.
+“v1” (initial installer) and “v2”
 (offline rework) were planning labels; neither defines today's feature boundary
 or establishes a completed release. Current scope includes offline GNOME/KDE
 images, Try Sensible and its installer launcher, desktop profiles, the offline
-manual, validated unattended input and diagnostic export. Try Sensible is an
-implemented capability, not a non-goal. Installed-disk and hardware acceptance
-remain separately tracked below.
+manual, validated unattended input, diagnostic export, hybrid ZRAM/disk swap
+and wallet/keyring first-use guidance. Try Sensible is an
+implemented capability, not a non-goal. Detailed coverage beyond the accepted
+beta scope remains separately tracked below.
 
-This reconciliation describes this checkout's merged baseline. ZRAM and
-additional autologin-prompt wording visible on separate feature branches are
-not part of that baseline yet. The dated CI/issue snapshots below remain
-historical evidence, not a fresh claim about remote status.
+ZRAM is merged in PR #33; the autologin prompt is merged in PR #32, alongside
+the wallet documentation in #30/#31 and firmware/second-disk guidance in #34.
+The [first-release checklist and draft notes](RELEASE.md) separate the selected
+scope, accepted hardware testing, follow-up coverage and publication steps.
+Deferred checks remain unclaimed rather than becoming beta requirements.
 
 Phases 1-5 are implemented. The project has since pivoted to an **offline
 installer** (Phase 7, design record in [OFFLINE_REWORK.md](OFFLINE_REWORK.md)),
@@ -31,8 +41,9 @@ than asked, and third-party software leaves the install path entirely.
 | Unattended input (#4) | merged in PR #17 (`553ad1d`); protected TOML/secret files and config-driven integration coverage; real `--config` acceptance belongs to #5 |
 | Installer/VM diagnostics | merged in PR #17; bounded pre-cleanup evidence and host export, original failure preserved; real guest failure/export acceptance remains |
 | Live desktop and audio | merged in PR #18 (`aa1c44e`); user confirms Try Sensible works as expected; specific installed-security and physical-audio checks remain separate |
-| Release gate | blocked on the full installed-disk matrix and physical-hardware evidence; one user-reported install/boot succeeded, not the whole matrix |
-| Hybrid ZRAM swap (#11) | implemented on `feat/zram-swap`; installed KDE ZRAM/disk-swap operation and VGA hibernate/resume validated (2026-09-13), ready for review/wrap-up; broader storage/hardware and failure-injection coverage remains separate |
+| First beta | maintainer accepts completed testing on three owned machines; ready for publication preparation, with existing build/checksum checks retained; exhaustive matrix and expanded hardware records are follow-ups |
+| Hybrid ZRAM swap (#11) | merged in PR #33 (`58b1d02`); installed KDE swap/compression and VGA hibernate/resume accepted; PR merge checklist additionally records pressure, failure fallback and shutdown checks; per-edition/layout comparisons remain |
+| Wallet/keyring first use (#29) | source diagnosis and manual guidance merged in #30/#31; autologin explanation merged in #32; fresh-session/PAM acceptance and optional boot-secret reuse remain distinct |
 | Phase 6 extras | re-scoped below: baked into the ISO, or moved to the post-install tool |
 | Desktop profiles | PR #16 merged; both ISO builds/live UEFI smoke checks pass; GNOME and KDE validation reported successful by the user; targeted acceptance and native KDE configuration remain; see [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md) |
 | Offline first-login manual | implemented from PR #2 on the current installer; real desktop first-login validation remains pending |
@@ -42,12 +53,13 @@ the next automation/harness slice. The existing #4 implementation and diagnostic
 transport stay in place. The user confirms Try Sensible works as expected; do
 not schedule another generic live-desktop validation pass as the next feature.
 
-**Current feature, ready for review/wrap-up (2026-09-13):** hybrid ZRAM plus the
-existing disk swapfile ([#11](https://github.com/korq-apps/sensible/issues/11)).
-Installed KDE validation confirms both swap areas operate together; the user
-also confirms hibernate/resume works with VGA. The reproduced virtio-GPU resume
-stall does not require changing swap sizing or GRUB resume configuration.
-This closes the reported VM failure, not the full release acceptance matrix.
+**Current priority (2026-09-14): first official beta release.** Keep hybrid ZRAM and
+the persistent swapfile as implemented. The reproduced virtio-GPU resume stall
+is a documented compatibility limit; the accepted VGA result does not require
+changing swap sizing or GRUB resume configuration. New navigation, snapshots,
+KDE styling, editor and optional-app work belongs after this release unless a
+candidate failure makes a specific fix necessary. Automation remains parked;
+no additional hardware campaign or full matrix is required for this beta.
 
 **Desktop roadmap:** the GNOME profile, complete global theme/icon collection,
 Flathub and ONLYOFFICE replacement are merged, not another implementation slice.
@@ -61,8 +73,25 @@ The agreed scope and evidence are in [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md).
 
 ## Reconciled priorities
 
-This queue governs the next work; the numbered phases below also retain
-implementation history. Updated **2026-09-10** after
+**Updated 2026-09-14:** release preparation now takes precedence over the
+feature queue below. Hardware acceptance for the beta is confirmed; finish
+build/artifact checks, beta notes and publication setup. Broader validation is
+follow-up work. The numbered phases retain implementation history.
+
+**Current GitHub snapshot:** PR #33 is merged. Its final
+[CI run](https://github.com/korq-apps/sensible/actions/runs/34783736035)
+passed unit/integration tests, GNOME/KDE ISO builds and both ordinary UEFI and
+Secure Boot live smoke checks; publication was skipped. The preceding `main`
+[build at `c6bdbc6`](https://github.com/korq-apps/sensible/actions/runs/34783417313)
+passed. The new `main` [build at `58b1d02`](https://github.com/korq-apps/sensible/actions/runs/34821712306)
+was queued when checked. GitHub returned no releases visible to the current
+account. The publication variable could not be read (HTTP 403), so its value is
+unknown. Issues #4–#9, #11, #13 and #19–#29 are open; #5/#6 have no added
+acceptance comments. #4 and #11 need issue-status reconciliation with their
+merged implementations, not repeat implementation. #13 and #29 retain targeted
+acceptance. No remote issue state is changed by this document update.
+
+**Historical snapshot, 2026-09-10:** after
 [PR #17](https://github.com/korq-apps/sensible/pull/17) (`553ad1d`) and
 [PR #18](https://github.com/korq-apps/sensible/pull/18) (`aa1c44e`) merged into
 `main`. Each PR passed unit/integration tests and both edition ISO/live UEFI
@@ -81,10 +110,17 @@ implementation is merged; its ticket needs a closure/evidence update linking
 PR #17, with the real install/boot matrix retained in #5 rather than reopening
 the input implementation.
 
-### Validation snapshot (updated 2026-09-13)
+<a id="validation-snapshot-updated-2026-09-10"></a>
+<a id="validation-snapshot-updated-2026-09-13"></a>
+
+### Validation snapshot (updated 2026-09-14)
 
 | Evidence | What it establishes | Still outstanding |
 | :--- | :--- | :--- |
+| Maintainer hardware report and beta decision (2026-09-14): Dell XPS 15 (2020), Lenovo Legion 7 15ASH11, custom Ryzen 7 7800X3D / 64 GB RAM / Radeon RX 7800 XT desktop | All checks the maintainer considers necessary are complete on owned hardware; accepted as sufficient for the first official beta | Broader hardware/configuration coverage is follow-up work. Per-machine image, storage and firmware settings were not enumerated; no repeat campaign is required for the beta |
+| Local regression run at `58b1d02` (2026-09-14) | All 19 suites pass, including 684 installer-flow assertions | Disk operations are mocked; exhaustive real-install coverage remains a follow-up |
+| PR #33 merged; final PR CI successful (checked 2026-09-14) | Both images build and pass ordinary UEFI and Secure Boot live smoke; ZRAM and terminal-reply prompt fix are merged | Post-merge `main` build was queued; live smoke does not prove installed-system Secure Boot |
+| PR #33 merge checklist (read 2026-09-14) | Reports installed swap priorities, controlled pressure/spillover, ZRAM failure fallback, hibernate with pages in ZRAM and clean shutdown under pressure as complete | Per-edition/layout responsiveness, compression and overhead comparison remains unchecked. This is PR-reported evidence, not a locally rerun or complete #5/#6 matrix |
 | Local KVM hibernation comparison (2026-09-13), KDE ISO SHA256 `a236f64460d418dec7bb9adf139806de83e9759f05cc296c0293e1689d2dd710`; kernel `7.1.13+deb14-amd64`, QEMU 11.1.1, Q35, 2 GiB RAM, Btrfs+LUKS, ZRAM enabled, Secure Boot off | Standard VGA restores the same KDE Wayland session, boot ID and KWin/Plasma PIDs with the existing RAM-sized swapfile, followed by clean shutdown. With virtio-GPU, image restoration succeeds but a worker blocks in `virtio_gpu_queue_fenced_ctrl_buffer` and PID 1 in `drm_modeset_lock`; the resumed system is not healthy. Private logs/screenshots are in `.qemu/hibernate.cAbtaMQc/` | Virtio-GPU compatibility remains a separate limitation. Diagnostic serial parameters were enabled and tests invoked `hibernate.target` directly: KDE menu/lock handshake, Secure Boot, physical hardware, controlled heavy pressure and failure fallback are not established by this result |
 | User: KDE ZRAM/swap screenshots after booting the installed system (2026-09-12), followed by VGA resume confirmation (2026-09-13) | `zramswap.service` starts successfully; ZRAM is 950.7 MiB at priority 100, disk swap is 1.9 GiB at priority 10, and both are used. LZ4 stores 837.8 MiB of data using 242 MiB total physical memory; the Btrfs swapfile is root-owned, mode 0600. Switching the VM video adapter to VGA resolves the reported black-screen resume failure; the user accepts hibernation as functional | Exact user ISO identity and full storage/hardware, controlled-pressure and failure-injection matrix remain unverified; do not infer those from this successful KDE VM validation |
 | PR #16 merged; final PR CI successful | GNOME/KDE ISOs build and reach the live UEFI smoke marker; automated regression suite passes | Installed-disk boots and Secure Boot matrix (#5), physical hardware records (#6) |
@@ -102,10 +138,10 @@ without a reported regression. Keep #13 as the owner of the remaining itemized
 GNOME evidence, not an unstarted configuration project. Broad positive feedback
 does not assert that every device, file format or security scenario was tested.
 
-### Proposed user-facing delivery order
+### Post-release feature queue
 
-This replaces the previous infrastructure-first recommendation. The user has
-parked unattended automation; the ordering below is a recommendation, not
+The earlier user-facing delivery order is retained for after the first release.
+The user has parked unattended automation; the ordering below is a recommendation, not
 authorization to implement every item or preinstall new AI clients.
 The [GitHub roadmap (#28)](https://github.com/korq-apps/sensible/issues/28)
 groups the existing and new issues by readiness, dependencies and proposed
@@ -114,8 +150,8 @@ relative effort/risk notes are planning aids, not delivery estimates or dates.
 
 | Order | Bounded change | Completion evidence / existing owner |
 | :--- | :--- | :--- |
-| Bugfix lane | Wallet/keyring first use and login integration | [#29](https://github.com/korq-apps/sensible/issues/29): reproduce KDE GPG setup failure, verify password-backed/PAM behavior on both desktops, preserve credentials; ahead of cosmetic #27 work, with boot-secret reuse evaluated separately |
-| 1 | Hybrid ZRAM + persistent swap, coordinated with hibernation guidance | #11 and #8: explicit priorities, unchanged disk-backed resume target, fallback if ZRAM fails, measured memory pressure and shutdown/hibernate validation; explain supported/unknown hibernation state honestly |
+| Bugfix lane | Wallet/keyring first use and login integration | [#29](https://github.com/korq-apps/sensible/issues/29): GPG-default diagnosis and first-use guidance merged; verify password-backed/PAM behavior on both desktops and preserve credentials; candidate defects precede cosmetic #27 work, with boot-secret reuse evaluated separately |
+| Completed | Hybrid ZRAM + persistent swap | #11 implemented in PR #33; retain remaining comparative evidence separately. #8's installed-system Secure Boot messaging is still a follow-up |
 | 2 | Consistent installer Back/Cancel | #7: repeated previous-step navigation without lost answers, stale derived state or accidental disk writes; Gum and fallback tests |
 | 3 | Complete offline pre-wipe protection | #9: derive required packages/assets from maintained inputs; fail before wiping on missing or invalid payloads; keep target-side checks |
 | 4 | Btrfs snapshots and recovery | [#19](https://github.com/korq-apps/sensible/issues/19): Snapper policy, retention and layout-aware restore; prove recovery with separate `/boot`; do not combine with #11 |
@@ -123,34 +159,30 @@ relative effort/risk notes are planning aids, not delivery estimates or dates.
 | 6 | Curated AI/CLI manual and optional-app catalog | [#23 manual](https://github.com/korq-apps/sensible/issues/23), [#25 CLI usability](https://github.com/korq-apps/sensible/issues/25), [#24 catalog](https://github.com/korq-apps/sensible/issues/24); [#22 AI delivery](https://github.com/korq-apps/sensible/issues/22) remains decision-gated |
 
 Build provenance/footprint reporting ([#20](https://github.com/korq-apps/sensible/issues/20)) and the #5 automation harness are deferred
-infrastructure, not prerequisites for every user-facing PR. #5/#6 remain release
-evidence requirements; manual runs can supply evidence while automation is
-parked. Discovered safety failures take precedence over this suggested ordering.
+infrastructure. #5's full matrix and #6's expanded evidence records are follow-up
+coverage for this beta; maintainer hardware acceptance is recorded above.
+Discovered safety failures take precedence over this suggested ordering.
 Personal-file backups ([#21](https://github.com/korq-apps/sensible/issues/21))
 remain a separate design-first workflow from root snapshots. Small editor/manual
 changes may land independently rather than wait for a storage project.
 
 ### Immediate handoff
 
-1. **Keep the accepted baseline.** Unattended input is merged and parked;
-   Try Sensible has positive user validation. No new harness or generic desktop
-   retest is the immediate assignment.
-2. **Wrap up #11's implemented feature.** Installed KDE swap/compression and
-   VGA hibernate/resume validation are accepted. Keep the existing swapfile
-   sizing and resume parameters; document the virtio-GPU limitation rather
-   than changing storage to address it. Broader matrix/failure-injection
-   evidence and #8's Secure Boot guidance remain separate acceptance work.
-3. **Keep the other useful scopes visible.** #7 navigation, #9 pre-wipe safety,
-   Snapper recovery, KDE defaults and the AI manual are distinct follow-ups.
-   The reported KDE wallet error now has a separate cross-desktop bugfix scope
-   in #29, ahead of cosmetic KDE work; it is not evidence that autologin can
-   safely decrypt stored secrets without a supported unlock mechanism.
-   These scopes now have linked GitHub tickets in #28; use the existing issues
-   rather than creating duplicates when a slice is selected.
-4. **Maintain evidence without blocking development on automation.** Record
-   targeted #13/#6 checks as available and retain the release gate. No issue
-   closures, release publication or feature implementation are performed by
-   this planning update; issue creation only makes the backlog actionable.
+1. **Freeze the first-release scope.** Use the merged baseline and the draft
+   notes in [RELEASE.md](RELEASE.md); choose a candidate commit and retain both
+   image checksums after its builds pass. Do not reopen #4 or #11 implementation.
+2. **Use the accepted beta evidence.** The maintainer's three-machine hardware
+   report, earlier desktop/VM feedback and automated checks are sufficient for
+   this beta. Retain #5/#6 and targeted desktop checks as follow-ups; do not
+   require a new testing campaign or automation framework.
+3. **Triage failures against the release scope.** Keep the virtio-GPU limitation
+   explicit. Review #8/#9/#29 against actual candidate findings; fix a release
+   defect when demonstrated. Keep unrelated enhancements in the post-release
+   queue and preserve the existing wallet security model.
+4. **Prepare beta publication.** Select a beta tag, finish notes and artifact
+   checks, and configure GitHub pre-release status before using the existing
+   tag/repository-variable workflow. This reconciliation prepares the beta;
+   it does not publish one or assert that deferred checks passed.
 
 ### Recommendations: adopt, narrow or defer
 
@@ -243,7 +275,8 @@ configuration and desktop/login. Keep encrypted unlock input private. Record
 each case as pass/fail/blocked with the reason; unavailable Secure Boot or session
 checks must not silently pass. The first one-case PR builds the harness, not
 completion of #5; expand to eight storage/edition cases plus installed Secure
-Boot and archive evidence before closing that release gate.
+Boot and archive evidence before marking that broader coverage complete.
+This harness contract is follow-up work, not a first-beta prerequisite.
 
 **Sanitized profile export:** follow independently of merged #4; allowlist non-secret
 preferences, omit disk identifiers and password hashes as well as passwords,
@@ -353,7 +386,7 @@ Phase 1  Build harness (live-build ISO, TUI live session)
         → Phase 3  Hardware packages (firmware, PipeWire, GPU, fwupd)
             → Phase 4  Desktops + keyd + default apps
                 → Phase 5  CI and release plumbing
-                    → RELEASE GATE  Automated input + installed tests + hardware evidence
+                    → Earlier release gate (superseded for beta; see current decision below)
                         → Phase 6  Sensible extras (biometrics, shell, git, firewall)
 ```
 
@@ -392,9 +425,9 @@ desktop edition baked into the selected release image.
 - [x] Secure Boot: `shim-signed` + `grub-efi-amd64-signed` chain on the installed system (`grub-install` stages the signed chain + module tree under `/EFI/debian`)
 - [x] Secure Boot on the **live ISO** — native live-build `--uefi-secure-boot enable`, with an enforced OVMF Secure Boot smoke path (`SMOKE_FIRMWARE=sb`) that uses Microsoft keys and must reach the live session
 
-The real-install matrix (GNOME/KDE × Btrfs/Ext4 × LUKS on/off) remains
-unproved and is part of the release gate below. Unit and sourced-shell
-integration tests do not close that gap.
+The complete real-install matrix (GNOME/KDE × Btrfs/Ext4 × LUKS on/off)
+remains follow-up coverage. Unit and sourced-shell integration tests do not
+prove that matrix; the first beta uses maintainer acceptance on owned hardware.
 
 ---
 
@@ -406,8 +439,9 @@ Make the installed system useful on a real laptop **before** polishing the DE.
 - [x] `nvidia-driver` in the offline closure; NVIDIA detection enables its KMS argument
 - [x] Enable NetworkManager, bluetooth, `power-profiles-daemon`, `fwupd`
 
-Physical Intel and AMD smoke coverage is intentionally part of the release gate
-below, not an optional follow-up.
+The maintainer accepts completed checks on the Dell XPS 15 (2020), Lenovo
+Legion 7 15ASH11 and custom Ryzen desktop for the beta. Expanded per-device
+records and additional hardware coverage remain follow-up work.
 
 ---
 
@@ -433,7 +467,8 @@ below, not an optional follow-up.
       PDF export/printing, fonts/scaling, file defaults and user overrides.
       Measure image footprint and runtime memory; audit corresponding-source
       availability/notices for release redistribution. Fixture/container checks
-      do not establish visual fidelity or replace this release gate.
+      do not establish visual fidelity. Remaining detailed checks are follow-up
+      coverage under the accepted first-beta scope.
 
 Office preparation evidence (2026-09-06): the downloaded upstream `.deb` matches
 the release asset's SHA256. Real cached staging and installation into a fresh
@@ -449,15 +484,15 @@ the mechanism is unresolved and shutdown still needs checking in real sessions.
 - [x] Debian-packaged Chromium and the native GNOME/KDE media utilities are
       baked into their images; Brave and alternative apps remain post-install
 - [x] Do not preinstall Slack/Zoom/etc.
-- [ ] Implement the agreed [desktop profiles](DESKTOP_PROFILES.md): Shotwell /
-      digiKam, LocalSend, GNOME extensions, native KDE equivalents and reviewed
-      defaults. Keep optional theme and backup choices distinct from shipped scope.
+- [ ] Finish acceptance of the merged [desktop profiles](DESKTOP_PROFILES.md):
+      Shotwell/digiKam, LocalSend, GNOME extensions and reviewed defaults.
+      Native KDE configuration and backup choices remain post-release features.
   - [x] Application/dependency configuration: photo tools, pinned LocalSend,
         phone integration, management tools, explicit runtime deps and sharing rules.
   - [x] Both edition ISO builds and live UEFI smoke jobs pass for PR #16.
   - [ ] Complete targeted offline app startup and actual discovery/transfer
         checks with UFW enabled. Both editions have positive user validation;
-        record itemized results and image/resource impact before release.
+        retain itemized results and image/resource impact as follow-up coverage.
   - [x] GNOME profile image configuration: curated extension activation,
         build-validated pins/dependencies, titlebar buttons and privacy-conscious
         fresh-user defaults. These are dconf defaults, not locks.
@@ -489,21 +524,24 @@ the mechanism is unresolved and shutdown still needs checking in real sessions.
 
 ## Phase 5 — CI and release plumbing
 
-- [x] `.github/workflows/build-iso.yml`: container `live-build`, APT cache, QEMU UEFI boot smoke, and direct, unarchived ISO + SHA256 artifacts
+- [x] `.github/workflows/build-iso.yml`: container `live-build`, APT cache, QEMU UEFI boot smoke, and direct, unarchived CI ISO + SHA256 artifacts; tag builds retain and seed the ISO outside the checkout
 - [x] Scheduled rebuilds so Testing does not rot
-- [x] Tag-only GitHub Release job attaches both variant ISOs + SHA256 files, isolated from PR-controlled code and gated by repository variable `SENSIBLE_RELEASE_READY == 'true'`
+- [x] Tag-only GitHub Release job attaches both editions' torrents, magnet-link files and ISO SHA256 files, isolated from PR-controlled code and gated by repository variable `SENSIBLE_RELEASE_READY == 'true'`
 
-The job existing is not approval to publish. Keep
-`SENSIBLE_RELEASE_READY` unset or `false` until every release-gate item below
-has evidence for the candidate ISO.
+The first beta uses the acceptance decision in [RELEASE.md](RELEASE.md).
+`SENSIBLE_RELEASE_READY` remains the final publication switch; the exhaustive
+matrix is no longer a prerequisite for this beta. Configure GitHub pre-release
+status and finish artifact checks before publication.
 
 ---
 
 ## Release gate: Beginner journey and reliability
 
-This phase blocks release publication and comes before extras or visual
-redesign. Fix the underlying behavior first; a friendlier screen cannot make an
-unsafe disk operation reliable.
+**First-beta decision, 2026-09-14:** the maintainer accepts testing completed
+on the three owned machines recorded in [RELEASE.md](RELEASE.md). This replaces
+the earlier exhaustive release gate for the beta. The implemented safety
+mechanisms below remain; broader unchecked scenarios are follow-up coverage.
+Only beta publication preparation remains, not another test campaign.
 
 - [x] **Offline before wipe:** the complete target closure is baked into the ISO, so no mirror check or package download can first fail after the old system is erased
 - [x] **Keyboard before secrets:** choose and apply the live keyboard layout before NetworkManager Wi-Fi credentials, the LUKS passphrase, or the account password; use that same layout in initramfs. A dedicated visual typing test belongs to the UI pass
@@ -511,18 +549,17 @@ unsafe disk operation reliable.
 - [x] **Owned cleanup and live sanitization:** track mounts and mappings created by this installer run and clean only those resources; remove live autostart, commands, branding, packages/state, staged source, and reused machine identity from the target
 - [x] **Truthful failures and logs:** critical failures produce failure rather than success; non-critical skipped choices are summarized; terminal/package output is retained in sudo-readable `/var/log/sensible-install.log` and copied to the target, including post-wipe failure cleanup when possible
 - [x] **Beginner install guide:** `docs/INSTALL.md` covers release download/checksum, trusted USB writing, requirements, destructive scope, offline flow, choices, first boot, updates, and honest support/log expectations
-- [x] **Automated install input (source/fixture evidence):** protected `--config answers.toml` input, shared validation, explicit `confirm_wipe = true`, unchanged disk revalidation and exit-only completion; all eight mocked config combinations and failure-path regressions. See [INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode). Real ISO execution remains part of the installed-disk gate below.
-- [ ] **Real QEMU installed-boot matrix:** install each GNOME/KDE release image onto fresh virtual disks for Btrfs/Ext4 × LUKS on/off, then boot from those installed disks under UEFI (not the ISO); verify expected partitions, mounts, `fstab`/`crypttab`, swap/resume arguments, desktop/login, and the LUKS prompt where applicable. Include an installed-system Secure Boot boot
-- [ ] **Physical hardware smoke:** install and first-boot the candidate on at least one Intel and one AMD amd64 UEFI machine; record disk selection, wired/Wi-Fi, graphics, audio input/output (`sensible-audio-check` output, internal speakers and headphones separately), suspend/resume, Secure Boot state, and `fwupd` detection. Document hardware unavailable for a check rather than silently treating it as passed
-- [ ] **Release decision:** archive the candidate ISO checksum and matrix/hardware results, review all failures and warnings, then and only then set `SENSIBLE_RELEASE_READY` to `true` for the release tag
+- [x] **Automated install input (source/fixture evidence):** protected `--config answers.toml` input, shared validation, explicit `confirm_wipe = true`, unchanged disk revalidation and exit-only completion; all eight mocked config combinations and failure-path regressions. See [INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode). Broader real ISO execution remains follow-up coverage.
+- [ ] **Follow-up: full QEMU installed-boot matrix (#5), not beta-blocking:** install each GNOME/KDE release image onto fresh virtual disks for Btrfs/Ext4 × LUKS on/off, then boot from those installed disks under UEFI (not the ISO); verify expected partitions, mounts, `fstab`/`crypttab`, swap/resume arguments, desktop/login, and the LUKS prompt where applicable. Include an installed-system Secure Boot boot
+- [x] **Beta hardware acceptance:** maintainer reports all necessary checks completed on Dell XPS 15 (2020), Lenovo Legion 7 15ASH11, and a custom Ryzen 7 7800X3D / 64 GB RAM / Radeon RX 7800 XT desktop. Accepted as sufficient for this beta on 2026-09-14.
+- [ ] **Follow-up: expanded hardware records (#6):** retain per-machine image identities, edition/storage/firmware settings and itemized device results as available; broader coverage does not block this beta.
+- [ ] **Beta publication:** select the version/tag, finish existing CI and checksum checks, finalize known limitations and mark the GitHub release as a pre-release when publishing through `SENSIBLE_RELEASE_READY`.
 
-Partial implementation does not earn a check. The remaining unchecked items
-require release-candidate virtual or physical installation evidence.
-
-Release-blocking work is tracked in [#4: automated input](https://github.com/korq-apps/sensible/issues/4),
-[#5: installed-disk QEMU matrix](https://github.com/korq-apps/sensible/issues/5)
-(depends on #4), and [#6: physical hardware evidence](https://github.com/korq-apps/sensible/issues/6).
-The final release decision still requires candidate checksums and reviewed results.
+Unchecked follow-up items do not imply a failed beta acceptance decision and
+are not marked as tested. #5/#6 keep their original detailed scopes as broader
+coverage work; their existing GitHub release-blocker titles predate this beta
+decision and have not been updated remotely. [#4](https://github.com/korq-apps/sensible/issues/4)
+is implemented in PR #17; its open issue does not mean the input feature is missing.
 
 Additional follow-ups: [#7: back-navigation](https://github.com/korq-apps/sensible/issues/7),
 [#8: Secure Boot/hibernation messaging](https://github.com/korq-apps/sensible/issues/8),
@@ -532,8 +569,7 @@ kernel/initramfs pairs; it does not validate the complete desktop/asset set.
 
 **Later UI work:** after the safety mechanics above are implemented and tested,
 add a guided/recommended path that explains defaults and keeps an advanced path
-for explicit choices. The broader UI redesign may follow; it must not be used
-to defer or waive this release gate.
+for explicit choices. The broader UI redesign is post-beta work.
 
 ---
 
@@ -676,13 +712,14 @@ These are user-facing candidates in the proposed queue, not gated on building
 an unattended harness first. Their own real-system acceptance is still required.
 
 - **Hybrid ZRAM and disk swap ([#11](https://github.com/korq-apps/sensible/issues/11)).**
-  Implemented on `feat/zram-swap` as compressed RAM swap ahead of the persistent
+  Merged in PR #33 (`58b1d02`) as compressed RAM swap ahead of the persistent
   RAM-sized swapfile, not instead of it. Installed KDE swap/compression and
   VGA hibernate/resume validation were accepted on 2026-09-13; the reproduced
   virtio-GPU stall is a display-driver limitation, not a swap-sizing blocker.
-  Retain the disk-backed hibernation target. Broader storage/hardware,
-  controlled-pressure and failure-injection coverage is not implied by this
-  result. Coordinate Secure Boot messaging with #8. This
+  Retain the disk-backed hibernation target. The PR's merge checklist additionally
+  reports controlled pressure, failure fallback and shutdown checks complete;
+  per-edition/layout comparisons and the full release matrix remain separate.
+  Coordinate Secure Boot messaging with #8. This
   is independent of Btrfs snapshots; do not combine both storage changes in one PR.
 - **Separate follow-up after desktop apps: Btrfs snapshots and recovery ([#19](https://github.com/korq-apps/sensible/issues/19)).**
   Configure Snapper only when Btrfs is selected; leave Ext4 unchanged. Reuse the
@@ -720,10 +757,10 @@ an unattended harness first. Their own real-system acceptance is still required.
 | Initramfs unlock / Plymouth fail | Unencrypted `/boot`; crypttab only; `update-initramfs -u -k all`; release-gate QEMU LUKS installs |
 | Target disk changes between selection and wipe | Stable identity plus immediate pre-wipe revalidation; block release until destructive-device tests pass |
 | Offline closure is incomplete | Validate every Debian package at build time and fail closed if the archive query itself fails |
-| Mocked tests hide an unbootable install | Real GNOME/KDE × Btrfs/Ext4 × LUKS on/off installed-disk QEMU matrix is release-blocking |
+| Mocked tests hide an unbootable install | Beta uses maintainer hardware and installed-VM acceptance; expand the real installed-disk matrix as follow-up coverage |
 | Brave or AI CLIs add untrusted install paths | Official optional install routes; any approved AI image artifacts require pins, license/dependency review and an installed-system update path ([AI_TOOLS.md](AI_TOOLS.md)) |
 | BioPass is young third-party PAM code (Phase 6) | Checkbox off by default; pinned `.deb` + SHA256; PAM via `pam-auth-update` so removal is clean; `fprintd` covers fingerprint without it |
 | Pinned artifacts rot (BioPass, Nerd Font, oh-my-bash, LazyVim) | Versions + SHA256 recorded in one place; CI fails loudly when a pin 404s |
 | live-build silently skips misnamed hooks | Hooks must match `*.hook.{chroot,binary}`; unit test enforces the naming |
 | Live ISO too large | Keep separate GNOME/KDE images and review every addition to the baked offline closure |
-| Release variable is enabled without evidence | Treat matrix/hardware records as the gate; the variable is only the final switch, never proof by itself |
+| Release variable is enabled without evidence | Record the beta acceptance decision, build/checksum results and known limitations; the variable is the publication switch |
