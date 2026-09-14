@@ -39,6 +39,7 @@ assert_file_exists "magnet exported for release" "$iso.magnet.txt"
 stored="$fixture/seeds/v1.0.0-beta.1/gnome/$(basename "$iso")"
 cmp "$iso" "$stored"
 assert_rc "seeded ISO is byte-identical" 0 $?
+assert_file_contains "download directory is scoped to the pending torrent add" "$SEED_TEST_LOG" "--add $stored.torrent --download-dir ${stored%/*}"
 assert_file_contains "only release torrent gets ratio override" "$SEED_TEST_LOG" '--torrent 0123456789abcdef0123456789abcdef01234567 --no-seedratio --no-idle-seeding-limit --verify'
 bash "$script" "$iso" v1.0.0-beta.1 "$fixture/seeds" > "$fixture/output" 2>&1
 assert_rc "same bytes may be seeded again" 0 $?

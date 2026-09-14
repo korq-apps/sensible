@@ -44,7 +44,8 @@ hash="$(grep -oE 'btih:[[:xdigit:]]{40}' <<< "$magnet" | cut -d: -f2)"
 printf '%s\n' "$magnet" > "$destination/$name.magnet.txt"
 
 # Apply limits only to this release torrent; preserve the daemon's global policy.
-transmission-remote --download-dir "$destination" --add "$torrent"
+# Transmission applies --download-dir to the pending add only when --add comes first.
+transmission-remote --add "$torrent" --download-dir "$destination"
 transmission-remote --torrent "$hash" --no-seedratio --no-idle-seeding-limit --verify
 transmission-remote --torrent "$hash" --start
 deadline=$((SECONDS + 600))
