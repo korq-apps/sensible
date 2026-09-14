@@ -3,14 +3,15 @@
 ## Where we are
 
 **Scope reconciliation (2026-09-14, baseline `58b1d02`):** the implementation
-has moved beyond the original v1 plan and is entering **first-beta release
-preparation**. The maintainer confirms all necessary checks are complete on
+has moved beyond the original v1 plan. The first official beta,
+[**v1.0.0-beta.1**](https://github.com/korq-apps/sensible/releases/tag/v1.0.0-beta.1), is published.
+The maintainer confirms all necessary checks are complete on
 owned hardware: Dell XPS 15 (2020), Lenovo Legion 7 15ASH11, and a custom
 Ryzen 7 7800X3D desktop with 64 GB RAM and Radeon RX 7800 XT.
 **Beta acceptance is complete by maintainer decision.** The exhaustive matrix
 and expanded hardware/desktop checklist are follow-up coverage, not beta
 publication blockers. This supersedes the earlier release-gate requirements.
-Freeze the feature scope around the merged baseline and prepare publication.
+The published source is `ed3db23`; subsequent work follows the feature queue below.
 “v1” (initial installer) and “v2”
 (offline rework) were planning labels; neither defines today's feature boundary
 or establishes a completed release. Current scope includes offline GNOME/KDE
@@ -22,8 +23,8 @@ beta scope remains separately tracked below.
 
 ZRAM is merged in PR #33; the autologin prompt is merged in PR #32, alongside
 the wallet documentation in #30/#31 and firmware/second-disk guidance in #34.
-The [first-release checklist and draft notes](RELEASE.md) separate the selected
-scope, accepted hardware testing, follow-up coverage and publication steps.
+The [first-release record](RELEASE.md) separates the published scope, accepted
+hardware testing, final artifact checks and follow-up coverage.
 Deferred checks remain unclaimed rather than becoming beta requirements.
 
 Phases 1-5 are implemented. The project has since pivoted to an **offline
@@ -41,7 +42,7 @@ than asked, and third-party software leaves the install path entirely.
 | Unattended input (#4) | merged in PR #17 (`553ad1d`); protected TOML/secret files and config-driven integration coverage; real `--config` acceptance belongs to #5 |
 | Installer/VM diagnostics | merged in PR #17; bounded pre-cleanup evidence and host export, original failure preserved; real guest failure/export acceptance remains |
 | Live desktop and audio | merged in PR #18 (`aa1c44e`); user confirms Try Sensible works as expected; specific installed-security and physical-audio checks remain separate |
-| First beta | maintainer accepts completed testing on three owned machines; ready for publication preparation, with existing build/checksum checks retained; exhaustive matrix and expanded hardware records are follow-ups |
+| First beta | `v1.0.0-beta.1` published from `ed3db23`; both seeded ISO builds and live boot checks passed; maintainer testing on three owned machines accepted; exhaustive matrix and expanded hardware records remain follow-ups |
 | Hybrid ZRAM swap (#11) | merged in PR #33 (`58b1d02`); installed KDE swap/compression and VGA hibernate/resume accepted; PR merge checklist additionally records pressure, failure fallback and shutdown checks; per-edition/layout comparisons remain |
 | Wallet/keyring first use (#29) | source diagnosis and manual guidance merged in #30/#31; autologin explanation merged in #32; fresh-session/PAM acceptance and optional boot-secret reuse remain distinct |
 | Phase 6 extras | re-scoped below: baked into the ISO, or moved to the post-install tool |
@@ -53,7 +54,7 @@ the next automation/harness slice. The existing #4 implementation and diagnostic
 transport stay in place. The user confirms Try Sensible works as expected; do
 not schedule another generic live-desktop validation pass as the next feature.
 
-**Current priority (2026-09-14): first official beta release.** Keep hybrid ZRAM and
+**Current priority (2026-09-14): beta feedback and post-release work.** Keep hybrid ZRAM and
 the persistent swapfile as implemented. The reproduced virtio-GPU resume stall
 is a documented compatibility limit; the accepted VGA result does not require
 changing swap sizing or GRUB resume configuration. New navigation, snapshots,
@@ -73,23 +74,18 @@ The agreed scope and evidence are in [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md).
 
 ## Reconciled priorities
 
-**Updated 2026-09-14:** release preparation now takes precedence over the
-feature queue below. Hardware acceptance for the beta is confirmed; finish
-build/artifact checks, beta notes and publication setup. Broader validation is
-follow-up work. The numbered phases retain implementation history.
+**Updated 2026-09-14:** the first beta is published. Triage beta feedback against
+the documented scope, then follow the feature queue below. Broader validation
+remains follow-up work. The numbered phases retain implementation history.
 
-**Current GitHub snapshot:** PR #33 is merged. Its final
-[CI run](https://github.com/korq-apps/sensible/actions/runs/34783736035)
-passed unit/integration tests, GNOME/KDE ISO builds and both ordinary UEFI and
-Secure Boot live smoke checks; publication was skipped. The preceding `main`
-[build at `c6bdbc6`](https://github.com/korq-apps/sensible/actions/runs/34783417313)
-passed. The new `main` [build at `58b1d02`](https://github.com/korq-apps/sensible/actions/runs/34821712306)
-was queued when checked. GitHub returned no releases visible to the current
-account. The publication variable could not be read (HTTP 403), so its value is
-unknown. Issues #4–#9, #11, #13 and #19–#29 are open; #5/#6 have no added
-acceptance comments. #4 and #11 need issue-status reconciliation with their
-merged implementations, not repeat implementation. #13 and #29 retain targeted
-acceptance. No remote issue state is changed by this document update.
+**Current GitHub snapshot:** `v1.0.0-beta.1` is published as a pre-release from
+`ed3db23`. Its [tag build](https://github.com/korq-apps/sensible/actions/runs/34828166637) passed all 20 test suites, both ISO builds,
+and ordinary UEFI and Secure Boot live smoke checks for both editions. Both
+ISOs are seeded by the runner; GitHub carries their torrent, magnet and checksum
+files. `SENSIBLE_RELEASE_READY` is enabled. PR #33 and the subsequent main build
+at `58b1d02` also passed. Issues #4 and #11 still need status reconciliation with
+their merged implementations; #5/#6 retain broader follow-up coverage. Remote
+issue state has not been changed by release publication.
 
 **Historical snapshot, 2026-09-10:** after
 [PR #17](https://github.com/korq-apps/sensible/pull/17) (`553ad1d`) and
@@ -168,9 +164,9 @@ changes may land independently rather than wait for a storage project.
 
 ### Immediate handoff
 
-1. **Freeze the first-release scope.** Use the merged baseline and the draft
-   notes in [RELEASE.md](RELEASE.md); choose a candidate commit and retain both
-   image checksums after its builds pass. Do not reopen #4 or #11 implementation.
+1. **Preserve the published release.** Keep `v1.0.0-beta.1`, its retained ISO
+   bytes and checksums immutable; use [RELEASE.md](RELEASE.md) for its source and
+   validation record. Do not reopen #4 or #11 implementation.
 2. **Use the accepted beta evidence.** The maintainer's three-machine hardware
    report, earlier desktop/VM feedback and automated checks are sufficient for
    this beta. Retain #5/#6 and targeted desktop checks as follow-ups; do not
@@ -179,10 +175,9 @@ changes may land independently rather than wait for a storage project.
    explicit. Review #8/#9/#29 against actual candidate findings; fix a release
    defect when demonstrated. Keep unrelated enhancements in the post-release
    queue and preserve the existing wallet security model.
-4. **Prepare beta publication.** Select a beta tag, finish notes and artifact
-   checks, and configure GitHub pre-release status before using the existing
-   tag/repository-variable workflow. This reconciliation prepares the beta;
-   it does not publish one or assert that deferred checks passed.
+4. **Maintain beta delivery.** Keep the runner seeding both editions. R2 and
+   Internet Archive remain optional direct-download mirrors; verify their ISO
+   checksums before linking them. Fixes and rebuilt images use a new beta tag.
 
 ### Recommendations: adopt, narrow or defer
 
@@ -530,8 +525,8 @@ the mechanism is unresolved and shutdown still needs checking in real sessions.
 
 The first beta uses the acceptance decision in [RELEASE.md](RELEASE.md).
 `SENSIBLE_RELEASE_READY` remains the final publication switch; the exhaustive
-matrix is no longer a prerequisite for this beta. Configure GitHub pre-release
-status and finish artifact checks before publication.
+matrix is no longer a prerequisite for this beta. `v1.0.0-beta.1` is published
+as a pre-release with both edition artifacts verified and seeded.
 
 ---
 
@@ -541,7 +536,7 @@ status and finish artifact checks before publication.
 on the three owned machines recorded in [RELEASE.md](RELEASE.md). This replaces
 the earlier exhaustive release gate for the beta. The implemented safety
 mechanisms below remain; broader unchecked scenarios are follow-up coverage.
-Only beta publication preparation remains, not another test campaign.
+Beta publication is complete; further coverage follows testing and feedback.
 
 - [x] **Offline before wipe:** the complete target closure is baked into the ISO, so no mirror check or package download can first fail after the old system is erased
 - [x] **Keyboard before secrets:** choose and apply the live keyboard layout before NetworkManager Wi-Fi credentials, the LUKS passphrase, or the account password; use that same layout in initramfs. A dedicated visual typing test belongs to the UI pass
@@ -553,7 +548,7 @@ Only beta publication preparation remains, not another test campaign.
 - [ ] **Follow-up: full QEMU installed-boot matrix (#5), not beta-blocking:** install each GNOME/KDE release image onto fresh virtual disks for Btrfs/Ext4 × LUKS on/off, then boot from those installed disks under UEFI (not the ISO); verify expected partitions, mounts, `fstab`/`crypttab`, swap/resume arguments, desktop/login, and the LUKS prompt where applicable. Include an installed-system Secure Boot boot
 - [x] **Beta hardware acceptance:** maintainer reports all necessary checks completed on Dell XPS 15 (2020), Lenovo Legion 7 15ASH11, and a custom Ryzen 7 7800X3D / 64 GB RAM / Radeon RX 7800 XT desktop. Accepted as sufficient for this beta on 2026-09-14.
 - [ ] **Follow-up: expanded hardware records (#6):** retain per-machine image identities, edition/storage/firmware settings and itemized device results as available; broader coverage does not block this beta.
-- [ ] **Beta publication:** select the version/tag, finish existing CI and checksum checks, finalize known limitations and mark the GitHub release as a pre-release when publishing through `SENSIBLE_RELEASE_READY`.
+- [x] **Beta publication:** `v1.0.0-beta.1` published as a GitHub pre-release from `ed3db23`; tag CI, retained ISO checksums, seeded torrent pieces and published metadata verified. Known limitations accompany the release.
 
 Unchecked follow-up items do not imply a failed beta acceptance decision and
 are not marked as tested. #5/#6 keep their original detailed scopes as broader

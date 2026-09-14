@@ -1,12 +1,14 @@
 # First official beta release
 
-Status as of **2026-09-14**, reviewed source baseline **`58b1d02`**:
-**ready for beta release preparation; hardware acceptance complete by maintainer
-confirmation, publication pending.** The first official release is a **beta**.
-On 2026-09-14 the maintainer confirmed that all necessary checks were completed
-on the hardware available to them and explicitly removed the exhaustive test
-matrix as a prerequisite for this beta. That decision supersedes the earlier
-release checklist. The proposed first tag is `v1.0.0-beta.1`; it has not been created yet.
+Status as of **2026-09-14**: [**v1.0.0-beta.1 is published**](https://github.com/korq-apps/sensible/releases/tag/v1.0.0-beta.1)
+as a GitHub **pre-release**, from source commit
+`ed3db234d8ae34da883186457800f47121a872d2`. GNOME and KDE are available as intact
+ISO files over BitTorrent, seeded by the project's runner.
+
+The maintainer confirmed that all necessary checks were completed on owned
+hardware and accepted that evidence for this first beta. The exhaustive test
+matrix remains follow-up coverage; it is not a beta prerequisite. This decision
+supersedes the earlier release checklist.
 
 ## Scope reconciliation
 
@@ -27,28 +29,52 @@ post-release features. Broader pre-wipe validation (#9), Secure Boot messaging
 an actual safety or supported-path failure takes precedence over this scope freeze.
 An open roadmap issue alone does not make every enhancement a release requirement.
 
-## Evidence at reconciliation
+## Evidence and publication record
 
-- All **19 local test suites pass** at `58b1d02`, including **684 installer-flow
-  assertions**. Disk commands in that suite are mocked.
+- The [tag build](https://github.com/korq-apps/sensible/actions/runs/34828166637) at `ed3db23` passed all **20 test suites**, including
+  **684 installer-flow assertions** and the release-seeding suite. Disk commands
+  in the installer-flow suite are mocked. Both edition builds and their ordinary
+  UEFI and Secure Boot live smoke checks passed.
+- Both complete ISOs were SHA256-checked before retention and fully verified by
+  Transmission. A 2 MiB piece from each was transferred from the runner over
+  BitTorrent and checked against its torrent piece hash. This transfer check was
+  over the LAN; Transmission separately reported the public peer port open.
+- GitHub's six published assets (torrent, magnet text and ISO SHA256 per edition)
+  were downloaded and checked against the retained seed metadata. The torrent
+  names, sizes, piece counts and magnet infohashes were validated.
 - [PR #33 CI](https://github.com/korq-apps/sensible/actions/runs/34783736035)
   passed tests, GNOME/KDE builds, and ordinary UEFI and Secure Boot live smoke
   for both images. Publication was skipped.
 - The preceding [main build at `c6bdbc6`](https://github.com/korq-apps/sensible/actions/runs/34783417313)
   passed. The [post-merge build at `58b1d02`](https://github.com/korq-apps/sensible/actions/runs/34821712306)
-  was **queued** when checked; the PR build is not a completed candidate build.
+  also passed. The tag build above identifies the published candidate.
 - Earlier user reports accept GNOME, KDE and Try Sensible. Recorded installed
   KDE validation covers ZRAM/swap and VGA hibernate/resume. PR #33 additionally
   marks controlled pressure/spillover, failure fallback and shutdown checks
   complete; its per-edition/layout comparison remains unchecked. Preserve the
   exact scope and older image identities in the [validation record](PLAN.md#validation-snapshot-updated-2026-09-14).
-- GitHub returned no releases visible to the current account. Reading
-  `SENSIBLE_RELEASE_READY` returned HTTP 403; its current value is **unknown**.
+- `SENSIBLE_RELEASE_READY` is enabled. The published GitHub release is explicitly
+  marked as a pre-release; the tag identifies the source and the asset checksums
+  identify the final image bytes.
 - #4 and #11 remain open despite merged implementations. #13 owns remaining
   GNOME evidence; #29 includes merged source diagnosis and first-use guidance
   with further session coverage retained as follow-up work. #5/#6 remain open
   under their older release-blocker titles; the beta decision below supersedes
   that classification locally. Remote issues have not been updated.
+
+### Published image identities
+
+Both files belong to `v1.0.0-beta.1` from `ed3db23`:
+
+| Edition | ISO bytes | BitTorrent infohash |
+| :--- | ---: | :--- |
+| GNOME | 3,841,982,464 | `14236c2601cf0b5e576e9b0370a17662fdc48495` |
+| KDE | 4,347,205,632 | `beed113cbc8a89b42d9aa1164e18e32e40860c5c` |
+
+```text
+b4bdf229bc3a980b195562551a1b72e6add2bffa842a3e82e7aa5891e5264a9b  sensible-gnome-debian-testing-amd64.iso
+bafd5dfef29c58113f950259057704998ea285425bf91598658299e877cc2120  sensible-kde-debian-testing-amd64.iso
+```
 
 ## Tested hardware and beta acceptance
 
@@ -77,10 +103,10 @@ reported defects should be triaged for fixes or release-note updates.
 
 - [x] Maintainer accepts the first-beta scope and testing completed on owned hardware.
 - [x] Record the tested hardware and known limitations.
-- [ ] Finalize `v1.0.0-beta.1` and its source commit.
-- [ ] Complete the selected build's existing CI checks and retain both edition
+- [x] Finalize `v1.0.0-beta.1` at `ed3db234d8ae34da883186457800f47121a872d2`.
+- [x] Complete the selected build's existing CI checks and retain both edition
   ISO files with matching SHA256 files.
-- [ ] Finalize these beta notes and publish as a GitHub **pre-release**, using
+- [x] Finalize these beta notes and publish as a GitHub **pre-release**, using
   the existing tag/publication gate. Do not present the beta as a stable release.
 
 No new hardware campaign, exhaustive matrix or automation framework is required
@@ -108,7 +134,7 @@ and a custom Ryzen 7 7800X3D desktop with 64 GB RAM and Radeon RX 7800 XT.
 This is a beta with testing concentrated on those machines; broader hardware
 and configuration coverage will follow through testing and feedback.
 
-Known limits to retain in the published notes:
+Known limitations:
 
 - Installation erases the selected disk. Same-disk OS preservation, manual
   partition editing, legacy BIOS and non-amd64 systems are unsupported.
@@ -135,12 +161,13 @@ excluded by the maintainer's decision. The latest PR build produced roughly
 The inspected local GNOME SquashFS already uses XZ compression. Further size
 work may help, but fitting both images below 2 GiB has not been demonstrated.
 
-The recommended first-beta route is one torrent per intact ISO, seeded by the
+The published first beta uses one torrent per intact ISO, seeded by the
 existing `it-m5plus` runner, with `.torrent` and SHA256 files attached to GitHub.
 Read-only checks on 2026-09-14 confirmed that its Transmission service is active,
 peer port 51414 reports open, DHT/peer exchange are enabled, and about 242 GB is
 free on the root filesystem. Keep release copies outside the CI checkout so
-build cleanup cannot remove seeded files. No torrents were added by this check.
+build cleanup cannot remove seeded files. Both release torrents are now retained
+and seeding from that location.
 
 Cloudflare R2 is the preferred optional direct-download mirror. The current
 pair totals about 8.19 GB, within the Standard free allowance of 10 GB-month,
@@ -160,29 +187,47 @@ explains that importing our torrent does not make Archive a seed for that
 original torrent: it creates a separate Archive torrent. Keep edition/version
 artifacts immutable and verify mirror checksums before linking them.
 
-The prepared tag workflow retains each verified ISO outside the CI checkout,
+The tag workflow retains each verified ISO outside the CI checkout,
 creates a torrent and waits for Transmission to report complete, error-free
 seeding. Its publication job attaches both torrents, magnet-link text files and
-SHA256 files. R2/Archive accounts have not been configured; no tag or release
-has been published yet.
+SHA256 files. R2/Archive mirrors have not been configured.
 
-The publishable notes are in [v1.0.0-beta.1.md](releases/v1.0.0-beta.1.md).
+The published notes are in [v1.0.0-beta.1.md](releases/v1.0.0-beta.1.md).
 
-## Publication handoff
+## Seed maintenance
 
-1. Select a beta version/tag and source commit, then finalize the notes with
-   the tested hardware and known limitations. Maintainer hardware acceptance is
-   already recorded above.
-2. Use the existing workflow's `v*` tag and `SENSIBLE_RELEASE_READY` publication
-   switch. Recheck the variable with an account able to read it. Ensure the
-   GitHub release is marked **pre-release**. The prepared workflow changes
-   set that flag for a prerelease tag; they are not committed or active yet.
-3. The tag workflow builds fresh images from Debian Testing and seeds them
-   from `/srv/storage/sensible-releases/<tag>/<edition>/`. Keep the tag-run
-   build and smoke results and the published checksums as the artifact record;
-   do not attribute those exact bytes to earlier hardware tests.
-4. Verify both intact ISO downloads and their SHA256 files, and attach the
-   beta notes and download links. Broader test coverage stays in the follow-up backlog.
+The runner retains release files under
+`/srv/storage/sensible-releases/<tag>/<edition>/`, outside its disposable CI
+checkout. Keep the ISO, checksum, torrent and magnet file together. Transmission
+starts on boot; release torrents have their ratio and idle-seeding limits
+disabled individually. Its existing download directory and other torrents keep
+their settings.
 
-This document prepares the beta. It does not create a tag, enable publication,
-close issues or claim an official release already exists.
+To inspect a release torrent on `it-m5plus`, use
+`transmission-remote --torrent <infohash> --info`. A healthy retained release
+must have all bytes verified and be seeding without an error. The daemon's
+local peer listener is TCP/UDP 51413; it currently reports external port 51414
+and a successful public port test. Preserve the router mapping when moving or
+reconfiguring the host.
+
+The public tracker reported a seed for each torrent, but peer-list requests
+also timed out during publication checks. DHT and peer exchange are enabled.
+The verified piece transfers above establish LAN serving; an independent
+internet download was not performed.
+
+Back up the small release metadata along with the retained ISO. A rebuild from
+Debian Testing can produce different bytes even at the same source tag;
+`scripts/seed-release.sh` refuses to replace an existing tag's ISO with different
+bytes. Recovery should restore the original ISO and verify its published SHA256.
+Changed images belong to a new release tag.
+
+## Subsequent releases
+
+1. Select a new version/tag and source commit, then finalize its release notes.
+   Retain the accepted hardware evidence and update known limitations from feedback.
+2. Use the workflow's `v*` tag trigger and `SENSIBLE_RELEASE_READY` publication
+   switch. Beta tags must remain GitHub pre-releases.
+3. Retain the tag-run build/smoke results and published checksums as the artifact
+   record. Do not attribute freshly rebuilt bytes to earlier hardware tests.
+4. Verify the retained seed and published metadata. Add direct-download mirrors
+   only after their intact ISO checksums match the existing release.
