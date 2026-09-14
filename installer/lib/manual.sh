@@ -7,6 +7,9 @@ require_manual_payload() {
         usr/share/sensible/manual/applications.html \
         usr/share/sensible/manual/terminal-tools.html \
         usr/share/sensible/manual/manual.css \
+        usr/share/sensible/manual/assets/sensible-logo-light.svg \
+        usr/share/sensible/manual/assets/sensible-logo-dark.svg \
+        usr/share/sensible/manual/assets/sensible-favicon.svg \
         usr/share/sensible/manual/sensible-manual-autostart.desktop \
         usr/share/applications/sensible-manual.desktop \
         usr/local/bin/sensible-manual; do

@@ -1,4 +1,9 @@
-# Sensible
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/svg/sensible-logo-dark.svg">
+    <img src="assets/brand/svg/sensible-logo-light.svg" alt="Sensible" width="420">
+  </picture>
+</h1>
 
 **Sensible** (aka **Lazydeb**) is a Debian Testing remix — installer tooling, not a fork. A Korq project. For first-time Debian users and anyone too lazy to fight `debian-installer`.
 
