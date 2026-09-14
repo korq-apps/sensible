@@ -15,6 +15,19 @@ python3 -c 'import sys, tarfile, tomllib; sys.exit(0 if sys.version_info >= (3, 
 ```
 
 No third-party Python packages are needed for the fixture tests.
+The setup-form suite includes Linux PTY checks for static styling followed by
+hostname/password input, preserved typeahead and non-fatal styling failure.
+Its Gum double models the stdout-terminal background query; for an additional
+check against the Gum 0.17 binary extracted from the ISO package, run:
+
+```bash
+SENSIBLE_TEST_GUM=/absolute/path/to/extracted/usr/bin/gum python3 tests/lib/check_terminal.py
+```
+
+This does not replace a live Konsole/console retest. The mitigation routes only
+static `gum style` output through a pipe, without changing `TERM`, discarding
+pending input, or filtering characters from answers.
+
 Theme fixture tests double `sassc`; real theme builds require the builder's
 `sassc` package as well as Python.
 
@@ -100,6 +113,7 @@ and path confinement even for a known reference.
 | `audio_test.sh` | Audio closure packages (UCM, ALSA tools, amplifier/DSP firmware) and their placement outside the documented app set; `sensible-audio-check` against fixture sysroots with mocked journal, PipeWire and ALSA: healthy Legion 7 15ASH11, per-model amplifier tuning missing from the firmware snapshot (log or codec-ID based, compressed files), CS35L41 generic-tuning note, unbound amplifier (missing kernel quirk), SoundWire board without an HDA codec, unreadable log, missing firmware files mapped to packages, no sound card, missing UCM/tools, session mute/zero/no-sink/inactive, mixer mute without the headphone switch, `--unmute` writes and the read-only default; the installer's warning helper |
 | `live_desktop_test.sh` | `sensible-live-desktop` against fixture roots: inert on the console entry, GNOME lock-off and dash pinning without duplicates, KDE lock-off, desktop icon and SDDM session completion, live username from the kernel command line, and degraded roots that never block the display manager |
 | `verify_test.sh` | Installed boot artifacts and extracted initramfs mapping/source identity, including stale UUIDs and literal mapping-name matching |
+| `zram_test.sh` | Hybrid ZRAM swap (#11): `zram-tools` in the offline closure outside the manual-checked app section, the explicit `/etc/default/zramswap` values, swapfile `pri=` below the ZRAM priority in both fstab layouts, unchanged resume handling, and non-fatal service enablement |
 
 ### Integration test (`tests/integration/installer_flow_test.sh`)
 
@@ -115,6 +129,9 @@ function mock that records its invocation. Asserts, per scenario:
 - Ext4 + no LUKS on the raw root partition
 - Live-copy deploy path: API mountpoints remain available while live-only installer artifacts are removed
 - Completion: stay-live, successful reboot request, and failed reboot fallback
+- ZRAM: a failed `zramswap.service` enablement on the target reaches the
+  completion summary as a warning while the install, swapfile and resume
+  configuration complete normally
 - Aborts: undersized/no-disk, failed partition-table reread, missing partition devices before formatting, surviving live initramfs diversion, missing cryptsetup closure, declined destructive confirmation, and a mandatory post-wipe failure
 - Boot-mount failure: exact arguments captured before teardown; successful, failed and timed-out diagnostics all preserve exit code 32. The full-flow fixture mocks the collector so it never probes the host.
 - Re-prompts: invalid username rejected, valid accepted

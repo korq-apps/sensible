@@ -853,6 +853,11 @@ virtual disk, or less RAM."
     install_progress_update 5 "Configuring hardware support"
     log_info "Offline install — hardware support is already in the copied live image"
     chroot "${MNT}" systemctl enable NetworkManager.service
+    # Compressed RAM swap ahead of the swapfile (#11). zramswap.service is a
+    # oneshot wanted by multi-user.target: if it fails, boot continues with
+    # the fstab swapfile and `systemctl status zramswap` explains why.
+    chroot "${MNT}" systemctl enable zramswap.service \
+        || record_warning "ZRAM swap service could not be enabled; the disk swapfile still works."
     chroot "${MNT}" systemctl enable bluetooth.service
     chroot "${MNT}" systemctl enable power-profiles-daemon.service
     chroot "${MNT}" systemctl enable fwupd-refresh.timer

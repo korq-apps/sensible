@@ -341,11 +341,17 @@ lsblk() {
         *"KNAME"*) printf 'sda\nsda1\n' ;;
         *"-nrno MAJ:MIN /dev/sda"*) printf '8:0\n8:1\n253:2\n' ;;
         *"-dnro MAJ:MIN /dev/dm-2"*) printf '253:2\n' ;;
+        *"-dnro MAJ:MIN /dev/zram0"*) printf '252:0\n' ;;
     esac
 }
 disk_has_mounts /dev/sda; assert_rc "failed mount probe marks disk in use" 0 $?
 disk_has_holders /dev/sda; assert_rc "sysfs holder detected without path-corrupted KNAME" 0 $?
 disk_has_active_swap /dev/sda; assert_rc "active mapper swap matched by major:minor" 0 $?
+# The live session runs compressed RAM swap (#11); /dev/zram0 must never make
+# a candidate disk look busy.
+printf 'Filename Type Size Used Priority\n/dev/zram0 partition 4096 0 100\n' > "$PROC_SWAPS"
+disk_has_active_swap /dev/sda; assert_rc "live ZRAM swap does not mark the target disk in use" 1 $?
+printf 'Filename Type Size Used Priority\n/dev/dm-2 partition 1024 0 -2\n' > "$PROC_SWAPS"
 PROC_SWAPS="${safety_tree}/missing-swaps"
 disk_has_active_swap /dev/sda; assert_rc "unreadable swap state marks disk in use" 0 $?
 SYS_CLASS_BLOCK="/sys/class/block"

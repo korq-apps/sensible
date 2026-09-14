@@ -32,6 +32,7 @@ than asked, and third-party software leaves the install path entirely.
 | Installer/VM diagnostics | merged in PR #17; bounded pre-cleanup evidence and host export, original failure preserved; real guest failure/export acceptance remains |
 | Live desktop and audio | merged in PR #18 (`aa1c44e`); user confirms Try Sensible works as expected; specific installed-security and physical-audio checks remain separate |
 | Release gate | blocked on the full installed-disk matrix and physical-hardware evidence; one user-reported install/boot succeeded, not the whole matrix |
+| Hybrid ZRAM swap (#11) | implemented on `feat/zram-swap`; installed KDE ZRAM/disk-swap operation and VGA hibernate/resume validated (2026-09-13), ready for review/wrap-up; broader storage/hardware and failure-injection coverage remains separate |
 | Phase 6 extras | re-scoped below: baked into the ISO, or moved to the post-install tool |
 | Desktop profiles | PR #16 merged; both ISO builds/live UEFI smoke checks pass; GNOME and KDE validation reported successful by the user; targeted acceptance and native KDE configuration remain; see [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md) |
 | Offline first-login manual | implemented from PR #2 on the current installer; real desktop first-login validation remains pending |
@@ -41,11 +42,12 @@ the next automation/harness slice. The existing #4 implementation and diagnostic
 transport stay in place. The user confirms Try Sensible works as expected; do
 not schedule another generic live-desktop validation pass as the next feature.
 
-**Recommended next feature, pending selection:** hybrid ZRAM plus the existing
-disk swapfile ([#11](https://github.com/korq-apps/sensible/issues/11)), coordinated
-with hibernation guidance (#8). User-facing work need not wait for the #5 harness.
-Required feature validation can be performed manually on identified VM/hardware
-images; parking automation does not mark the release acceptance gates complete.
+**Current feature, ready for review/wrap-up (2026-09-13):** hybrid ZRAM plus the
+existing disk swapfile ([#11](https://github.com/korq-apps/sensible/issues/11)).
+Installed KDE validation confirms both swap areas operate together; the user
+also confirms hibernate/resume works with VGA. The reproduced virtio-GPU resume
+stall does not require changing swap sizing or GRUB resume configuration.
+This closes the reported VM failure, not the full release acceptance matrix.
 
 **Desktop roadmap:** the GNOME profile, complete global theme/icon collection,
 Flathub and ONLYOFFICE replacement are merged, not another implementation slice.
@@ -79,10 +81,12 @@ implementation is merged; its ticket needs a closure/evidence update linking
 PR #17, with the real install/boot matrix retained in #5 rather than reopening
 the input implementation.
 
-### Validation snapshot (updated 2026-09-10)
+### Validation snapshot (updated 2026-09-13)
 
 | Evidence | What it establishes | Still outstanding |
 | :--- | :--- | :--- |
+| Local KVM hibernation comparison (2026-09-13), KDE ISO SHA256 `a236f64460d418dec7bb9adf139806de83e9759f05cc296c0293e1689d2dd710`; kernel `7.1.13+deb14-amd64`, QEMU 11.1.1, Q35, 2 GiB RAM, Btrfs+LUKS, ZRAM enabled, Secure Boot off | Standard VGA restores the same KDE Wayland session, boot ID and KWin/Plasma PIDs with the existing RAM-sized swapfile, followed by clean shutdown. With virtio-GPU, image restoration succeeds but a worker blocks in `virtio_gpu_queue_fenced_ctrl_buffer` and PID 1 in `drm_modeset_lock`; the resumed system is not healthy. Private logs/screenshots are in `.qemu/hibernate.cAbtaMQc/` | Virtio-GPU compatibility remains a separate limitation. Diagnostic serial parameters were enabled and tests invoked `hibernate.target` directly: KDE menu/lock handshake, Secure Boot, physical hardware, controlled heavy pressure and failure fallback are not established by this result |
+| User: KDE ZRAM/swap screenshots after booting the installed system (2026-09-12), followed by VGA resume confirmation (2026-09-13) | `zramswap.service` starts successfully; ZRAM is 950.7 MiB at priority 100, disk swap is 1.9 GiB at priority 10, and both are used. LZ4 stores 837.8 MiB of data using 242 MiB total physical memory; the Btrfs swapfile is root-owned, mode 0600. Switching the VM video adapter to VGA resolves the reported black-screen resume failure; the user accepts hibernation as functional | Exact user ISO identity and full storage/hardware, controlled-pressure and failure-injection matrix remain unverified; do not infer those from this successful KDE VM validation |
 | PR #16 merged; final PR CI successful | GNOME/KDE ISOs build and reach the live UEFI smoke marker; automated regression suite passes | Installed-disk boots and Secure Boot matrix (#5), physical hardware records (#6) |
 | PR #17 merged; PR CI successful | Validated unattended input, controlled disk-path rejection, failure bundles, QEMU export and optional Git metadata are in `main`; both images pass live console smoke | Real `--config` runs, detached-ISO boots and a controlled guest failure/export check in #5 |
 | PR #18 merged; PR CI successful | Try Sensible entry/launcher, shared image/installed GNOME defaults, audio closure and `sensible-audio-check` are in `main`; both images pass console smoke | Graphical live sessions and installer launch on both editions, installed lock/autologin isolation, and physical speakers/headphones/microphone evidence; earlier desktop feedback does not establish these new checks |
@@ -131,11 +135,11 @@ changes may land independently rather than wait for a storage project.
 1. **Keep the accepted baseline.** Unattended input is merged and parked;
    Try Sensible has positive user validation. No new harness or generic desktop
    retest is the immediate assignment.
-2. **Recommend #11 as the next bounded feature.** Retain the current swapfile,
-   size rules and resume parameters; add explicit ZRAM configuration/priorities,
-   graceful fallback, tests and manual tips. Coordinate #8's wording, without
-   assuming ZRAM solves Secure Boot limitations. Before default enablement,
-   record memory-pressure, shutdown and applicable hibernate/resume results.
+2. **Wrap up #11's implemented feature.** Installed KDE swap/compression and
+   VGA hibernate/resume validation are accepted. Keep the existing swapfile
+   sizing and resume parameters; document the virtio-GPU limitation rather
+   than changing storage to address it. Broader matrix/failure-injection
+   evidence and #8's Secure Boot guidance remain separate acceptance work.
 3. **Keep the other useful scopes visible.** #7 navigation, #9 pre-wipe safety,
    Snapper recovery, KDE defaults and the AI manual are distinct follow-ups.
    The reported KDE wallet error now has a separate cross-desktop bugfix scope
@@ -672,10 +676,13 @@ These are user-facing candidates in the proposed queue, not gated on building
 an unattended harness first. Their own real-system acceptance is still required.
 
 - **Hybrid ZRAM and disk swap ([#11](https://github.com/korq-apps/sensible/issues/11)).**
-  Evaluate compressed RAM swap ahead of the persistent RAM-sized swapfile, not
-  instead of it. Retain the disk-backed hibernation target and require the
-  issue's memory-pressure, fallback, shutdown and hibernate/resume tests across
-  the existing storage matrix. Coordinate Secure Boot messaging with #8. This
+  Implemented on `feat/zram-swap` as compressed RAM swap ahead of the persistent
+  RAM-sized swapfile, not instead of it. Installed KDE swap/compression and
+  VGA hibernate/resume validation were accepted on 2026-09-13; the reproduced
+  virtio-GPU stall is a display-driver limitation, not a swap-sizing blocker.
+  Retain the disk-backed hibernation target. Broader storage/hardware,
+  controlled-pressure and failure-injection coverage is not implied by this
+  result. Coordinate Secure Boot messaging with #8. This
   is independent of Btrfs snapshots; do not combine both storage changes in one PR.
 - **Separate follow-up after desktop apps: Btrfs snapshots and recovery ([#19](https://github.com/korq-apps/sensible/issues/19)).**
   Configure Snapper only when Btrfs is selected; leave Ext4 unchanged. Reuse the

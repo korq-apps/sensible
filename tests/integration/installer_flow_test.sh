@@ -254,6 +254,9 @@ chroot() {
         return 1
     fi
     if [ "${1:-}" = "id" ] && [ "${2:-}" = "-nG" ]; then echo "sudo audio video plugdev netdev bluetooth"; fi
+    if [ "${1:-}" = "systemctl" ] && [ "${2:-}" = "enable" ] && [ "${3:-}" = "zramswap.service" ]; then
+        return "${MOCK_ZRAM_ENABLE_RC:-0}"
+    fi
     if [ "${1:-}" = "dpkg-query" ]; then
         local queried_package="${4:-}"
         if [ "${MOCK_MISSING_PACKAGE:-}" = "${queried_package}" ]; then return 1; fi
@@ -573,7 +576,8 @@ assert_contains "swapfile mirrors RAM (8192M)" "$(log_text)" "fallocate -l 8192M
 assert_file_contains "crypttab: cryptroot by header UUID only" "${MNT}/etc/crypttab" "cryptroot UUID=ROOTPART-FS-UUID-4444 none luks,discard,initramfs"
 assert_file_contains "fstab: root subvol=@" "${MNT}/etc/fstab" "UUID=ROOTFS-FS-UUID-5555  /            btrfs"
 assert_file_contains "fstab: @swap subvolume" "${MNT}/etc/fstab" "UUID=ROOTFS-FS-UUID-5555  /swap        btrfs  noatime,subvol=@swap"
-assert_file_contains "fstab: swapfile on encrypted root" "${MNT}/etc/fstab" "/swap/swapfile none swap sw 0 0"
+assert_file_contains "fstab: swapfile on encrypted root" "${MNT}/etc/fstab" "/swap/swapfile none swap sw,pri=10 0 0"
+assert_contains "ZRAM swap service enabled on the target" "$(log_text)" "systemctl enable zramswap.service"
 assert_file_contains "resume= via swapfile offset" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTFS-FS-UUID-5555 resume_offset=38400"
 assert_file_contains "initramfs RESUME set" "${MNT}/etc/initramfs-tools/conf.d/resume" "RESUME=UUID=ROOTFS-FS-UUID-5555"
 assert_file_contains "initramfs keymap carried" "${MNT}/etc/initramfs-tools/initramfs.conf" "KEYMAP=y"
@@ -600,7 +604,7 @@ assert_not_contains "no cryptsetup without LUKS" "$(log_text)" "luksFormat"
 assert_contains "btrfs on raw partition" "$(log_text)" "mkfs.btrfs -f -L ROOT /dev/sda3"
 assert_contains "swapfile created without LUKS too" "$(log_text)" "swap/swapfile"
 assert_file_contains "crypttab placeholder" "${MNT}/etc/crypttab" "No encrypted volumes configured"
-assert_file_contains "fstab: swapfile, not a partition" "${MNT}/etc/fstab" "/swap/swapfile none swap sw 0 0"
+assert_file_contains "fstab: swapfile, not a partition" "${MNT}/etc/fstab" "/swap/swapfile none swap sw,pri=10 0 0"
 assert_file_contains "resume points at the root fs" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTPART-FS-UUID-4444"
 
 t_section "Combo 3: Btrfs + LUKS, NVIDIA GPU enables modeset for the baked driver"
@@ -620,7 +624,7 @@ assert_contains "ext4 on encrypted mapper" "$(log_text)" "mkfs.ext4 -F -L ROOT -
 assert_contains "ext4 swapfile created at root" "$(log_text)" "fallocate -l 8192M ${MNT}/swapfile"
 assert_not_contains "ext4 creates no btrfs subvolumes" "$(log_text)" "btrfs subvolume create"
 assert_file_contains "ext4 encrypted root in fstab" "${MNT}/etc/fstab" "UUID=ROOTFS-FS-UUID-5555  /            ext4"
-assert_file_contains "ext4 swapfile in fstab" "${MNT}/etc/fstab" "/swapfile none swap sw 0 0"
+assert_file_contains "ext4 swapfile in fstab" "${MNT}/etc/fstab" "/swapfile none swap sw,pri=10 0 0"
 assert_file_contains "ext4 encrypted resume offset" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTFS-FS-UUID-5555 resume_offset=38400"
 
 t_section "Combo 5: Ext4 + no LUKS formats the raw root partition"
@@ -664,6 +668,18 @@ assert_file_not_exists "unencrypted KDE has no live SDDM override" "${MNT}/etc/s
 assert_file_not_exists "unencrypted KDE has no autologin drop-in" "${MNT}/etc/sddm.conf.d/autologin.conf"
 assert_file_contains "unencrypted KDE still locks on idle" "${MNT}/etc/xdg/kscreenlockerrc" "Autolock=true"
 unset SENSIBLE_VARIANT
+
+t_section "ZRAM service enablement failure degrades to a warning, never an abort"
+SENSIBLE_VARIANT=gnome
+MOCK_ZRAM_ENABLE_RC=1
+build_answers yes
+run_flow
+MOCK_ZRAM_ENABLE_RC=0
+assert_rc "installation completes although zramswap.service could not be enabled" 0 "${RC}"
+assert_contains "enablement was attempted on the target" "$(log_text)" "systemctl enable zramswap.service"
+assert_contains "ZRAM enablement failure reaches the completion summary" "$(output_text)" "- ZRAM swap service could not be enabled; the disk swapfile still works."
+assert_file_contains "disk swapfile stays configured as the fallback" "${MNT}/etc/fstab" "/swap/swapfile none swap sw,pri=10 0 0"
+assert_file_contains "resume target unaffected by the ZRAM failure" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTFS-FS-UUID-5555 resume_offset=38400"
 
 t_section "Live-copy deploy path: excludes keep API dirs, mountpoints exist (offline skips apt)"
 build_answers no

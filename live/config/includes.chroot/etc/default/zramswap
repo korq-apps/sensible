@@ -1,0 +1,19 @@
+# Sensible: compressed RAM swap (zram) ahead of the disk swapfile (issue #11).
+# Read by zramswap.service from zram-tools. The persistent swapfile keeps a
+# lower priority in /etc/fstab and stays the only hibernation target; ZRAM
+# capacity is never persistent and is not counted for disk sizing. Debian's
+# defaults are stated explicitly so a zram-tools upgrade cannot change them
+# silently. Valid shell: the service sources this file.
+
+# Compression algorithm. lz4 favours speed over ratio; see
+# /sys/block/zram0/comp_algorithm for what the running kernel offers.
+ALGO=lz4
+
+# Logical ZRAM size as a percentage of physical RAM. Takes precedence over
+# SIZE, which is therefore left unset. Real RAM use is the compressed
+# footprint, which zramctl reports, not this figure.
+PERCENT=50
+
+# Swap priority; higher wins. The disk swapfile uses pri=10 in /etc/fstab, so
+# memory pressure fills ZRAM first and spills to disk only when it is full.
+PRIORITY=100

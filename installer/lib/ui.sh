@@ -155,7 +155,15 @@ _ui_plain_style_fallback() {
 
 ui_style() {
     local fallback_text="${!#}"
-    if ! gum style "$@" >/dev/tty 2>&1; then
+    # Gum 0.17's renderer probes the background when stdout is a terminal.
+    # A late OSC 11 reply can then become input to the next prompt (Konsole).
+    # Render through a pipe: stderr still supplies color capability detection,
+    # but stdout cannot trigger that probe. Static styling must not read input.
+    # Keep pipefail local and preserve Gum failures as well as output failures.
+    if ! (
+        set -o pipefail
+        { gum style "$@" </dev/null | cat; } >/dev/tty 2>&1
+    ); then
         _ui_plain_style_fallback "${fallback_text}"
         if [ "$SENSIBLE_STYLE_WARNING_SHOWN" != "true" ]; then
             if ! log_warn "Terminal styling is unavailable; continuing with plain installer output."; then
