@@ -2,12 +2,15 @@
 
 ## Where we are
 
+**Next feature: standalone biometric setup.** Build, install, configure and test
+[Howdy-next](https://codeberg.org/nathawat/howdy-next) from a local checkout.
+The [local tool guide](BIOMETRICS.md) owns the commands and remaining work;
+the setup launcher now guides service-specific activation with timed rollback.
+
 **Scope reconciliation (2026-09-14, baseline `58b1d02`):** the implementation
 has moved beyond the original v1 plan. The first official beta,
 [**v1.0.0-beta.1**](https://github.com/korq-apps/sensible/releases/tag/v1.0.0-beta.1), is published.
-The maintainer confirms all necessary checks are complete on
-owned hardware: Dell XPS 15 (2020), Lenovo Legion 7 15ASH11, and a custom
-Ryzen 7 7800X3D desktop with 64 GB RAM and Radeon RX 7800 XT.
+The necessary hardware checks are complete and accepted for the beta.
 **Beta acceptance is complete by maintainer decision.** The exhaustive matrix
 and expanded hardware/desktop checklist are follow-up coverage, not beta
 publication blockers. This supersedes the earlier release-gate requirements.
@@ -38,11 +41,11 @@ than asked, and third-party software leaves the install path entirely.
 | Phase 7.1 variant build + package gate | **done** |
 | Phase 7.2 copy install | **done** |
 | Phase 7.3-7.5 live session, guided prompts, KDE | **done** |
-| Phase 7.6 post-install app tool | planned |
+| Phase 7.6 post-install app tool | general catalog planned; standalone biometric tools are the active independent slice |
 | Unattended input (#4) | merged in PR #17 (`553ad1d`); protected TOML/secret files and config-driven integration coverage; real `--config` acceptance belongs to #5 |
 | Installer/VM diagnostics | merged in PR #17; bounded pre-cleanup evidence and host export, original failure preserved; real guest failure/export acceptance remains |
 | Live desktop and audio | merged in PR #18 (`aa1c44e`); user confirms Try Sensible works as expected; specific installed-security and physical-audio checks remain separate |
-| First beta | `v1.0.0-beta.1` published from `ed3db23`; both seeded ISO builds and live boot checks passed; maintainer testing on three owned machines accepted; exhaustive matrix and expanded hardware records remain follow-ups |
+| First beta | `v1.0.0-beta.1` published from `ed3db23`; both seeded ISO builds and live boot checks passed; hardware testing accepted; exhaustive matrix and expanded hardware records remain follow-ups |
 | Hybrid ZRAM swap (#11) | merged in PR #33 (`58b1d02`); installed KDE swap/compression and VGA hibernate/resume accepted; PR merge checklist additionally records pressure, failure fallback and shutdown checks; per-edition/layout comparisons remain |
 | Wallet/keyring first use (#29) | source diagnosis and manual guidance merged in #30/#31; autologin explanation merged in #32; fresh-session/PAM acceptance and optional boot-secret reuse remain distinct |
 | Phase 6 extras | re-scoped below: baked into the ISO, or moved to the post-install tool |
@@ -54,8 +57,9 @@ the next automation/harness slice. The existing #4 implementation and diagnostic
 transport stay in place. The user confirms Try Sensible works as expected; do
 not schedule another generic live-desktop validation pass as the next feature.
 
-**Current priority (2026-09-14): beta feedback and post-release work.** Keep hybrid ZRAM and
-the persistent swapfile as implemented. The reproduced virtio-GPU resume stall
+**Previous priority (2026-09-14), superseded by biometric setup above:** beta
+feedback and post-release work. Keep hybrid ZRAM and the persistent swapfile as
+implemented. The reproduced virtio-GPU resume stall
 is a documented compatibility limit; the accepted VGA result does not require
 changing swap sizing or GRUB resume configuration. New navigation, snapshots,
 KDE styling, editor and optional-app work belongs after this release unless a
@@ -74,11 +78,10 @@ The agreed scope and evidence are in [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md).
 
 ## Reconciled priorities
 
-**Updated 2026-09-14:** the first beta is published. Triage beta feedback against
-the documented scope, then follow the feature queue below. Broader validation
-remains follow-up work. The numbered phases retain implementation history.
+**Updated 2026-09-15:** biometric setup is the next feature. Broader installer
+validation remains follow-up work; the numbered phases retain implementation history.
 
-**Current GitHub snapshot:** `v1.0.0-beta.1` is published as a pre-release from
+**GitHub snapshot (2026-09-14; not rechecked in the 2026-09-15 local planning pass):** `v1.0.0-beta.1` is published as a pre-release from
 `ed3db23`. Its [tag build](https://github.com/korq-apps/sensible/actions/runs/34828166637) passed all 20 test suites, both ISO builds,
 and ordinary UEFI and Secure Boot live smoke checks for both editions. Both
 ISOs are seeded by the runner; GitHub carries their torrent, magnet and checksum
@@ -109,11 +112,11 @@ the input implementation.
 <a id="validation-snapshot-updated-2026-09-10"></a>
 <a id="validation-snapshot-updated-2026-09-13"></a>
 
-### Validation snapshot (updated 2026-09-14)
+### Validation snapshot (updated 2026-09-15)
 
 | Evidence | What it establishes | Still outstanding |
 | :--- | :--- | :--- |
-| Maintainer hardware report and beta decision (2026-09-14): Dell XPS 15 (2020), Lenovo Legion 7 15ASH11, custom Ryzen 7 7800X3D / 64 GB RAM / Radeon RX 7800 XT desktop | All checks the maintainer considers necessary are complete on owned hardware; accepted as sufficient for the first official beta | Broader hardware/configuration coverage is follow-up work. Per-machine image, storage and firmware settings were not enumerated; no repeat campaign is required for the beta |
+| Beta hardware acceptance (2026-09-14) | Required hardware checks accepted for the first official beta | Broader hardware/configuration coverage remains follow-up work |
 | Local regression run at `58b1d02` (2026-09-14) | All 19 suites pass, including 684 installer-flow assertions | Disk operations are mocked; exhaustive real-install coverage remains a follow-up |
 | PR #33 merged; final PR CI successful (checked 2026-09-14) | Both images build and pass ordinary UEFI and Secure Boot live smoke; ZRAM and terminal-reply prompt fix are merged | Post-merge `main` build was queued; live smoke does not prove installed-system Secure Boot |
 | PR #33 merge checklist (read 2026-09-14) | Reports installed swap priorities, controlled pressure/spillover, ZRAM failure fallback, hibernate with pages in ZRAM and clean shutdown under pressure as complete | Per-edition/layout responsiveness, compression and overhead comparison remains unchecked. This is PR-reported evidence, not a locally rerun or complete #5/#6 matrix |
@@ -136,9 +139,10 @@ does not assert that every device, file format or security scenario was tested.
 
 ### Post-release feature queue
 
-The earlier user-facing delivery order is retained for after the first release.
-The user has parked unattended automation; the ordering below is a recommendation, not
-authorization to implement every item or preinstall new AI clients.
+Biometric setup is the next feature.
+The remaining earlier queue is retained below it. Unattended automation stays
+parked; the remaining order is a recommendation, not authorization to implement
+every item or preinstall new AI clients.
 The [GitHub roadmap (#28)](https://github.com/korq-apps/sensible/issues/28)
 groups the existing and new issues by readiness, dependencies and proposed
 priority. New tickets contain explicit scope, acceptance and exclusions; the
@@ -146,6 +150,7 @@ relative effort/risk notes are planning aids, not delivery estimates or dates.
 
 | Order | Bounded change | Completion evidence / existing owner |
 | :--- | :--- | :--- |
+| **1 — active** | **Single-entry biometric setup with Howdy-next** | [Local tools](BIOMETRICS.md): native package build/install, camera configuration, enrollment and isolated PAM tests; guided activation has a timed rollback. Coordinates wallet behavior with #29 |
 | Bugfix lane | Wallet/keyring first use and login integration | [#29](https://github.com/korq-apps/sensible/issues/29): GPG-default diagnosis and first-use guidance merged; verify password-backed/PAM behavior on both desktops and preserve credentials; candidate defects precede cosmetic #27 work, with boot-secret reuse evaluated separately |
 | Completed | Hybrid ZRAM + persistent swap | #11 implemented in PR #33; retain remaining comparative evidence separately. #8's installed-system Secure Boot messaging is still a follow-up |
 | 2 | Consistent installer Back/Cancel | #7: repeated previous-step navigation without lost answers, stale derived state or accidental disk writes; Gum and fallback tests |
@@ -164,11 +169,15 @@ changes may land independently rather than wait for a storage project.
 
 ### Immediate handoff
 
+**Active feature:** use the standalone [biometric tools](BIOMETRICS.md) to
+build a local package, configure a camera, enroll and test through an isolated
+PAM service, then enable login through the guided flow with timed rollback.
+
 1. **Preserve the published release.** Keep `v1.0.0-beta.1`, its retained ISO
    bytes and checksums immutable; use [RELEASE.md](RELEASE.md) for its source and
    validation record. Do not reopen #4 or #11 implementation.
-2. **Use the accepted beta evidence.** The maintainer's three-machine hardware
-   report, earlier desktop/VM feedback and automated checks are sufficient for
+2. **Use the accepted beta evidence.** The accepted hardware
+   checks, earlier desktop/VM feedback and automated checks are sufficient for
    this beta. Retain #5/#6 and targeted desktop checks as follow-ups; do not
    require a new testing campaign or automation framework.
 3. **Triage failures against the release scope.** Keep the virtio-GPU limitation
@@ -188,7 +197,7 @@ The external recommendations are proposals, not evidence of prior decisions.
 | System-level switches for defaults | Adopt the reversibility goal, not one universal switch. Shell defaults are copied into skel; Git already uses `/etc/gitconfig`, and GNOME already uses unlocked system dconf defaults. Separate optional styling from idle/resume locking before adding opt-outs. |
 | `sensible-doctor` | Adopt incrementally after shared validators/provenance exist. Start with read-only evidence, explicit unknown states and redacted JSON; do not make a large diagnostic framework a prerequisite for #5. |
 | Build provenance / `sensible-info` | Retain as deferred infrastructure, paired with footprint reporting. Distinguish the baked build inventory from the installed system's later package state. |
-| Declarative `sensible-apps` | Adopt a small common catalog; reconcile Brave Origin, Audacious, developer tools and optional AI entries. BioPass needs separate PAM/removal validation; LazyVim is an opt-in configuration for the included Neovim, not a reason to remove Neovim. |
+| Declarative `sensible-apps` | Adopt a small common catalog; reconcile Brave Origin, Audacious, developer tools and optional AI entries. Howdy-next setup needs separate PAM/removal validation ([scope](BIOMETRICS.md)); LazyVim is an opt-in configuration for the included Neovim, not a reason to remove Neovim. |
 | Save interactive answers | Adopt a sanitized export follow-up to #4, not automatic replay authorization. Omit secrets and target disk, clear wipe confirmation, and require fresh inputs/revalidation. |
 | Pin Debian archive snapshots | Evaluate after provenance is available. Use one archive selection for the package gate and build; keep a rolling Testing canary or reviewed bump builds. Snapshotting only the target archive is not complete ISO reproducibility. |
 | Size/package deltas and a hard budget | Adopt reports now; select warning/failure thresholds after comparable baselines exist. The old numbers in OFFLINE_REWORK.md are already labeled historical, not a current agreed cap or proof of unnoticed regression. |
@@ -329,7 +338,7 @@ review, not an arbitrary-command escape hatch. Preserve existing repositories,
 shared dependencies and user data during removal. Require explicit privilege
 and source-change approval. A Gum checklist is a frontend, not a second backend.
 Brave Origin remains the curated browser; do not substitute regular Brave.
-BioPass/PAM and LazyVim user-config migrations need dedicated acceptance, not
+Howdy-next/PAM and LazyVim user-config migrations need dedicated acceptance, not
 the assumption that any entry is safely reversible because package removal works.
 
 **Archive control and CI follow-ups:** a candidate snapshot must supply the
@@ -422,7 +431,7 @@ desktop edition baked into the selected release image.
 
 The complete real-install matrix (GNOME/KDE × Btrfs/Ext4 × LUKS on/off)
 remains follow-up coverage. Unit and sourced-shell integration tests do not
-prove that matrix; the first beta uses maintainer acceptance on owned hardware.
+prove that matrix; the first beta uses maintainer acceptance on tested hardware.
 
 ---
 
@@ -434,8 +443,7 @@ Make the installed system useful on a real laptop **before** polishing the DE.
 - [x] `nvidia-driver` in the offline closure; NVIDIA detection enables its KMS argument
 - [x] Enable NetworkManager, bluetooth, `power-profiles-daemon`, `fwupd`
 
-The maintainer accepts completed checks on the Dell XPS 15 (2020), Lenovo
-Legion 7 15ASH11 and custom Ryzen desktop for the beta. Expanded per-device
+Hardware checks are accepted for the beta. Expanded per-device
 records and additional hardware coverage remain follow-up work.
 
 ---
@@ -533,7 +541,7 @@ as a pre-release with both edition artifacts verified and seeded.
 ## Release gate: Beginner journey and reliability
 
 **First-beta decision, 2026-09-14:** the maintainer accepts testing completed
-on the three owned machines recorded in [RELEASE.md](RELEASE.md). This replaces
+on the tested systems recorded in [RELEASE.md](RELEASE.md). This replaces
 the earlier exhaustive release gate for the beta. The implemented safety
 mechanisms below remain; broader unchecked scenarios are follow-up coverage.
 Beta publication is complete; further coverage follows testing and feedback.
@@ -546,7 +554,7 @@ Beta publication is complete; further coverage follows testing and feedback.
 - [x] **Beginner install guide:** `docs/INSTALL.md` covers release download/checksum, trusted USB writing, requirements, destructive scope, offline flow, choices, first boot, updates, and honest support/log expectations
 - [x] **Automated install input (source/fixture evidence):** protected `--config answers.toml` input, shared validation, explicit `confirm_wipe = true`, unchanged disk revalidation and exit-only completion; all eight mocked config combinations and failure-path regressions. See [INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode). Broader real ISO execution remains follow-up coverage.
 - [ ] **Follow-up: full QEMU installed-boot matrix (#5), not beta-blocking:** install each GNOME/KDE release image onto fresh virtual disks for Btrfs/Ext4 × LUKS on/off, then boot from those installed disks under UEFI (not the ISO); verify expected partitions, mounts, `fstab`/`crypttab`, swap/resume arguments, desktop/login, and the LUKS prompt where applicable. Include an installed-system Secure Boot boot
-- [x] **Beta hardware acceptance:** maintainer reports all necessary checks completed on Dell XPS 15 (2020), Lenovo Legion 7 15ASH11, and a custom Ryzen 7 7800X3D / 64 GB RAM / Radeon RX 7800 XT desktop. Accepted as sufficient for this beta on 2026-09-14.
+- [x] **Beta hardware acceptance:** required hardware checks accepted for this beta on 2026-09-14.
 - [ ] **Follow-up: expanded hardware records (#6):** retain per-machine image identities, edition/storage/firmware settings and itemized device results as available; broader coverage does not block this beta.
 - [x] **Beta publication:** `v1.0.0-beta.1` published as a GitHub pre-release from `ed3db23`; tag CI, retained ISO checksums, seeded torrent pieces and published metadata verified. Known limitations accompany the release.
 
@@ -584,8 +592,9 @@ to installation or first login; unselected optional software stays post-install.
 
 The "bake into the ISO" items below live in `live/` (package lists,
 `scripts/fetch-pins.sh` + `live/pins.env`, and the ufw hook), staged into the
-image that the installer copies. The post-install items do not exist yet;
-Architecture/spec sections mark them **(planned — post-install tool)**.
+image that the installer copies. The general post-install catalog remains
+planned; standalone biometric tools are implemented, with usage tracked in
+[BIOMETRICS.md](BIOMETRICS.md).
 
 **Bake into the ISO** (Debian packages, no question asked):
 
@@ -600,7 +609,7 @@ Architecture/spec sections mark them **(planned — post-install tool)**.
 **Move to the post-install tool** (`sensible-apps`, online, after first boot):
 
 - [ ] Developer tools: `docker.io` + `docker-compose` + `lazygit` + `gh`; user **not** added to the docker group (root-equivalent). Was an installer checkbox, which is exactly the kind of question the offline rework removes, and these cost nothing to add after first boot
-- [ ] BioPass face login: pinned `.deb` + SHA256 from [TickLabVN/biopass](https://github.com/TickLabVN/biopass), PAM via `pam-auth-update`. Third-party and young, so it does not belong in the offline image. This desktop PAM integration does not unlock LUKS; biometric authentication alone supplies no wallet/keyring decryption password, so access may still prompt unless another supported unlock path applies (see #29). State both limitations where it is offered.
+- [ ] Howdy-next face login: [standalone tools](BIOMETRICS.md) provide a native build/install and local configuration/enrollment/PAM test workflow. The launcher guides login activation with verification and timed rollback; image integration remains separate.
 - [x] Brave Origin is documented as a curated optional online app with its official installer; it is not preinstalled.
 - [ ] One declarative post-install catalog for Brave Origin, Audacious and
   approved developer/AI tools, introduced through the small backend/adapters
@@ -754,8 +763,8 @@ an unattended harness first. Their own real-system acceptance is still required.
 | Offline closure is incomplete | Validate every Debian package at build time and fail closed if the archive query itself fails |
 | Mocked tests hide an unbootable install | Beta uses maintainer hardware and installed-VM acceptance; expand the real installed-disk matrix as follow-up coverage |
 | Brave or AI CLIs add untrusted install paths | Official optional install routes; any approved AI image artifacts require pins, license/dependency review and an installed-system update path ([AI_TOOLS.md](AI_TOOLS.md)) |
-| BioPass is young third-party PAM code (Phase 6) | Checkbox off by default; pinned `.deb` + SHA256; PAM via `pam-auth-update` so removal is clean; `fprintd` covers fingerprint without it |
-| Pinned artifacts rot (BioPass, Nerd Font, oh-my-bash, LazyVim) | Versions + SHA256 recorded in one place; CI fails loudly when a pin 404s |
+| Third-party face authentication changes PAM | Howdy-next is opt-in after first boot; pin package/models, verify hardware and enrollment, preserve password fallback, validate service-specific activation and removal ([scope](BIOMETRICS.md)) |
+| Pinned artifacts rot (Howdy-next/models, Nerd Font, oh-my-bash, LazyVim) | Versions + SHA256 recorded in one place; CI fails loudly when a pin 404s |
 | live-build silently skips misnamed hooks | Hooks must match `*.hook.{chroot,binary}`; unit test enforces the naming |
 | Live ISO too large | Keep separate GNOME/KDE images and review every addition to the baked offline closure |
 | Release variable is enabled without evidence | Record the beta acceptance decision, build/checksum results and known limitations; the variable is the publication switch |

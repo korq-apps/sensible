@@ -1,0 +1,19 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Howdy Next
+Source: https://codeberg.org/nathawat/howdy-next
+
+Files: *
+Copyright: Howdy Next contributors
+License: GPL-3.0-or-later
+ See /usr/share/common-licenses/GPL-3 and the installed upstream notices.
+
+Files: debian/*
+Copyright: 2026 Sensible contributors
+License: GPL-3.0-or-later
+ See /usr/share/common-licenses/GPL-3.
+
+Files: usr/lib/howdy-next/libopencv*
+Copyright: OpenCV contributors
+License: Apache-2.0
+ See /usr/share/common-licenses/Apache-2.0 and the OpenCV license installed
+ alongside this package's upstream third-party notices.

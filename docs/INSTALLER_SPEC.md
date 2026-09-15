@@ -65,7 +65,7 @@ variant-native utilities are always installed — not checkboxes.
 
 | Field | Default | Notes |
 | :--- | :--- | :--- |
-| BioPass face login | Off | Pinned `.deb` + SHA256; IR camera recommended. Fingerprint (`fprintd`) is not a prompt — always installed |
+| Howdy-next face setup | Off | Standalone local build/configuration/test tools ([guide](BIOMETRICS.md)); guided login activation with timed rollback. Fingerprint (`fprintd`) is always installed |
 | Developer tools | Off | `docker.io` + `docker-compose`, `lazygit`, `gh`; user **not** added to the docker group |
 
 <a id="unattended-mode-planned--release-test-infrastructure"></a>
@@ -527,9 +527,9 @@ Brave Origin:     official Brave apt source + brave-origin (never from Debian);
 Audacious:        optional alternative media player from Debian
 Developer tools:  docker.io docker-compose lazygit gh; systemctl enable docker;
                   the user is NOT added to the docker group (root-equivalent)
-BioPass:          pinned biopass_<ver>_amd64.deb from GitHub releases, SHA256
-                  verified; PAM wiring via the package's pam-auth-update
-                  profile; enrollment happens post-install in the BioPass app
+Howdy-next:       standalone build/install, camera configuration, enrollment
+                  and guided PAM activation with testing and timed rollback;
+                  see BIOMETRICS.md
 ```
 
 ---

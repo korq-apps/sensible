@@ -1,0 +1,456 @@
+#!/usr/bin/env python3
+"""Standalone Howdy-next build, setup and test tools for Debian amd64."""
+
+import argparse
+import configparser
+import errno
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import re
+import stat
+import struct
+import subprocess
+import sys
+
+
+# linux/videodev2.h: fixed-width structs, no pointers (same layout on amd64).
+VIDIOC_QUERYCAP = 0x80685600
+VIDIOC_ENUM_FMT = 0xC0405602
+VIDEO_CAPTURE = 0x00000001
+VIDEO_CAPTURE_MPLANE = 0x00001000
+DEVICE_CAPS = 0x80000000
+MONO_FORMATS = {"GREY", "Y10 ", "Y12 ", "Y16 ", "Y16B"}
+PAM_SERVICES = (
+    "common-auth", "common-account", "common-session", "gdm-password",
+    "gdm-fingerprint", "gdm-autologin", "sddm", "sddm-autologin",
+    "kde", "kde-fingerprint", "sudo", "sudo-i", "polkit-1", "login", "sshd",
+)
+
+
+def read_text(path):
+    try:
+        return path.read_text(errors="replace").strip()
+    except OSError:
+        return None
+
+
+def query_video(path):
+    """Use node-specific caps; device-wide caps also include metadata siblings."""
+    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)
+    try:
+        if not stat.S_ISCHR(os.fstat(fd).st_mode):
+            raise OSError(errno.ENODEV, "not a character device")
+        cap = bytearray(104)
+        fcntl.ioctl(fd, VIDIOC_QUERYCAP, cap, True)
+        capabilities, device_caps = struct.unpack_from("=II", cap, 84)
+        effective = device_caps if capabilities & DEVICE_CAPS else capabilities
+        capture = bool(effective & (VIDEO_CAPTURE | VIDEO_CAPTURE_MPLANE))
+        formats = set()
+        for buffer_type, flag in ((1, VIDEO_CAPTURE), (9, VIDEO_CAPTURE_MPLANE)):
+            if not effective & flag:
+                continue
+            for index in range(256):
+                fmt = bytearray(64)
+                struct.pack_into("=II", fmt, 0, index, buffer_type)
+                try:
+                    fcntl.ioctl(fd, VIDIOC_ENUM_FMT, fmt, True)
+                except OSError as exc:
+                    if exc.errno == errno.EINVAL:
+                        break  # The documented end of the format enumeration.
+                    raise
+                formats.add(bytes(fmt[44:48]).decode("ascii", errors="replace"))
+            else:
+                raise OSError(errno.EOVERFLOW, "unbounded format enumeration")
+        return {"capture": capture, "formats": sorted(formats)}
+    finally:
+        os.close(fd)
+
+
+def stable_paths(node, dev_root):
+    matches = []
+    for directory in ("by-id", "by-path"):
+        for link in sorted((dev_root / "v4l" / directory).glob("*")):
+            try:
+                if link.is_symlink() and link.resolve(strict=True) == node.resolve(strict=True):
+                    matches.append("/dev/" + str(link.relative_to(dev_root)))
+            except (OSError, RuntimeError):
+                continue
+    return matches
+
+
+def usb_identity(sys_node):
+    try:
+        device = (sys_node / "device").resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+    for parent in (device, *device.parents):
+        vendor = read_text(parent / "idVendor")
+        product = read_text(parent / "idProduct")
+        if vendor and product and re.fullmatch(r"[0-9a-fA-F]{4}", vendor) and re.fullmatch(r"[0-9a-fA-F]{4}", product):
+            return f"{vendor.lower()}:{product.lower()}"
+    return None
+
+
+def discover_cameras(sys_root=Path("/sys"), dev_root=Path("/dev"), query=query_video):
+    cameras = []
+    for entry in sorted((sys_root / "class/video4linux").glob("video*")):
+        if not re.fullmatch(r"video[0-9]+", entry.name):
+            continue
+        node = dev_root / entry.name
+        camera = {
+            "node": "/dev/" + entry.name,
+            "name": read_text(entry / "name"),
+            "usb_id": usb_identity(entry),
+            "stable_paths": stable_paths(node, dev_root),
+            "capture": None, "formats": [], "ir_candidate": False,
+            "status": "unknown",
+        }
+        try:
+            camera.update(query(node))
+            if camera["capture"]:
+                # A monochrome format or explicit IR name is a hint, not proof
+                # of IR sensitivity, emitter operation or spoof resistance.
+                name_hint = re.search(r"\b(ir|infrared)\b", camera["name"] or "", re.I)
+                camera["ir_candidate"] = bool(set(camera["formats"]) & MONO_FORMATS or name_hint)
+                camera["status"] = "capture"
+            else:
+                camera["status"] = "not_capture"
+        except OSError as exc:
+            camera["status"] = {
+                errno.EACCES: "permission_denied", errno.EPERM: "permission_denied",
+                errno.ENOENT: "unavailable", errno.ENODEV: "unavailable",
+                errno.EBUSY: "busy",
+            }.get(exc.errno, "query_failed")
+        cameras.append(camera)
+    return cameras
+
+
+def camera_selection(cameras):
+    candidates = [c for c in cameras if c["ir_candidate"]]
+    unresolved = [c for c in cameras if c["status"] not in {"capture", "not_capture"}]
+    result = {"status": "no_ir_candidate", "suggested_device_path": None,
+              "verified_ir": False, "emitter": "unknown"}
+    # Unreadable peers can be better/competing candidates; do not hide them.
+    if unresolved:
+        result["status"] = "incomplete"
+    elif len(candidates) > 1:
+        result["status"] = "ambiguous"
+    elif len(candidates) == 1:
+        candidate = candidates[0]
+        if candidate["stable_paths"] and candidate["formats"]:
+            result.update(status="needs_verification", suggested_device_path=candidate["stable_paths"][0])
+        else:
+            result["status"] = "missing_stable_path_or_formats"
+    return result
+
+
+def fingerprint_status(run=subprocess.run):
+    """Ask fprintd for devices it exposes; never infer support from USB IDs."""
+    try:
+        proc = run([
+            "busctl", "--system", "--timeout=3s", "--json=short", "call",
+            "net.reactivated.Fprint", "/net/reactivated/Fprint/Manager",
+            "net.reactivated.Fprint.Manager", "GetDevices",
+        ], capture_output=True, text=True, timeout=5, check=False)
+    except FileNotFoundError:
+        return {"status": "unavailable", "device_count": None}
+    except (OSError, subprocess.TimeoutExpired):
+        return {"status": "unknown", "device_count": None}
+    if proc.returncode:
+        return {"status": "unknown", "device_count": None}
+    try:
+        data = json.loads(proc.stdout)
+        devices = data["data"][0]
+        if data["type"] != "ao" or not isinstance(devices, list) or not all(
+            isinstance(d, str) and d.startswith("/net/reactivated/Fprint/Device/") for d in devices
+        ):
+            raise ValueError("unexpected fprintd response")
+        return {"status": "detected" if devices else "none", "device_count": len(devices)}
+    except (ValueError, KeyError, IndexError, TypeError):
+        return {"status": "unknown", "device_count": None}
+
+
+def pam_inventory(etc_root=Path("/etc"), vendor_root=Path("/usr/lib/pam.d")):
+    """Summaries only: no custom arguments, usernames or file contents exported."""
+    services = {}
+    directory = etc_root / "pam.d"
+    for name in PAM_SERVICES:
+        path = directory / name
+        source = "etc"
+        if not path.exists() and not path.is_symlink():
+            path = vendor_root / name
+            source = "vendor"
+        try:
+            content = path.read_bytes()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            services[name] = {"status": "unreadable"}
+            continue
+        active = "\n".join(line.split("#", 1)[0] for line in content.decode(errors="replace").splitlines())
+        services[name] = {
+            "status": "present", "source": source, "sha256": hashlib.sha256(content).hexdigest(),
+            "howdy_reference": bool(re.search(r"\b(?:pam_howdy\.so|howdy/pam\.py)\b", active)),
+            "biopass_reference": "libbiopass_pam.so" in active,
+            "fingerprint_reference": "pam_fprintd.so" in active,
+        }
+    display_manager = read_text(etc_root / "X11/default-display-manager")
+    return {
+        "display_manager": Path(display_manager).name if display_manager else None,
+        "services": services,
+        "assessment": "inventory_only",
+    }
+
+
+def package_inventory(run=subprocess.run):
+    names = ("biopass", "howdy", "howdy-next", "fprintd", "libpam-fprintd")
+    result = {name: {"status": "unknown", "version": None} for name in names}
+    try:
+        proc = run([
+            "dpkg-query", "-W", "-f=${binary:Package}\t${Status}\t${Version}\n", *names,
+        ], capture_output=True, text=True, timeout=5, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return result
+    if proc.returncode not in (0, 1):
+        return result
+    for line in proc.stdout.splitlines():
+        fields = line.split("\t")
+        if len(fields) != 3:
+            continue
+        name, state, version = fields
+        name = name.split(":", 1)[0]
+        if name in result:
+            result[name] = {"status": "installed" if state.split()[-2:] == ["ok", "installed"] else "not_installed", "version": version}
+    # Missing query rows are not proof of a healthy package database.
+    return result
+
+
+def probe():
+    cameras = discover_cameras()
+    return {
+        "schema_version": 1, "mode": "read_only", "kernel": platform.release(),
+        "cameras": cameras, "face": camera_selection(cameras),
+        "fingerprint": fingerprint_status(), "pam": pam_inventory(),
+        "packages": package_inventory(),
+        "setup_available": True,
+        "login_activation_available": True,
+    }
+
+
+CAMERA_STATUS = {"capture": ("capture", "ok"), "not_capture": ("not capture", "dim"),
+                 "permission_denied": ("permission denied", "warn"), "busy": ("busy", "warn"),
+                 "unavailable": ("unavailable", "warn"), "query_failed": ("query failed", "warn")}
+FACE_STATUS = {"needs_verification": ("IR candidate found; needs a live check", "info"),
+               "no_ir_candidate": ("no IR candidate", "warn"),
+               "incomplete": ("incomplete; some devices could not be read", "warn"),
+               "ambiguous": ("ambiguous; several IR candidates", "warn"),
+               "missing_stable_path_or_formats": ("candidate lacks a stable link or formats", "warn")}
+FINGERPRINT_STATUS = {"detected": "ok", "none": "dim", "unavailable": "warn", "unknown": "warn"}
+PACKAGE_STATUS = {"installed": ("installed", "ok"), "not_installed": ("not installed", "dim"),
+                  "unknown": ("unknown", "warn")}
+
+
+def print_report(report, style=None):
+    """Human layout of the probe; --json carries the same facts unchanged."""
+    import tui
+    style = style or tui.Style()
+    tui.banner(style, "Biometric discovery", "Sensible", "read-only probe", "kernel " + report["kernel"])
+    tui.rule(style, "Cameras")
+    if not report["cameras"]:
+        tui.say(style, "No video4linux devices were found.", "warn")
+    rows = []
+    for camera in report["cameras"]:
+        text, kind = CAMERA_STATUS.get(camera["status"], (camera["status"].replace("_", " "), "warn"))
+        rows.append([(camera["node"], "bold"), (text, kind), (",".join(camera["formats"]) or "-", "dim"),
+                     (style.glyph("done") + " IR candidate" if camera["ir_candidate"] else "", "ok")])
+    tui.grid(style, rows)
+    face = report["face"]
+    text, kind = FACE_STATUS.get(face["status"], (face["status"].replace("_", " "), "warn"))
+    tui.rule(style, "Face")
+    rows = [[("Selection", "dim"), (text, kind)]]
+    if face["suggested_device_path"]:
+        rows.append([("Suggested path", "dim"), (face["suggested_device_path"], "bold")])
+    tui.grid(style, rows)
+    if face["suggested_device_path"]:
+        tui.say(style, "IR operation and the emitter still need a live check before enrollment.", "warn")
+    fingerprint = report["fingerprint"]
+    tui.rule(style, "Fingerprint")
+    count = fingerprint["device_count"]
+    detail = f" ({count} device{'s' if count != 1 else ''})" if count else ""
+    tui.grid(style, [[("fprintd", "dim"), (fingerprint["status"] + detail, FINGERPRINT_STATUS.get(fingerprint["status"], "warn"))]])
+    tui.rule(style, "Packages")
+    rows = []
+    for name, package in report["packages"].items():
+        text, kind = PACKAGE_STATUS.get(package["status"], (package["status"], "warn"))
+        rows.append([(name, "bold"), (package["version"] or "", "dim"), (text, kind)])
+    tui.grid(style, rows)
+    tui.rule(style, "Login")
+    tui.grid(style, [[("Display manager", "dim"), (report["pam"]["display_manager"] or "unknown", "bold")]])
+    tui.say(style, "PAM: inventory only; authentication behavior has not been tested.", "info")
+    tui.say(style, "Run setup for guided camera checks, enrollment and reversible login activation.", "info")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    setup = commands.add_parser('setup', help='guided installation, enrollment and reversible login activation')
+    setup.add_argument('--keep-open', action='store_true', help='keep the launcher terminal open when finished')
+    commands.add_parser('launcher', help='add Face Login Setup to the applications menu')
+    commands.add_parser('runtime-deps', help='install the PAM test utility through Debian APT')
+    for name in ('pam-plan', 'pam-enable'):
+        sub = commands.add_parser(name, help='review login changes' if name == 'pam-plan' else 'enable login with timed rollback')
+        sub.add_argument('--user')
+        sub.add_argument('--service', action='append', required=True, choices=('gdm-password', 'sddm', 'kde', 'sudo'))
+    check = commands.add_parser('verify', help='verify face authentication or run an optional no-face diagnostic',
+                                description='A fresh face check is required for activation. '
+                                            'The reject check is an optional no-face diagnostic.')
+    check.add_argument('kind', choices=('face', 'reject'))
+    check.add_argument('--user')
+    check.add_argument('--json', action='store_true', help='return a structured verification result')
+    check.add_argument('--delay', type=int, default=0, help='seconds before the no-face scan starts')
+    checks = commands.add_parser('verify-status', help='show fresh verification checks for this account')
+    checks.add_argument('--user')
+    for name, help_text in (('pam-check', 'test the activated services'), ('pam-confirm', 'keep a tested activation'),
+                            ('pam-disable', 'restore previous login settings'), ('pam-status', 'show login activation status')):
+        commands.add_parser(name, help=help_text)
+    discovery = commands.add_parser("probe", help="inspect cameras, fprintd and PAM without changing configuration")
+    discovery.add_argument("--json", action="store_true", help="print a structured report (unknown is not a pass)")
+    for name in ("deps", "prepare", "build"):
+        sub = commands.add_parser(name, help={"deps": "install native build dependencies using apt", "prepare": "fetch and verify pinned build sources", "build": "build a native Debian package; no ISO needed"}[name])
+        sub.add_argument("--work-dir", type=Path)
+        sub.add_argument("--jobs", type=int)
+    install = commands.add_parser("install", help="install the locally built package using apt")
+    install.add_argument("--package", type=Path)
+    install.add_argument("--sha256")
+    config = commands.add_parser("configure", help="select a capture camera and update Howdy with a rollback backup")
+    config.add_argument("--device", help="stable /dev/v4l/by-id or by-path link; defaults to the unique IR candidate")
+    config.add_argument("--timeout", type=int, default=4)
+    config.add_argument("--dry-run", action="store_true")
+    for name in ("models", "preview", "enroll", "list", "pam-test"):
+        sub = commands.add_parser(name, help={"models": "download hash-verified upstream recognition models", "preview": "open the camera preview", "enroll": "enroll a face for the desktop account", "list": "list that account's enrolled models", "pam-test": "test authentication through a temporary PAM service"}[name])
+        if name != "models":
+            sub.add_argument("--user", help="desktop account; defaults to the invoking user")
+        if name == "pam-test":
+            sub.add_argument("--password-fallback", action="store_true")
+            sub.add_argument("--timeout", type=int, default=30)
+    commands.add_parser("restore-config", help="restore the original Howdy configuration")
+    commands.add_parser("pam-cleanup", help="remove a test service left by an interrupted run")
+    args = parser.parse_args()
+    if args.command in ('setup', 'launcher'):
+        import tui
+        import wizard
+        if args.command == 'launcher':
+            wizard.install_launcher()
+            return
+        style = tui.Style()
+        try:
+            wizard.setup(wizard.Terminal(style))
+        except (wizard.Cancelled, KeyboardInterrupt, EOFError) as error:
+            tui.say(style, str(error) or 'Setup cancelled.', 'warn')
+        except subprocess.CalledProcessError:
+            tui.say(style, 'Setup paused because a step could not complete. See its message above. '
+                    'Your existing enrollment is kept locally.', 'fail')
+            raise SystemExit(1)
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+            tui.say(style, f'Setup stopped: {error}\nOpen Face Login Setup to retry. '
+                    'Existing enrollment is kept locally.', 'fail')
+            raise SystemExit(1)
+        finally:
+            if args.keep_open:
+                try:
+                    input('\n' + tui.prompt_text(style, 'Press Enter to close.'))
+                except (EOFError, KeyboardInterrupt):
+                    pass
+        return
+    if args.command == "probe":
+        report = probe()
+        if args.json:
+            print(json.dumps(report, indent=2, sort_keys=True))
+        else:
+            print_report(report)
+        return
+    here = Path(__file__).resolve().parent
+    if args.command in ("deps", "prepare", "build"):
+        command = [sys.executable, str(here / "build.py"), args.command]
+        if args.work_dir:
+            command += ["--work-dir", str(args.work_dir)]
+        if args.jobs is not None:
+            command += ["--jobs", str(args.jobs)]
+        subprocess.run(command, check=True)
+        return
+    if os.geteuid() != 0:
+        sudo = ["sudo"]
+        if args.command == "preview":
+            sudo += ["--preserve-env=DISPLAY,XAUTHORITY,WAYLAND_DISPLAY,XDG_RUNTIME_DIR"]
+        # -B: root must not leave bytecode caches it owns inside the user's checkout.
+        subprocess.run([*sudo, "--", sys.executable, "-B", str(Path(__file__).resolve()), *sys.argv[1:]], check=True)
+        return
+    import local_ops
+    if args.command.startswith('pam-') and args.command not in ('pam-test', 'pam-cleanup') or args.command in ('verify', 'verify-status'):
+        import pam_ops
+        if args.command == 'pam-plan':
+            plan = pam_ops.service_plan(local_ops.target_user(args.user), args.service)
+            print('Face login will apply to: ' + ', '.join(pam_ops.SERVICES[name] for name in plan) +
+                  '. Password fallback is retained.')
+        elif args.command == 'pam-enable':
+            pam_ops.enable(local_ops.target_user(args.user), args.service)
+        elif args.command == 'pam-check':
+            pam_ops.check_services()
+        elif args.command == 'pam-confirm':
+            pam_ops.confirm()
+        elif args.command == 'pam-disable':
+            pam_ops.rollback()
+        elif args.command == 'pam-status':
+            print(json.dumps(pam_ops.status()))
+        elif args.command == 'verify-status':
+            print(json.dumps(pam_ops.verification_status(local_ops.target_user(args.user))))
+        else:
+            result = pam_ops.verify(local_ops.target_user(args.user), args.kind, delay=args.delay)
+            print(json.dumps(result) if args.json else result['message'])
+            if not args.json and not result['ok']:
+                raise SystemExit(1)
+    elif args.command == 'runtime-deps':
+        import shutil
+        if not shutil.which('pamtester'):
+            subprocess.run(['apt-get', '--no-remove', 'install', 'pamtester'], check=True)
+    elif args.command == "install":
+        if args.package is None:
+            dist = here.parents[1] / ".build/biometrics/dist"
+            manifest = json.loads((dist / "build.json").read_text())
+            args.package, args.sha256 = dist / Path(manifest["package"]).name, manifest["sha256"]
+        local_ops.install_package(args.package.resolve(), args.sha256 or "")
+    elif args.command == "configure":
+        cameras = discover_cameras()
+        device = args.device or camera_selection(cameras)["suggested_device_path"]
+        matches = [c for c in cameras if device in c["stable_paths"] and c["capture"] and c["formats"]]
+        if len(matches) != 1:
+            raise ValueError("No unique usable camera; run probe, then configure --device with its stable capture link")
+        local_ops.configure(device, args.timeout, args.dry_run)
+    elif args.command == "restore-config":
+        local_ops.restore_config()
+    elif args.command == "pam-cleanup":
+        local_ops.pam_cleanup()
+    elif args.command == "pam-test":
+        if not 1 <= args.timeout <= 300:
+            raise ValueError("PAM test timeout must be between 1 and 300 seconds")
+        local_ops.pam_test(local_ops.target_user(args.user), args.password_fallback, args.timeout)
+    elif args.command == "models":
+        local_ops.howdy("download-models", timeout=600)
+    else:
+        command = {"preview": "test", "enroll": "add", "list": "list"}[args.command]
+        local_ops.howdy(command, local_ops.target_user(args.user), timeout=300 if args.command == "enroll" else None)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except subprocess.TimeoutExpired:
+        raise SystemExit("Operation timed out; authentication was not accepted.")
+    except subprocess.CalledProcessError as error:
+        raise SystemExit(error.returncode or 1)
+    except (OSError, ValueError, KeyError, configparser.Error) as error:
+        raise SystemExit(str(error))

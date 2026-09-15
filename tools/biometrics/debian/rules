@@ -1,0 +1,43 @@
+#!/usr/bin/make -f
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+export PKG_CONFIG_PATH := $(HOWDY_DEPS_PREFIX)/lib/pkgconfig
+export CMAKE_PREFIX_PATH := $(HOWDY_DEPS_PREFIX)
+
+%:
+	dh $@ --buildsystem=cmake+ninja --builddirectory=build
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBEXECDIR=lib -DCMAKE_PREFIX_PATH=$(HOWDY_DEPS_PREFIX) \
+		-DCMAKE_INSTALL_RPATH=/usr/lib/howdy-next -DCMAKE_BUILD_RPATH=$(HOWDY_DEPS_PREFIX)/lib \
+		-DBUILD_TESTING=ON -DHOWDY_ENABLE_PRIVILEGED_TESTS=OFF \
+		-DHOWDY_PAM_DIR=/usr/lib/$(DEB_HOST_MULTIARCH)/security \
+		-DHOWDY_LICENSES_INSTALL_DIR=/usr/share/doc/howdy-next
+
+override_dh_auto_test:
+	LD_LIBRARY_PATH=$(HOWDY_DEPS_PREFIX)/lib ctest --test-dir build --output-on-failure --timeout 60
+
+override_dh_auto_install:
+	dh_auto_install
+	mkdir -p debian/howdy-next/usr/lib/howdy-next
+	find $(HOWDY_DEPS_PREFIX)/lib -maxdepth 1 -name 'libopencv*.so*' -exec cp -a {} debian/howdy-next/usr/lib/howdy-next/ \;
+	install -D -m 0644 $(HOWDY_OPENCV_LICENSE) debian/howdy-next/usr/share/doc/howdy-next/OpenCV-LICENSE
+
+override_dh_makeshlibs:
+	# Private OpenCV libraries are used only by this package.
+
+override_dh_shlibdeps:
+	set -e; : > debian/shlibs.local; \
+	for lib in debian/howdy-next/usr/lib/howdy-next/lib*.so.*; do \
+		[ -L "$$lib" ] && continue; \
+		soname=$$(objdump -p "$$lib" | awk '/SONAME/ {print $$2}'); \
+		[ -n "$$soname" ]; \
+		echo "$${soname%%.so.*} $${soname#*.so.} howdy-next" >> debian/shlibs.local; \
+	done; dh_shlibdeps -ldebian/howdy-next/usr/lib/howdy-next
+
+override_dh_fixperms:
+	dh_fixperms
+	chmod 4755 debian/howdy-next/usr/lib/howdy/howdy-auth-helper
+	chmod 0750 debian/howdy-next/etc/howdy debian/howdy-next/etc/howdy/models
+	chmod 0640 debian/howdy-next/etc/howdy/config.ini

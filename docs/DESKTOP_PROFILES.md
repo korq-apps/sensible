@@ -1,8 +1,8 @@
 # Desktop profiles: GNOME and KDE
 
 Status, reconciled **2026-09-14**: **first-beta scope is frozen around the
-merged desktop baseline.** The maintainer accepts completed checks on the three
-owned machines recorded in [RELEASE.md](RELEASE.md). Remaining targeted tests
+merged desktop baseline.** Hardware validation is accepted as recorded in
+[RELEASE.md](RELEASE.md). Remaining targeted tests
 are follow-up coverage, not beta blockers; native KDE styling, editor neutrality
 and backup features follow the beta. **PRs #16–#18 are merged; both editions passed
 each PR's ISO build and live console smoke.** Earlier user feedback confirms
@@ -481,8 +481,7 @@ to this profile or replace the outstanding session acceptance checks above.
 
 ## Acceptance checklist
 
-For the first beta, the maintainer's completed checks on owned hardware are
-accepted. Unchecked entries below preserve detailed follow-up scopes rather
+For the first beta, completed hardware checks are accepted. Unchecked entries below preserve detailed follow-up scopes rather
 than imposing an additional beta test campaign. They are not inferred as passed
 from the general hardware report.
 
