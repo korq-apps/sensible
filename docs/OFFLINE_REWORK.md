@@ -163,5 +163,7 @@ by the unchecked acceptance gates in PLAN.md, not by completion of these steps.
   ~40 GiB**.
 - **Live desktop implemented:** Try Sensible is part of the current baseline.
   First-boot identity delegation remains outside the installer design.
-- **Still planned:** the post-install app tool and outstanding acceptance in
+- **Post-release:** standalone biometric build/configuration/test tools are
+  the active feature ([BIOMETRICS.md](BIOMETRICS.md)). The general post-install
+  app tool remains planned, along with outstanding acceptance in
   [PLAN.md](PLAN.md); the completed offline rework does not close those gates.

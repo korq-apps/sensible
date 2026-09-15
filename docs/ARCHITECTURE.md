@@ -261,11 +261,9 @@ prompt when the secret is unavailable; no custom persistent password handoff.
 Two tiers, because fingerprint and face have very different maturity on Debian:
 
 - **Fingerprint — always installed.** `fprintd` + `libpam-fprintd` (Debian main). Enrollment lives in GNOME Settings / Plasma System Settings; nothing to configure at install time, dormant without a supported reader.
-- **Face — planned post-install opt-in, not shipped.** BioPass is the candidate
-  for face/fingerprint enrollment. Package provenance, model downloads, PAM
-  integration, removal and real authentication behavior need validation before
-  adoption. There is no BioPass installer checkbox; see the acceptance scope
-  in [PLAN.md](PLAN.md).
+- **Face — local development.** [Standalone Howdy-next tools](BIOMETRICS.md)
+  build/install a native package, configure a camera and support enrollment and
+  isolated PAM tests. The launcher guides service-specific login activation with timed rollback.
 
 Facts to not relearn later:
 
@@ -284,7 +282,7 @@ Facts to not relearn later:
 | Audio | PipeWire, WirePlumber, `pipewire-pulse`, `pipewire-audio`, `pipewire-alsa`, `alsa-ucm-conf` (nothing in PipeWire depends on it; without the UCM profiles SOF and SoundWire laptops expose no device), `alsa-topology-conf`, `alsa-utils`; `sensible-audio-check` is baked as a read-only diagnostic with an opt-in `--unmute`, and the installer runs its `--summary` in the live session to record findings as completion warnings |
 | GPU | `mesa-vulkan-drivers`, `va-driver-all` (VDPAU comes from `mesa-libgallium` via mesa; `vdpau-driver-all` was removed from Testing); the offline closure includes `nvidia-driver`, while NVIDIA KMS configuration is enabled only when `lspci` sees matching hardware |
 | Power | `power-profiles-daemon` (not TLP — it fights PPD and both DEs) |
-| Biometrics | `fprintd`, `libpam-fprintd` (baked); BioPass optional — see §5 **(planned — post-install tool)** |
+| Biometrics | `fprintd`, `libpam-fprintd` (baked); Howdy-next opt-in setup — see §5 (guided setup with timed rollback) |
 | Print / scan | `cups`, `ipp-usb` (driverless IPP-over-USB), `sane-airscan`; `simple-scan` with GNOME, `skanlite` with KDE |
 | Updates | `fwupd` (LVFS), `wireless-regdb` |
 | Repos on the target | `main`, `contrib`, `non-free`, `non-free-firmware` |
@@ -441,7 +439,7 @@ optional. No AI tools or installer checkboxes are currently added. Approved
 image artifacts would be pinned and verified at build time; optional online
 recipes and desktop-client support require separate validation.
 
-**Planned (post-install tool):** BioPass face login (pinned `.deb`, see §5); Developer tools — `docker.io`, `docker-compose` (the v2 rewrite in Testing), `lazygit`, `gh`. Developer tools deliberately do **not** add the user to the `docker` group — membership is root-equivalent, so the default is `sudo docker` (a user can opt in later, knowing the tradeoff).
+**Planned (post-install tool):** Howdy-next face setup (standalone tools, see §5); Developer tools — `docker.io`, `docker-compose` (the v2 rewrite in Testing), `lazygit`, `gh`. Developer tools deliberately do **not** add the user to the `docker` group — membership is root-equivalent, so the default is `sudo docker` (a user can opt in later, knowing the tradeoff).
 
 ### Explicitly not installed
 
@@ -462,7 +460,7 @@ from the copy, suppresses interactive UI and exits after verification/cleanup.
 There is no automatic reboot; the caller owns the next boot. Fixture evidence
 does not replace installed-disk acceptance. See [INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode).
 
-**Planned (post-install tool):** developer tools and BioPass (§5, §7).
+**Planned (post-install tool):** developer tools and Howdy-next catalog integration (§5, §7); the standalone setup launcher is available.
 
 **Later:** Btrfs Snapper and evaluated `grub-btrfs` recovery integration (a separate follow-up after desktop apps; see the layout/restore acceptance requirements in [PLAN.md](PLAN.md)), TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis; PCR policy must account for the unencrypted `/boot`), FIDO2 keys for sudo/polkit (`libpam-u2f`), GUI NVIDIA/MOK enrollment flow, Calamares if someone wants a GUI, other arches.
 

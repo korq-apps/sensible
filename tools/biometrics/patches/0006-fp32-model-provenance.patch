@@ -1,0 +1,13 @@
+--- a/THIRD_PARTY_NOTICES.md
++++ b/THIRD_PARTY_NOTICES.md
+@@ -49,8 +49,8 @@
+ 
+ Artifact:
+ 
+-- `face_recognition_sface_2021dec_int8.onnx`
+-- SHA-256: `2b0e941e6f16cc048c20aee0c8e31f569118f65d702914540f7bfdc14048d78a`
++- `face_recognition_sface_2021dec.onnx`
++- SHA-256: `0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79`
+ 
+ Source:
+ 
