@@ -230,7 +230,10 @@ per app. On a **GNOME autologin** install the installer therefore writes an
 **empty-password `login` keyring** (`installer/lib/keyring.sh`, plaintext
 `~/.local/share/keyrings/login.keyring` + `default`, owned by the user): the
 daemon auto-unlocks it and it is the default collection from the first login, so
-secret access never prompts and no second keyring appears. This is scoped to
+secret access should not prompt and no second keyring appears (the empty-password
+keyring is stored unencrypted, which is how the daemon unlocks it unattended;
+on-hardware acceptance across a real GDM autologin session start is still due).
+This is scoped to
 autologin only, where the LUKS passphrase is already the access boundary; a
 GNOME **password** login keeps its PAM-unlocked encrypted keyring, and **face
 login without autologin** keeps an encrypted keyring asked for once per session.

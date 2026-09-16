@@ -133,6 +133,10 @@ libpam-fprintd
 # config/packages.chroot by stage-biometrics.sh, inert until Face Login Setup
 # enables it per account. Checked by the 0280-biometrics hook.
 howdy-next
+# pamtester drives the guided service test (pam-check) in Face Login Setup.
+# Baked so that setup completes offline on the installed system; without it the
+# wizard would fall back to apt-get and need repository access.
+pamtester
 
 # Printing/scanning: driverless IPP-over-USB printing and eSCL/WSD scanning
 # (cups + printer-driver-all are in the variant lists)

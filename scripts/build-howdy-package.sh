@@ -46,6 +46,13 @@ if [ "${1:-}" = "--inside" ]; then
             exit 0
         fi
         echo "==> Howdy-next: cached package no longer installs on current Testing; rebuilding"
+        # The private OpenCV prefix is keyed only by our source inputs, not by
+        # the Testing library set. A soname transition is exactly why the cached
+        # package stopped installing, so a plain rebuild would relink against the
+        # stale prefix and fail again. Discard the extracted/compiled trees so
+        # OpenCV and Howdy recompile against current Testing; the pinned source
+        # tarballs under downloads/ are kept.
+        rm -rf "${WORK}"/source-* "${WORK}/dist"
     else
         echo "==> Howdy-next: no package built from the current inputs; building"
     fi

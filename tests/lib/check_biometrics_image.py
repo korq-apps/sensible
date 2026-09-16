@@ -238,6 +238,9 @@ exit "${MOCK_HOWDY_RC:-0}"
 ''', True)
         write(self.bin / "desktop-file-validate", '#!/bin/sh\nexit "${MOCK_DESKTOP_INVALID:-0}"\n', True)
         write(self.bin / "update-desktop-database", '#!/bin/sh\nexit 0\n', True)
+        # pamtester must be baked so the guided service test runs offline; the
+        # hook checks the package's /usr/bin/pamtester path (redirected here).
+        write(self.root / "usr/bin/pamtester", "#!/bin/sh\n", True)
 
     def run_hook(self):
         return subprocess.run(["sh", str(self.hook)], env=self.env, text=True, capture_output=True)
@@ -268,6 +271,8 @@ exit "${MOCK_HOWDY_RC:-0}"
             ("asset is missing", {}, lambda: (self.tool / "tui.py").unlink(), lambda: shutil.copy(TOOLS / "tui.py", self.tool / "tui.py")),
             ("does not run", {}, lambda: (self.tool / "sensible-biometrics").write_text("#!/bin/sh\nexit 3\n"),
              lambda: shutil.copy(TOOLS / "sensible-biometrics", self.tool / "sensible-biometrics")),
+            ("pamtester is not installed", {}, lambda: (self.root / "usr/bin/pamtester").unlink(),
+             lambda: write(self.root / "usr/bin/pamtester", "#!/bin/sh\n", True)),
         ]
         for message, env, break_it, restore in cases:
             with self.subTest(message=message, env=env):

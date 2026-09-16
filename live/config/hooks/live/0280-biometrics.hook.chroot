@@ -22,6 +22,14 @@ for executable in /usr/bin/howdy "$tool_root/sensible-biometrics"; do
         exit 1
     fi
 done
+# The guided service test (pam-check) calls pamtester. It must be baked so Face
+# Login Setup completes offline; otherwise the wizard falls back to apt-get and
+# needs repository access on the installed system. The pamtester package ships
+# /usr/bin/pamtester.
+if [ ! -x /usr/bin/pamtester ]; then
+    echo "Error: pamtester is not installed; Face Login Setup needs it and the image must bake it." >&2
+    exit 1
+fi
 for asset in /usr/lib/x86_64-linux-gnu/security/pam_howdy.so /etc/howdy/config.ini \
     /usr/share/doc/howdy-next/copyright /usr/share/doc/sensible-biometrics/sources.txt \
     /usr/share/applications/sensible-biometrics.desktop \

@@ -203,10 +203,13 @@ in the live session for diagnostics.
   log in with the username and user password created during installation.
 - Without encryption, there is no disk-unlock prompt; log in normally.
 
-Skipping desktop login does not guarantee that saved application passwords are
-already unlocked. KDE Wallet or GNOME Keyring may ask for its password on first
-use after autologin or biometric login. A wallet/keyring password can differ
-from the account password; do not delete the store if an unlock fails. The
+On a GNOME autologin install Sensible pre-creates an empty-password login
+keyring so GNOME Keyring should unlock it without prompting; if an app still
+asks, or you prefer a prompt, adjust it in Passwords and Keys. Otherwise,
+skipping desktop login does not guarantee that saved application passwords are
+already unlocked: KDE Wallet, or GNOME Keyring after a face login without
+autologin, may ask for its password on first use. A wallet/keyring password can
+differ from the account password; do not delete the store if an unlock fails. The
 [manual's saved-credentials guidance](../manual/index.html#desktop-credentials)
 also explains KDE's GPG-key setup error. Cross-desktop integration improvements
 are tracked in [#29](https://github.com/korq-apps/sensible/issues/29); automatic
