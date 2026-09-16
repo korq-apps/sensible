@@ -129,6 +129,10 @@ keyd
 # without a reader.
 fprintd
 libpam-fprintd
+# Face login: Howdy-next built from pinned sources and supplied through
+# config/packages.chroot by stage-biometrics.sh, inert until Face Login Setup
+# enables it per account. Checked by the 0280-biometrics hook.
+howdy-next
 
 # Printing/scanning: driverless IPP-over-USB printing and eSCL/WSD scanning
 # (cups + printer-driver-all are in the variant lists)

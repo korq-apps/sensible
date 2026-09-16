@@ -2,10 +2,16 @@
 
 ## Where we are
 
-**Next feature: standalone biometric setup.** Build, install, configure and test
-[Howdy-next](https://codeberg.org/nathawat/howdy-next) from a local checkout.
-The [local tool guide](BIOMETRICS.md) owns the commands and remaining work;
-the setup launcher now guides service-specific activation with timed rollback.
+**Active feature: face login baked into the image.** The standalone
+[Howdy-next](https://codeberg.org/nathawat/howdy-next) tools (package build,
+camera configuration, enrollment, isolated PAM tests, guided activation with
+timed rollback) are implemented; the [tool guide](BIOMETRICS.md) owns the
+commands. The current slice bakes the locally built package, its recognition
+models and the Face Login Setup launcher into both editions
+(see [Face login delivery](#face-login-delivery)); a green CI image build with
+the package and an installed-system check of the wizard complete it. A signed
+Sensible APT repository for that package and the Sensible tools follows as its
+own slice.
 
 **Scope reconciliation (2026-09-14, baseline `58b1d02`):** the implementation
 has moved beyond the original v1 plan. The first official beta,
@@ -41,13 +47,13 @@ than asked, and third-party software leaves the install path entirely.
 | Phase 7.1 variant build + package gate | **done** |
 | Phase 7.2 copy install | **done** |
 | Phase 7.3-7.5 live session, guided prompts, KDE | **done** |
-| Phase 7.6 post-install app tool | general catalog planned; standalone biometric tools are the active independent slice |
+| Phase 7.6 post-install app tool | general catalog planned; the biometric tools are implemented and being baked into the image |
 | Unattended input (#4) | merged in PR #17 (`553ad1d`); protected TOML/secret files and config-driven integration coverage; real `--config` acceptance belongs to #5 |
 | Installer/VM diagnostics | merged in PR #17; bounded pre-cleanup evidence and host export, original failure preserved; real guest failure/export acceptance remains |
 | Live desktop and audio | merged in PR #18 (`aa1c44e`); user confirms Try Sensible works as expected; specific installed-security and physical-audio checks remain separate |
 | First beta | `v1.0.0-beta.1` published from `ed3db23`; both seeded ISO builds and live boot checks passed; hardware testing accepted; exhaustive matrix and expanded hardware records remain follow-ups |
 | Hybrid ZRAM swap (#11) | merged in PR #33 (`58b1d02`); installed KDE swap/compression and VGA hibernate/resume accepted; PR merge checklist additionally records pressure, failure fallback and shutdown checks; per-edition/layout comparisons remain |
-| Wallet/keyring first use (#29) | source diagnosis and manual guidance merged in #30/#31; autologin explanation merged in #32; fresh-session/PAM acceptance and optional boot-secret reuse remain distinct |
+| Wallet/keyring first use (#29) | source diagnosis and manual guidance merged in #30/#31; autologin explanation merged in #32; GNOME autologin now gets an empty-password auto-unlocking login keyring so secret access never prompts (`installer/lib/keyring.sh`, `seahorse` shipped); KDE Wallet, fresh-session/PAM acceptance and optional boot-secret reuse remain distinct |
 | Phase 6 extras | re-scoped below: baked into the ISO, or moved to the post-install tool |
 | Desktop profiles | PR #16 merged; both ISO builds/live UEFI smoke checks pass; GNOME and KDE validation reported successful by the user; targeted acceptance and native KDE configuration remain; see [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md) |
 | Offline first-login manual | implemented from PR #2 on the current installer; real desktop first-login validation remains pending |
@@ -150,7 +156,7 @@ relative effort/risk notes are planning aids, not delivery estimates or dates.
 
 | Order | Bounded change | Completion evidence / existing owner |
 | :--- | :--- | :--- |
-| **1 — active** | **Single-entry biometric setup with Howdy-next** | [Local tools](BIOMETRICS.md): native package build/install, camera configuration, enrollment and isolated PAM tests; guided activation has a timed rollback. Coordinates wallet behavior with #29 |
+| **1 — active** | **Face login baked into the image** | [Tools](BIOMETRICS.md) implemented: native package build, camera configuration, enrollment, isolated PAM tests and guided activation with timed rollback. In progress: package compiled in a Testing container by CI, models pinned, launcher shipped, build hook. Next slice: signed Sensible APT repository. Coordinates wallet behavior with #29 |
 | Bugfix lane | Wallet/keyring first use and login integration | [#29](https://github.com/korq-apps/sensible/issues/29): GPG-default diagnosis and first-use guidance merged; verify password-backed/PAM behavior on both desktops and preserve credentials; candidate defects precede cosmetic #27 work, with boot-secret reuse evaluated separately |
 | Completed | Hybrid ZRAM + persistent swap | #11 implemented in PR #33; retain remaining comparative evidence separately. #8's installed-system Secure Boot messaging is still a follow-up |
 | 2 | Consistent installer Back/Cancel | #7: repeated previous-step navigation without lost answers, stale derived state or accidental disk writes; Gum and fallback tests |
@@ -167,11 +173,34 @@ Personal-file backups ([#21](https://github.com/korq-apps/sensible/issues/21))
 remain a separate design-first workflow from root snapshots. Small editor/manual
 changes may land independently rather than wait for a storage project.
 
+### Face login delivery
+
+Decided 2026-09-15. Howdy-next is not downloaded as a binary: it is compiled
+from the source pins in `tools/biometrics/sources.json` inside a Debian Testing
+container (`scripts/build-howdy-package.sh`) so its dependencies match the
+archive the image is bootstrapped from, then staged into the image like the
+other local packages (`scripts/stage-biometrics.sh`). A cached package is
+reused only while it was built from the current inputs and still installs on
+current Testing, so a library transition rebuilds it before the ISO build can
+fail. The two recognition models are pinned in `live/pins.env` and baked; the
+`0280-biometrics` hook makes Howdy verify them offline and fails the build if
+any PAM service or polkit rule references Howdy. Installation stays inert:
+Face Login Setup, shipped as a launcher, is the only path that changes login,
+per account and with a timed rollback.
+
+Follow-up slice: a signed Sensible APT repository (static, generated by CI, a
+keyring package and scoped origin baked into the image, signing key kept off
+the runner) carrying `howdy-next` and the Sensible tools, so installed systems
+receive rebuilt packages when Testing moves instead of waiting for a new image.
+
 ### Immediate handoff
 
-**Active feature:** use the standalone [biometric tools](BIOMETRICS.md) to
-build a local package, configure a camera, enroll and test through an isolated
-PAM service, then enable login through the guided flow with timed rollback.
+**Active feature:** finish baking face login into the image. The package
+build and staging path is implemented (`scripts/build-howdy-package.sh`,
+`scripts/stage-biometrics.sh`, the `0280-biometrics` hook, CI `package` job);
+a green CI image build with the package and a live check of Face Login Setup on
+an installed system complete the slice. The standalone
+[biometric tools](BIOMETRICS.md) remain the developer path.
 
 1. **Preserve the published release.** Keep `v1.0.0-beta.1`, its retained ISO
    bytes and checksums immutable; use [RELEASE.md](RELEASE.md) for its source and
@@ -259,7 +288,14 @@ Not included: profile export, a general dry-run/diagnostics tool, the expanded
 **Desktop credentials (#29, bugfix lane):** distinguish KDE's GPG-key setup
 error from a missing password for wallet decryption. Verify actual package/PAM
 integration, provide a supported password-backed fresh-user path and preserve
-existing encrypted stores. Test password login, autologin, available biometrics,
+existing encrypted stores. **GNOME autologin is handled:** the installer writes
+an empty-password `login` keyring (`installer/lib/keyring.sh`) so autologin
+sessions auto-unlock without prompting or forking a second keyring, `seahorse`
+ships for users to add a password or opt other accounts in, and the manual
+documents it; scoped to GNOME autologin, where LUKS is already the boundary.
+Remaining: the same for KDE Wallet's classic backend, and on-hardware
+acceptance of the GNOME behavior across a real GDM autologin session start.
+Test password login, autologin, available biometrics,
 password changes/resets and live-to-installed isolation. Evaluate upstream GDM
 disk-secret reuse separately; package configuration alone is not boot evidence.
 Keep safe fallback prompts rather than blank passwords, disabled secret storage
@@ -604,12 +640,13 @@ planned; standalone biometric tools are implemented, with usage tracked in
 - [x] git defaults: `configs/gitconfig` → `/etc/gitconfig` in the image. The installer still offers optional name/email for the user's `~/.gitconfig`; dropping those prompts is deferred to the first-boot/UI pass
 - [x] `ufw` enabled, deny incoming / allow outgoing (config-file enable, never `ufw enable` in chroot); both editions allow TCP/UDP 53317 for LocalSend and TCP/UDP 1714–1764 for GSConnect/KDE Connect. Debian's IPv6-enabled defaults generate IPv4/IPv6 rules across interfaces and source addresses, not only trusted networks — `live/config/hooks/live/0300-ufw.hook.chroot`
 - [x] Printing/scanning: `cups` + `ipp-usb` + `sane-airscan`; `simple-scan` (GNOME) / `skanlite` (KDE)
+- [ ] Howdy-next face login: package compiled from pinned sources in a Testing container (`scripts/build-howdy-package.sh`), pinned OpenCV zoo models and the Face Login Setup launcher staged by `scripts/stage-biometrics.sh`, checked by the `0280-biometrics` hook; installation inert, activation through the [guided setup](BIOMETRICS.md) with timed rollback. Pending: first CI image build with the package and installed-system acceptance
 - [x] Audio: `alsa-ucm-conf` (SOF/SoundWire laptops expose no device without it), `alsa-topology-conf`, `alsa-utils`, and explicit `firmware-cirrus`/`firmware-intel-sound` in the closure; `sensible-audio-check` baked and run by the installer so live-session findings reach the completion screen; live mixer state dropped from the target. Known limit: Realtek + Cirrus CS35L56 laptops newer than Testing's `firmware-cirrus` snapshot stay silent (headphones work) until their per-model tuning migrates, brand-new models can additionally wait for a kernel quirk, and Debian packages no AMD SOF DSP firmware
 
 **Move to the post-install tool** (`sensible-apps`, online, after first boot):
 
 - [ ] Developer tools: `docker.io` + `docker-compose` + `lazygit` + `gh`; user **not** added to the docker group (root-equivalent). Was an installer checkbox, which is exactly the kind of question the offline rework removes, and these cost nothing to add after first boot
-- [ ] Howdy-next face login: [standalone tools](BIOMETRICS.md) provide a native build/install and local configuration/enrollment/PAM test workflow. The launcher guides login activation with verification and timed rollback; image integration remains separate.
+- Howdy-next face login moved to the "bake into the ISO" list above; the post-install catalog no longer owns it.
 - [x] Brave Origin is documented as a curated optional online app with its official installer; it is not preinstalled.
 - [ ] One declarative post-install catalog for Brave Origin, Audacious and
   approved developer/AI tools, introduced through the small backend/adapters
@@ -763,7 +800,7 @@ an unattended harness first. Their own real-system acceptance is still required.
 | Offline closure is incomplete | Validate every Debian package at build time and fail closed if the archive query itself fails |
 | Mocked tests hide an unbootable install | Beta uses maintainer hardware and installed-VM acceptance; expand the real installed-disk matrix as follow-up coverage |
 | Brave or AI CLIs add untrusted install paths | Official optional install routes; any approved AI image artifacts require pins, license/dependency review and an installed-system update path ([AI_TOOLS.md](AI_TOOLS.md)) |
-| Third-party face authentication changes PAM | Howdy-next is opt-in after first boot; pin package/models, verify hardware and enrollment, preserve password fallback, validate service-specific activation and removal ([scope](BIOMETRICS.md)) |
+| Third-party face authentication changes PAM | Howdy-next ships inert and is enabled per account after first boot with a timed rollback; the package is compiled from pinned sources in a Testing container, models are pinned, and the build hook verifies that installation touches no PAM service ([scope](BIOMETRICS.md)) |
 | Pinned artifacts rot (Howdy-next/models, Nerd Font, oh-my-bash, LazyVim) | Versions + SHA256 recorded in one place; CI fails loudly when a pin 404s |
 | live-build silently skips misnamed hooks | Hooks must match `*.hook.{chroot,binary}`; unit test enforces the naming |
 | Live ISO too large | Keep separate GNOME/KDE images and review every addition to the baked offline closure |

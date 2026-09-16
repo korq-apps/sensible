@@ -73,6 +73,13 @@ live/config/packages.chroot/localsend_amd64.deb
 live/config/includes.chroot/usr/share/doc/localsend/
 live/config/packages.chroot/onlyoffice-desktopeditors_amd64.deb
 live/config/includes.chroot/usr/share/doc/sensible-office/
+# Staged by scripts/stage-biometrics.sh (package from .build/biometrics/dist)
+live/config/packages.chroot/howdy-next_amd64.deb
+live/config/includes.chroot/usr/share/howdy/
+live/config/includes.chroot/usr/local/lib/sensible/
+live/config/includes.chroot/usr/local/bin/sensible-biometrics
+live/config/includes.chroot/usr/share/applications/sensible-biometrics.desktop
+live/config/includes.chroot/usr/share/doc/sensible-biometrics/
 
 # Temporary files
 /.qemu/

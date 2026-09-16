@@ -27,7 +27,10 @@ mountpoint() { return 1; }
 mount() { return 0; }
 stat() { echo 0; }
 bash() {
-    if [ "$1" = /workspace/scripts/fetch-pins.sh ]; then return 0; fi
+    # External staging steps (pins, face-login stack) have their own fixtures.
+    case "$1" in
+        /workspace/scripts/fetch-pins.sh|/workspace/scripts/stage-biometrics.sh) return 0 ;;
+    esac
     command bash "$@"
 }
 export -f lb mountpoint mount stat bash

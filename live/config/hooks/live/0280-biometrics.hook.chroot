@@ -1,0 +1,89 @@
+#!/bin/sh
+# Fail the build unless the baked face-login stack is complete and inert:
+# pinned Howdy-next package, offline recognition models Howdy itself accepts,
+# the setup tool and its launcher, and no PAM service touched by installation.
+set -eu
+. /etc/sensible/pins.env
+
+if ! status=$(dpkg-query -W -f='${Status}' howdy-next 2>/dev/null) \
+    || ! version=$(dpkg-query -W -f='${Version}' howdy-next 2>/dev/null) \
+    || ! arch=$(dpkg-query -W -f='${Architecture}' howdy-next 2>/dev/null) \
+    || [ "$status" != 'install ok installed' ] \
+    || [ "$version" != "$HOWDY_NEXT_DEB_VERSION" ] \
+    || [ "$arch" != amd64 ]; then
+    echo "Error: howdy-next is missing or differs from the pinned package identity." >&2
+    exit 1
+fi
+
+tool_root=/usr/local/lib/sensible/biometrics
+for executable in /usr/bin/howdy "$tool_root/sensible-biometrics"; do
+    if [ ! -x "$executable" ]; then
+        echo "Error: face-login executable is missing: $executable" >&2
+        exit 1
+    fi
+done
+for asset in /usr/lib/x86_64-linux-gnu/security/pam_howdy.so /etc/howdy/config.ini \
+    /usr/share/doc/howdy-next/copyright /usr/share/doc/sensible-biometrics/sources.txt \
+    /usr/share/applications/sensible-biometrics.desktop \
+    "$tool_root/local_ops.py" "$tool_root/pam_ops.py" "$tool_root/pam_session.py" \
+    "$tool_root/recover.py" "$tool_root/tui.py" "$tool_root/wizard.py" "$tool_root/sources.json"; do
+    if [ ! -s "$asset" ]; then
+        echo "Error: face-login asset is missing: $asset" >&2
+        exit 1
+    fi
+done
+if [ "$(readlink -f /usr/local/bin/sensible-biometrics)" != "$(readlink -f "$tool_root/sensible-biometrics")" ]; then
+    echo "Error: /usr/local/bin/sensible-biometrics does not launch the staged tool." >&2
+    exit 1
+fi
+# The tool must at least parse and start without a checkout around it.
+if ! python3 -B "$tool_root/sensible-biometrics" --help >/dev/null; then
+    echo "Error: the staged sensible-biometrics tool does not run." >&2
+    exit 1
+fi
+# The setup tool rewrites exactly these two keys; refuse a layout it cannot manage.
+if ! grep -q '^\[video\]' /etc/howdy/config.ini \
+    || ! grep -Eq '^[[:space:]]*device_path[[:space:]]*=' /etc/howdy/config.ini \
+    || ! grep -Eq '^[[:space:]]*timeout[[:space:]]*=' /etc/howdy/config.ini; then
+    echo "Error: /etc/howdy/config.ini lacks the [video] device_path/timeout keys the setup tool manages." >&2
+    exit 1
+fi
+
+# Models: the exact pinned bytes, owned by the build user (root in the chroot)
+# and not writable by anyone else, or Howdy refuses them at enrollment.
+models_dir=/usr/share/howdy/models
+for entry in "$HOWDY_YUNET_FILE $HOWDY_YUNET_SHA256" "$HOWDY_SFACE_FILE $HOWDY_SFACE_SHA256"; do
+    set -- $entry
+    if ! printf '%s  %s\n' "$2" "$models_dir/$1" | sha256sum -c --status; then
+        echo "Error: recognition model differs from its pin: $models_dir/$1" >&2
+        exit 1
+    fi
+    if [ "$(stat -c '%u %a' "$models_dir/$1")" != "$(id -u) 644" ]; then
+        echo "Error: recognition model ownership or mode is not owner-only writable: $models_dir/$1" >&2
+        exit 1
+    fi
+done
+# Howdy's own downloader must accept the baked files as complete: any attempt
+# to fetch or replace one means the pins drifted from its compiled manifest.
+if ! output=$(howdy download-models 2>&1) \
+    || printf '%s\n' "$output" | grep -Eq 'Downloading|Replacing'; then
+    echo "Error: Howdy did not accept the pinned recognition models offline:" >&2
+    printf '%s\n' "$output" >&2
+    exit 1
+fi
+
+# Installation must not enable face login anywhere. Only Face Login Setup does,
+# per account, with a rollback timer.
+if grep -rqs 'pam_howdy' /etc/pam.d /usr/lib/pam.d 2>/dev/null; then
+    echo "Error: a PAM service already references pam_howdy; installation must stay inert." >&2
+    exit 1
+fi
+for stray in /usr/share/pam-configs/howdy* /etc/polkit-1/rules.d/*howdy* /usr/share/polkit-1/rules.d/*howdy*; do
+    if [ -e "$stray" ]; then
+        echo "Error: unexpected PAM or polkit profile shipped with Howdy: $stray" >&2
+        exit 1
+    fi
+done
+
+desktop-file-validate /usr/share/applications/sensible-biometrics.desktop
+update-desktop-database /usr/share/applications

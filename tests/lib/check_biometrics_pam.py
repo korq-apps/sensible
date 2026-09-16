@@ -21,6 +21,7 @@ sys.path.insert(0, str(TOOLS))
 import local_ops as ops
 import pam_ops as pam
 import pam_session
+import recover
 import tui
 import wizard
 
@@ -42,6 +43,9 @@ class Transactions(unittest.TestCase):
             patcher = patch.object(target, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
+        package_locks = patch.object(ops, 'PACKAGE_LOCKS', (self.root / 'lock-frontend', self.root / 'lock-dpkg'))
+        package_locks.start()
+        self.addCleanup(package_locks.stop)
         for path, content in (
             (ops.CONFIG, b'[core]\ndisabled=false\n[video]\ntimeout=4\ndevice_path=/dev/v4l/by-path/fixture\n'),
             (ops.CONFIG.parent / 'models/fixture.dat', b'face-data'), (ops.PAM_MODULE, b'fixture module'),
@@ -221,16 +225,75 @@ class Transactions(unittest.TestCase):
             with self.assertRaises(ValueError): pam.check_services()
         self.assertEqual((pam.PAM_DIR / 'gdm-password').read_bytes(), SERVICE)
 
+    def test_recovery_can_run_during_manual_pam_test(self):
+        self.activate()
+        with patch.object(ops.subprocess, 'run', side_effect=lambda *a, **k: pam.rollback(pending_only=True)):
+            ops.pam_test('fixture', timeout=300)
+        self.assertEqual(pam.status()['status'], 'off')
+        self.assertEqual((pam.PAM_DIR / 'gdm-password').read_bytes(), SERVICE)
+
+    def test_recovery_during_verification_does_not_resurrect_proof(self):
+        self.activate()
+        def prompt(*args, **kwargs):
+            pam.rollback(pending_only=True)
+            return {'start': 0, 'auth': 0, 'account': 0, 'message': 'Success'}
+        with patch.object(ops, 'run_pam_service', side_effect=prompt), self.assertRaises(ValueError):
+            pam.verify('fixture', 'face')
+        self.assertEqual(pam.status()['status'], 'off')
+        self.assertFalse((ops.STATE / 'verified.json').exists())
+
+    def test_original_bytes_with_changed_metadata_retain_recovery_backup(self):
+        self.activate()
+        path = pam.PAM_DIR / 'gdm-password'
+        path.write_bytes(SERVICE)
+        path.chmod(0o600)
+        with self.assertRaises(pam.ReconciliationError): pam.rollback()
+        self.assertTrue((ops.STATE / 'pam.json').exists())
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_late_pam_edit_is_not_overwritten_during_activation(self):
+        self.proof()
+        write = ops.atomic_write
+        path = pam.PAM_DIR / 'gdm-password'
+        edited = SERVICE + b'# intervening edit\n'
+        def concurrent(target, *args, **kwargs):
+            if target == path: path.write_bytes(edited)
+            return write(target, *args, **kwargs)
+        with patch.object(ops, 'atomic_write', side_effect=concurrent), self.assertRaises(pam.ReconciliationError):
+            pam.enable('fixture', ['gdm-password'])
+        self.assertEqual(path.read_bytes(), edited)
+        self.assertTrue((ops.STATE / 'pam.json').exists())
+
     def test_rollback_retry_after_partial_recovery(self):
         self.activate(('gdm-password', 'sudo'))
         original = ops.atomic_write
         def fail(path, *a, **kw):
             if path.name == 'sudo': raise OSError('temporarily read-only')
             return original(path, *a, **kw)
-        with patch.object(ops, 'atomic_write', side_effect=fail), self.assertRaises(ValueError): pam.rollback()
+        with patch.object(ops, 'atomic_write', side_effect=fail), self.assertRaises(OSError): pam.rollback()
         self.assertEqual((pam.PAM_DIR / 'gdm-password').read_bytes(), SERVICE)
         pam.rollback()
         self.assertEqual(pam.status()['status'], 'off')
+
+
+class RecoveryExit(unittest.TestCase):
+    def test_only_transient_errors_remain_retryable(self):
+        for error, expected in ((pam.ReconciliationError('external edit'), 78),
+                                (ValueError('invalid backup'), 78), (OSError('busy'), 1), (None, 0)):
+            with self.subTest(error=error), patch.object(recover.os, 'geteuid', return_value=0), \
+                 patch.object(pam, 'rollback', side_effect=error), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(recover.main(), expected)
+        unit = pam.recovery_unit()
+        self.assertIn(b'RestartPreventExitStatus=78\n', unit)
+        # A persistent transient failure must not loop forever behind the
+        # display-manager ordering; the burst limit lets it fail and release.
+        self.assertIn(b'StartLimitBurst=5\n', unit)
+        self.assertIn(b'StartLimitIntervalSec=120\n', unit)
+        with patch.object(pam, 'install_recovery'), patch.object(pam.subprocess, 'run') as run:
+            pam.arm_recovery()
+            command = next(call.args[0] for call in run.call_args_list if call.args[0][0] == 'systemd-run')
+            self.assertIn('--property=RestartPreventExitStatus=78', command)
+            self.assertIn('--property=StartLimitBurst=5', command)
 
 
 class ResultChannel(unittest.TestCase):
@@ -321,9 +384,10 @@ class RealPam(unittest.TestCase):
         self.assertEqual((result['start'], result['auth'], result['account']), (0, 0, 13))
         result = pam_session.authenticate('worker', self.user, account=False, confdir=self.root)
         self.assertEqual((result['auth'], result['account']), (0, None))
-        (self.root / 'worker').write_text(f'auth required {self.module} 7\naccount required {self.module} 0\n')
+        # No argument: the compiled module returns the actual header's PAM_AUTH_ERR.
+        (self.root / 'worker').write_text(f'auth required {self.module}\naccount required {self.module} 0\n')
         result = pam_session.authenticate('worker', self.user, confdir=self.root)
-        self.assertEqual((result['auth'], result['account']), (7, None))
+        self.assertEqual((result['auth'], result['account']), (pam.PAM_AUTH_ERR, None))
         self.assertTrue(pam.verification_result('reject', result)['ok'])
 
     def test_worker_process_delivers_structured_results_through_private_fd(self):
@@ -335,11 +399,14 @@ class RealPam(unittest.TestCase):
 
 
 class FakeBackend:
-    def __init__(self, fail=None, checks=(), results=None):
+    def __init__(self, fail=None, checks=(), results=None, report=None):
         self.calls, self.fail = [], fail
         self.active = False
         self.checks = list(checks)
         self.results = results or {}
+        self.report = report or {'face': {'status': 'needs_verification'},
+                                 'cameras': [{'capture': True, 'ir_candidate': True,
+                                 'stable_paths': ['/dev/v4l/by-path/fixture'], 'name': 'IR', 'node': '/dev/video2'}]}
     def installed(self): return True
     def desktop_services(self): return ['gdm-password']
     def run(self, *args, **kwargs):
@@ -352,8 +419,7 @@ class FakeBackend:
         if args[0] == 'verify':
             outcomes = self.results.get(args[1], [])
             return outcomes.pop(0) if outcomes else {'ok': True, 'reason': 'verified', 'message': 'Passed.'}
-        if args[0] == 'probe': return {'cameras': [{'capture': True, 'ir_candidate': True,
-                                                  'stable_paths': ['/dev/v4l/by-path/fixture'], 'name': 'IR'}]}
+        if args[0] == 'probe': return self.report
 
 
 class FakeUI:
@@ -381,6 +447,8 @@ class WizardFlow(unittest.TestCase):
         backend = FakeBackend()
         ui = self.execute([True, False, True, False, True, True, True, True], backend)
         self.assertEqual(ui.steps, [1, 2, 3, 4, 5, 6])
+        self.assertTrue(any('run sudo without a password' in message for message in ui.messages),
+                        'the sudo prompt must be preceded by a passwordless-root warning')
         calls = [c[0] for c in backend.calls]
         self.assertEqual([c[1] for c in backend.calls if c[0] == 'verify'], ['face'])
         self.assertLess(max(i for i, c in enumerate(calls) if c == 'verify'), calls.index('pam-enable'))
@@ -411,6 +479,23 @@ class WizardFlow(unittest.TestCase):
         backend = FakeBackend()
         with self.assertRaises(wizard.Cancelled): self.execute([True, False, False, False], backend)
         self.assertNotIn('enroll', [c[0] for c in backend.calls])
+
+    def test_unreadable_peer_blocks_configuration_despite_readable_ir_candidate(self):
+        backend = FakeBackend()
+        backend.report['face']['status'] = 'incomplete'
+        with self.assertRaises(ValueError): self.execute([True, False], backend)
+        self.assertNotIn('configure', [c[0] for c in backend.calls])
+        self.assertNotIn('enroll', [c[0] for c in backend.calls])
+
+    def test_camera_menu_does_not_emit_device_control_sequences(self):
+        backend = FakeBackend()
+        camera = backend.report['cameras'][0]
+        camera['name'] = 'IR\x1b[2J\nInjected text'
+        backend.report['cameras'].append(dict(camera, name='Second camera', node='/dev/video4'))
+        ui = FakeUI([True, False])
+        with patch.object(ui, 'choose', return_value=0) as choose:
+            wizard.check_camera_and_enroll(ui, backend, 'fixture')
+        self.assertEqual(choose.call_args.args[1], ['/dev/video2', 'Second camera'])
 
     def test_face_check_retry_keeps_enrollment(self):
         backend = FakeBackend(results={'face': [{'ok': False, 'reason': 'not_authenticated', 'message': 'No match.'}]})
@@ -443,6 +528,34 @@ class WizardFlow(unittest.TestCase):
                     self.execute([True, False, True, False, True, *final], backend)
                 self.assertEqual(backend.calls[-1][0], 'pam-disable')
                 self.assertNotIn('pam-confirm', [c[0] for c in backend.calls])
+
+
+class InstallLayout(unittest.TestCase):
+    """A packaged install never compiles; a checkout builds when no package exists."""
+
+    def run_setup(self, layout, backend):
+        with patch.object(wizard, 'HERE', layout), patch.object(ops, 'target_user', return_value='fixture'), \
+             patch.object(wizard.os, 'geteuid', return_value=1000):
+            wizard.setup(FakeUI([True, False]), backend)
+
+    def test_missing_package_without_build_recipe_asks_for_apt(self):
+        backend = FakeBackend()
+        backend.installed = lambda: False
+        with tempfile.TemporaryDirectory() as baked:
+            with self.assertRaises(ValueError) as caught:
+                self.run_setup(Path(baked), backend)
+        self.assertIn('Reinstall it with APT', str(caught.exception))
+        self.assertFalse({'deps', 'build', 'install'} & {c[0] for c in backend.calls})
+
+    def test_checkout_without_package_builds_then_installs(self):
+        backend = FakeBackend()
+        backend.installed = lambda: False
+        with tempfile.TemporaryDirectory() as checkout:
+            (Path(checkout) / 'build.py').write_text('')
+            with self.assertRaises(StopIteration):  # The fake runs out of answers after the build steps.
+                self.run_setup(Path(checkout), backend)
+        calls = [c[0] for c in backend.calls]
+        self.assertEqual([c for c in calls if c in ('deps', 'build', 'install')], ['deps', 'build', 'install'])
 
 
 class TerminalPrompts(unittest.TestCase):

@@ -1,7 +1,11 @@
 # Local biometric tools
 
-Use `tools/biometrics/sensible-biometrics` from a checkout on Debian Testing
-amd64. No ISO build or image installation is involved.
+The face-login stack is baked into the Sensible image: `howdy-next` compiled
+from pinned sources, its recognition models and this setup tool
+(`/usr/local/bin/sensible-biometrics`, **Face Login Setup** in the menu). From a
+checkout on Debian Testing amd64 the same tool also builds the package and runs
+every step locally; no ISO build is needed for that. See
+[Image integration](#image-integration) for what the image build does.
 
 ## Guided setup
 
@@ -19,7 +23,9 @@ image, enrolls a face and verifies a successful match.
 It then enables the detected desktop's login/unlock
 services, tests them, and asks the user to try the real lock screen with both
 face and password before keeping the change. Administrator commands (`sudo`)
-are an optional selection. Reopening the launcher offers **Turn off face login**.
+are an optional selection, off by default; enabling it means a face match runs
+`sudo` without a password, with the account password kept as a fallback, so the
+wizard warns before offering it. Reopening the launcher offers **Turn off face login**.
 
 A failed face check can be retried in place, and a fresh check can be resumed
 for 15 minutes if the configuration, enrollment and authentication policy are
@@ -65,6 +71,16 @@ the block itself or its permissions, automatic recovery stops and retains the
 original bytes in `/var/lib/sensible-biometrics/pam.json` for reconciliation.
 This protects against setup failures; it is not a guarantee against arbitrary
 system or administrator changes. A confirmed setup retains its recovery backup.
+Unreconcilable edits stop automatic retries and leave an error in the recovery
+service's journal. Transient I/O errors or a busy package manager remain retryable.
+These can delay restoration beyond the nominal five-minute deadline.
+
+Configuration writes take the APT/dpkg frontend and database locks and recheck
+contents, file identity and permissions immediately before replacement. These
+are advisory locks: do not manually edit Howdy or the selected PAM services
+during setup or recovery. Arbitrary root writers that ignore these locks cannot
+be excluded by the final check. Interactive PAM tests use a separate lock so
+they do not prevent timed recovery; cleanup refuses to remove a running test.
 
 ## Build and install
 
@@ -80,7 +96,9 @@ asks for your password in the terminal. `prepare` downloads hash-pinned source
 archives and applies the included compatibility patches. `build` compiles
 OpenCV and Howdy-next as your normal user, runs the upstream tests, and creates
 `.build/biometrics/dist/howdy-next_3.4.0-6+sensible1_amd64.deb` with a checksum and
-build manifest. Adjust `--jobs` to suit available CPU and memory. Build logs are
+build manifest that also records the identity of the pins, patches and
+packaging files it was built from (`build.py check` accepts only a matching
+package). Adjust `--jobs` to suit available CPU and memory. Build logs are
 printed to the terminal; capture them locally if needed.
 Build directories and their parents must not be group/world writable because
 upstream security tests check their fixture paths. A custom `--work-dir` must
@@ -98,6 +116,47 @@ in Testing; rebuilding locally avoids that mismatch. Camera capture uses V4L2,
 so FFmpeg is disabled in this build. Debian supplies the other dependencies.
 Source pins and compatibility-patch provenance live next to the tool. Upstream
 GPL and third-party license notices are included with the package.
+
+## Image integration
+
+The ISO carries face login ready to enable, offline:
+
+- `scripts/build-howdy-package.sh` builds `howdy-next` from the pinned sources
+  in a Debian Testing container (podman or docker), so its dependencies match
+  the archive the image is bootstrapped from. A package already under
+  `.build/biometrics/dist` is reused only while `build.py check` confirms it was
+  built from the current pins, patches and packaging files and
+  `apt-get --simulate` still installs it on today's Testing; a library
+  transition in Testing rebuilds it instead of breaking the ISO build later. CI
+  runs this once per workflow (`package` job, cached by the tools' contents)
+  and hands the package to both edition builds. Without a container engine the
+  script accepts a package built by `sensible-biometrics build` as your normal
+  user.
+- `scripts/stage-biometrics.sh`, called by `live/build-stages.sh` and
+  `scripts/build-native.sh` after `fetch-pins.sh`, verifies that package
+  against its manifest and `live/pins.env`, stages it into live-build's local
+  package directory, fetches the two OpenCV zoo models named by Howdy's compiled
+  manifest (hash-pinned in `live/pins.env`) into `/usr/share/howdy/models`,
+  installs the tool under `/usr/local/lib/sensible/biometrics` with the
+  `/usr/local/bin/sensible-biometrics` launcher and the Face Login Setup menu
+  entry, and records provenance in `/usr/share/doc/sensible-biometrics/sources.txt`.
+- The `0280-biometrics` chroot hook fails the build unless the pinned package is
+  installed, `howdy download-models` accepts the baked models without fetching
+  anything, the tool starts, the launcher resolves, the configuration has the
+  keys the tool manages, and no PAM service or polkit rule references Howdy.
+  Installation is inert; the wizard's per-account activation with timed
+  rollback is the only path that changes login.
+
+The packaged install carries no build recipe. If the package is ever removed,
+Face Login Setup asks for it to be reinstalled with APT instead of compiling.
+The source-build commands above remain the developer path and are what CI runs.
+Fixture tests cover the staging script and the hook with tool doubles; whether
+the package installs in the chroot and Howdy accepts the models is proven only
+by the image build itself.
+
+Planned next: a signed Sensible APT repository for `howdy-next` and the Sensible
+tools, so installed systems receive rebuilt packages when Testing moves rather
+than waiting for a new image.
 
 ## Configure and check the camera
 

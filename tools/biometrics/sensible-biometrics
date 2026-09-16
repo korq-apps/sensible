@@ -375,6 +375,8 @@ def main():
         return
     here = Path(__file__).resolve().parent
     if args.command in ("deps", "prepare", "build"):
+        if not (here / "build.py").is_file():
+            raise ValueError("Source builds run from a checkout; this installation uses the packaged howdy-next")
         command = [sys.executable, str(here / "build.py"), args.command]
         if args.work_dir:
             command += ["--work-dir", str(args.work_dir)]

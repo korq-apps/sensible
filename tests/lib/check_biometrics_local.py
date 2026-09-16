@@ -48,7 +48,8 @@ class LocalFiles(unittest.TestCase):
         self.pam_module.write_bytes(b"fixture module")
         self.pam_module.chmod(0o644)
         self.state = self.root / "state"
-        for name, value in (("CONFIG", self.config), ("STATE", self.state), ("PAM_PATH", self.pam), ("PAM_MODULE", self.pam_module)):
+        for name, value in (("CONFIG", self.config), ("STATE", self.state), ("PAM_PATH", self.pam), ("PAM_MODULE", self.pam_module),
+                            ('PACKAGE_LOCKS', (self.root / 'lock-frontend', self.root / 'lock-dpkg'))):
             patcher = patch.object(ops, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -147,6 +148,56 @@ class LocalFiles(unittest.TestCase):
         with ops.locked_state(), self.assertRaises(BlockingIOError):
             ops.configure(DEVICE)
 
+    def test_configuration_waits_for_both_package_manager_locks(self):
+        code = ('import fcntl,sys,os; f=open(sys.argv[1], "a+"); os.fchmod(f.fileno(), 0o640); '
+                'fcntl.lockf(f, fcntl.LOCK_EX); print("locked", flush=True); sys.stdin.read(1)')
+        for path in ops.PACKAGE_LOCKS:
+            child = subprocess.Popen([sys.executable, '-c', code, str(path)], stdin=subprocess.PIPE,
+                                     stdout=subprocess.PIPE, text=True)
+            try:
+                self.assertEqual(child.stdout.readline().strip(), 'locked')
+                with self.assertRaises(BlockingIOError): ops.configure(DEVICE)
+                self.assertEqual(self.config.read_bytes(), ORIGINAL)
+                self.assertFalse((self.state / 'config.json').exists())
+            finally:
+                child.communicate('x', timeout=5)
+        ops.configure(DEVICE)
+
+    def test_late_configuration_edit_is_not_overwritten(self):
+        write = ops.atomic_write
+        edited = ORIGINAL + b'# intervening edit\n'
+        def concurrent(path, *args, **kwargs):
+            if path == self.config:
+                self.config.write_bytes(edited)
+            return write(path, *args, **kwargs)
+        with patch.object(ops, 'atomic_write', concurrent), self.assertRaises(ValueError):
+            ops.configure(DEVICE)
+        self.assertEqual(self.config.read_bytes(), edited)
+
+    def test_replacement_with_identical_bytes_or_new_mode_invalidates_snapshot(self):
+        for change in ('inode', 'mode'):
+            with self.subTest(change=change):
+                before = ops.checked_read(self.config)
+                if change == 'inode':
+                    replacement = self.config.with_suffix('.new')
+                    replacement.write_bytes(before[0])
+                    replacement.chmod(0o640)
+                    replacement.replace(self.config)
+                else:
+                    self.config.chmod(0o600)
+                with self.assertRaises(ValueError):
+                    ops.atomic_write(self.config, b'new data', 0o640, expected=before)
+                self.assertEqual(self.config.read_bytes(), before[0])
+
+    def test_running_pam_test_allows_state_access_but_prevents_cleanup(self):
+        def prompt(*args, **kwargs):
+            with ops.locked_state(): pass
+            with self.assertRaises(BlockingIOError): ops.pam_cleanup()
+            with self.assertRaises(BlockingIOError): ops.pam_test('fixture')
+        with patch.object(ops.subprocess, 'run', side_effect=prompt):
+            ops.pam_test('fixture', timeout=300)
+        self.assertFalse(self.pam.exists())
+
     def run_pam(self, failure=None, fallback=False):
         def run(args, **kwargs):
             self.assertEqual(args, ["pamtester", "sensible-howdy-test", "fixture", "authenticate", "acct_mgmt"])
@@ -199,13 +250,40 @@ class LocalFiles(unittest.TestCase):
             with self.assertRaises(ValueError):
                 ops.install_package(package, ops.sha(b"fixture"))
             run.assert_not_called()
-            identity.return_value = "Package: howdy-next\nVersion: 3.4.0-6+sensible1\nArchitecture: amd64\n"
+            # Derive the expected version from the same pin the tool reads, so a
+            # version bump in sources.json alone keeps this test honest.
+            version = json.loads((TOOLS / "sources.json").read_text())["version"]
+            identity.return_value = f"Package: howdy-next\nVersion: {version}\nArchitecture: amd64\n"
             ops.install_package(package, ops.sha(b"fixture"))
             self.assertIn("--simulate", run.call_args_list[0].args[0])
             self.assertTrue(all("--no-remove" in call.args[0] for call in run.call_args_list))
 
 
 class BuildAndIdentity(unittest.TestCase):
+    def test_package_install_stages_companion_opencv_license_notices(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            prefix = root / 'prefix'
+            (prefix / 'lib').mkdir(parents=True)
+            (prefix / 'lib/libopencv_core.so.5').write_bytes(b'fixture library')
+            notices = prefix / 'share/licenses/opencv5'
+            notices.mkdir(parents=True)
+            (notices / 'protobuf-LICENSE').write_text('fixture third-party notice')
+            license = root / 'LICENSE'
+            license.write_text('fixture OpenCV license')
+            fake_bin = root / 'bin'
+            fake_bin.mkdir()
+            install = fake_bin / 'dh_auto_install'
+            install.write_text('#!/bin/sh\nexit 0\n')
+            install.chmod(0o755)
+            subprocess.run(['make', '-f', str(TOOLS / 'debian/rules'), 'override_dh_auto_install',
+                            'DEB_HOST_MULTIARCH=x86_64-linux-gnu', f'HOWDY_DEPS_PREFIX={prefix}',
+                            f'HOWDY_OPENCV_LICENSE={license}'], cwd=root, check=True, capture_output=True,
+                           env=dict(os.environ, PATH=str(fake_bin) + ':' + os.environ['PATH']))
+            doc = root / 'debian/howdy-next/usr/share/doc/howdy-next'
+            self.assertEqual((doc / 'OpenCV-LICENSE').read_text(), 'fixture OpenCV license')
+            self.assertEqual((doc / 'opencv-licenses/protobuf-LICENSE').read_text(), 'fixture third-party notice')
+
     def test_source_permissions_and_build_umask(self):
         with tempfile.TemporaryDirectory() as root:
             directory = tarfile.TarInfo("fixture")

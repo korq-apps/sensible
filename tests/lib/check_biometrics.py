@@ -77,9 +77,16 @@ class PresentationTests(unittest.TestCase):
             self.assertIs(tui.Style(stream=Tty("UTF-8")).glyphs, tui.GLYPHS["utf8"])
         with patch.dict(os.environ, {"TERM": "xterm-256color", "NO_COLOR": "1"}):
             self.assertFalse(tui.Style(stream=Tty()).color)
+            self.assertIs(tui.Style(stream=Tty()).glyphs, tui.GLYPHS['ascii'])
         with patch.dict(os.environ, {"TERM": "dumb"}, clear=False):
             os.environ.pop("NO_COLOR", None)
             self.assertFalse(tui.Style(stream=Tty()).color)
+            self.assertIs(tui.Style(stream=Tty()).glyphs, tui.GLYPHS['ascii'])
+        with patch.dict(os.environ, {"TERM": "xterm-256color"}):
+            pipe = Tty()
+            pipe.isatty = lambda: False
+            self.assertIs(tui.Style(stream=pipe).glyphs, tui.GLYPHS['ascii'])
+            self.assertIs(tui.Style(stream=pipe, unicode=True).glyphs, tui.GLYPHS['utf8'])
         plain = render(color=False, unicode=False, width=80)
         self.assertNotIn("\x1b", plain)
         self.assertTrue(plain.isascii(), plain)

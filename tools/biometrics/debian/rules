@@ -23,6 +23,8 @@ override_dh_auto_install:
 	mkdir -p debian/howdy-next/usr/lib/howdy-next
 	find $(HOWDY_DEPS_PREFIX)/lib -maxdepth 1 -name 'libopencv*.so*' -exec cp -a {} debian/howdy-next/usr/lib/howdy-next/ \;
 	install -D -m 0644 $(HOWDY_OPENCV_LICENSE) debian/howdy-next/usr/share/doc/howdy-next/OpenCV-LICENSE
+	mkdir -p debian/howdy-next/usr/share/doc/howdy-next/opencv-licenses
+	cp -a $(HOWDY_DEPS_PREFIX)/share/licenses/opencv5/. debian/howdy-next/usr/share/doc/howdy-next/opencv-licenses/
 
 override_dh_makeshlibs:
 	# Private OpenCV libraries are used only by this package.

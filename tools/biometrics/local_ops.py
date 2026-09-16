@@ -19,6 +19,7 @@ CONFIG = Path("/etc/howdy/config.ini")
 STATE = Path("/var/lib/sensible-biometrics")
 PAM_PATH = Path("/etc/pam.d/sensible-howdy-test")
 PAM_MODULE = Path("/usr/lib/x86_64-linux-gnu/security/pam_howdy.so")
+PACKAGE_LOCKS = (Path('/var/lib/dpkg/lock-frontend'), Path('/var/lib/dpkg/lock'))
 PAM_FACE = b"# Sensible temporary Howdy test; never included by login services\nauth required pam_howdy.so\n@include common-account\n"
 PAM_FALLBACK = b"# Sensible temporary Howdy test; never included by login services\nauth sufficient pam_howdy.so\n@include common-auth\n@include common-account\n"
 
@@ -49,7 +50,12 @@ def check_directory(path, owner=None):
         raise ValueError(f"Expected an owner-controlled directory: {path}")
 
 
-def atomic_write(path, data, mode, uid=None, gid=None):
+def file_version(info):
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid,
+            info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def atomic_write(path, data, mode, uid=None, gid=None, *, expected=None):
     uid = os.geteuid() if uid is None else uid
     gid = os.getegid() if gid is None else gid
     temporary = None
@@ -61,6 +67,13 @@ def atomic_write(path, data, mode, uid=None, gid=None):
             stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
+        if expected is not None:
+            current, info = checked_read(path)
+            if current != expected[0] or file_version(info) != file_version(expected[1]):
+                raise ValueError(f"File changed during setup; refusing to replace {path}")
+        # Package writers are excluded by configuration_writes(). This final
+        # check detects intervening edits, but is not CAS against arbitrary root
+        # writers that ignore the locks.
         os.replace(temporary, path)
         fd = os.open(path.parent, os.O_DIRECTORY | os.O_RDONLY)
         try:
@@ -73,19 +86,52 @@ def atomic_write(path, data, mode, uid=None, gid=None):
 
 
 @contextmanager
-def locked_state():
+def locked_state_file(name):
     check_directory(STATE.parent)
     STATE.mkdir(mode=0o700, exist_ok=True)
     check_directory(STATE)
-    fd = os.open(STATE / "lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    fd = os.open(STATE / name, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_nlink != 1 or info.st_mode & 0o022:
             raise ValueError("Unsafe state lock")
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise BlockingIOError('Another Sensible biometrics operation is running; retry when it finishes') from error
         yield
     finally:
         os.close(fd)
+
+
+def locked_state():
+    return locked_state_file('lock')
+
+
+@contextmanager
+def configuration_writes():
+    """Coordinate short config transactions with APT/dpkg, never hold across PAM prompts.
+
+    Lock order and POSIX record locking follow dpkg's spec/frontend-api.txt.
+    These advisory locks cannot exclude an administrator's uncoordinated editor.
+    """
+    descriptors = []
+    try:
+        for path in PACKAGE_LOCKS:
+            check_directory(path.parent)
+            fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o640)
+            descriptors.append(fd)
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_nlink != 1 or info.st_mode & 0o022:
+                raise ValueError(f'Unsafe package-manager lock: {path}')
+            try:
+                fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise BlockingIOError('A package operation is running; retry when it finishes') from error
+        yield
+    finally:
+        for fd in reversed(descriptors):
+            os.close(fd)
 
 
 def configured_bytes(original, device, timeout):
@@ -119,7 +165,7 @@ def configured_bytes(original, device, timeout):
 
 def configure(device, timeout=4, dry_run=False):
     check_directory(CONFIG.parent)
-    with nullcontext() if dry_run else locked_state():
+    with nullcontext() if dry_run else configuration_writes(), nullcontext() if dry_run else locked_state():
         original, info = checked_read(CONFIG)
         updated = configured_bytes(original, device, timeout)
         if updated == original:
@@ -146,15 +192,14 @@ def configure(device, timeout=4, dry_run=False):
         # Save rollback data before changing config; restore also handles a
         # crash between these two atomic replacements.
         atomic_write(state_path, json.dumps(state).encode(), 0o600)
-        if checked_read(CONFIG)[0] != original:
-            raise ValueError("Configuration changed during setup; no configuration write performed")
-        atomic_write(CONFIG, updated, stat.S_IMODE(info.st_mode), info.st_uid, info.st_gid)
+        atomic_write(CONFIG, updated, stat.S_IMODE(info.st_mode), info.st_uid, info.st_gid,
+                     expected=(original, info))
         print("Camera configured. Use restore-config to undo these changes.")
 
 
 def restore_config():
     check_directory(CONFIG.parent)
-    with locked_state():
+    with configuration_writes(), locked_state():
         state_path = STATE / "config.json"
         state = json.loads(checked_read(state_path)[0])
         current, info = checked_read(CONFIG)
@@ -163,7 +208,7 @@ def restore_config():
             stat.S_IMODE(info.st_mode), info.st_uid, info.st_gid
         ) != (state["mode"], state["uid"], state["gid"]):
             raise ValueError("Configuration changed outside this tool; refusing to overwrite it")
-        atomic_write(CONFIG, original, state["mode"], state["uid"], state["gid"])
+        atomic_write(CONFIG, original, state["mode"], state["uid"], state["gid"], expected=(current, info))
         state_path.unlink()
         print("Original camera configuration restored.")
 
@@ -193,11 +238,16 @@ def pam_test(user, password_fallback=False, timeout=30):
     if not stat.S_ISREG(module.st_mode) or module.st_uid != os.geteuid() or module.st_mode & 0o022:
         raise ValueError("Expected a root-controlled PAM module")
     content = PAM_FALLBACK if password_fallback else PAM_FACE
-    with locked_state():
-        run_pam_service(content, user, timeout)
+    run_pam_service(content, user, timeout)
 
 
 def run_pam_service(content, user, timeout, *, structured=False, account=True):
+    # Serialize test/cleanup operations independently from timed PAM recovery.
+    with locked_state_file('pam-test.lock'):
+        return _run_pam_service(content, user, timeout, structured=structured, account=account)
+
+
+def _run_pam_service(content, user, timeout, *, structured=False, account=True):
     check_directory(PAM_PATH.parent)
     fd = os.open(PAM_PATH, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
     try:
@@ -217,7 +267,7 @@ def run_pam_service(content, user, timeout, *, structured=False, account=True):
 
 
 def pam_cleanup():
-    with locked_state():
+    with locked_state_file('pam-test.lock'):
         if checked_read(PAM_PATH)[0] not in (PAM_FACE, PAM_FALLBACK):
             raise ValueError("Refusing to remove an unrecognized PAM test service")
         PAM_PATH.unlink()
@@ -240,7 +290,10 @@ def install_package(package, checksum):
             if hashlib.file_digest(stream, "sha256").hexdigest() != checksum:
                 raise ValueError("Package checksum mismatch")
         fields = subprocess.check_output(["dpkg-deb", "-f", str(copy), "Package", "Version", "Architecture"], text=True)
-        expected = "Package: howdy-next\nVersion: 3.4.0-6+sensible1\nArchitecture: amd64\n"
+        # Derive the expected version from the single source of truth (the pin
+        # shipped beside this tool) rather than repeating the literal here.
+        version = json.loads((Path(__file__).resolve().parent / "sources.json").read_text())["version"]
+        expected = f"Package: howdy-next\nVersion: {version}\nArchitecture: amd64\n"
         if fields != expected:
             raise ValueError("Unexpected package identity; build the local Howdy-next package first")
         subprocess.run(["apt-get", "--simulate", "--no-remove", "install", str(copy)], check=True)

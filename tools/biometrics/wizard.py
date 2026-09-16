@@ -139,20 +139,26 @@ def setup(ui=None, backend=None):
     services = backend.desktop_services()
     if not services:
         raise ValueError('No supported GNOME/GDM or KDE/SDDM login service was detected.')
+    ui.say('Face login for administrator commands lets a face match run sudo without a password. '
+           'Your account password still works as a fallback. Skip this to keep sudo password-only.', kind='warn')
     if ui.yes('Also use face login for administrator commands (sudo)?'):
         services.append('sudo')
     service_args = [arg for service in services for arg in ('--service', service)]
     # Discover unsupported authentication policies before downloads or enrollment.
     backend.run('pam-plan', '--user', user, *service_args, root=True)
     ui.step(1, 'Install recognition software')
-    if not backend.installed():
+    if backend.installed():
+        ui.say('Recognition software is already installed.', kind='ok')
+    elif not (HERE / 'build.py').is_file():
+        # Baked into a Sensible image: the package ships preinstalled, and only
+        # APT may replace it. The build recipe deliberately stays in the checkout.
+        raise ValueError('The howdy-next package is missing. Reinstall it with APT, then reopen Face Login Setup.')
+    else:
         ui.say('The first source build can take several minutes.', kind='info')
         if not (HERE.parents[1] / '.build/biometrics/dist/build.json').is_file():
             backend.run('deps')
             backend.run('build')  # build.py sizes --jobs from the CPU count.
         backend.run('install')
-    else:
-        ui.say('Recognition software is already installed.', kind='ok')
     backend.run('runtime-deps')
     saved = 'face' in backend.run('verify-status', '--user', user, root=True, capture=True)['checks']
     resume = saved and ui.choose('There is a fresh face check for this camera and enrollment.',
@@ -208,12 +214,15 @@ def setup(ui=None, backend=None):
 def check_camera_and_enroll(ui, backend, user):
     ui.step(2, 'Check the camera')
     report = backend.run('probe', '--json', root=True, capture=True)
+    if report['face']['status'] == 'incomplete':
+        raise ValueError('Some camera devices could not be inspected. Close other camera apps and check '
+                         'device access before running setup again.')
     candidates = [c for c in report['cameras'] if c['capture'] and c['ir_candidate'] and c['stable_paths']]
     if not candidates:
         raise ValueError('No usable infrared camera was found. Check camera privacy controls and try again.')
     while True:
         selected = 0 if len(candidates) == 1 else ui.choose('Choose the infrared camera',
-                    [c['name'] or c['node'] for c in candidates])
+                    [c['name'] if c['name'] and c['name'].isprintable() else c['node'] for c in candidates])
         camera = candidates[selected]
         backend.run('configure', '--device', camera['stable_paths'][0])
         backend.run('models')

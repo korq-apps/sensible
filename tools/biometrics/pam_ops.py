@@ -21,6 +21,14 @@ BEGIN = '# BEGIN sensible-biometrics v1\n'
 END = '# END sensible-biometrics v1\n'
 WINDOW = 300
 PROOF_AGE = 900
+# Linux-PAM ABI: security/_pam_types.h (this tool targets Debian Linux).
+PAM_SUCCESS = 0
+PAM_AUTH_ERR = 7
+RECOVERY_RECONCILE = 78
+
+
+class ReconciliationError(ValueError):
+    """External edits need an administrator; automatic retry cannot resolve them."""
 
 
 def read_json(name):
@@ -127,20 +135,20 @@ def fingerprint(user):
 
 
 def verification_result(kind, result):
-    if result['start'] != 0 or result['auth'] not in (0, 7):
+    if result['start'] != PAM_SUCCESS or result['auth'] not in (PAM_SUCCESS, PAM_AUTH_ERR):
         return {'ok': False, 'reason': 'unavailable',
                 'message': 'The authentication check could not finish normally. ' + result['message']}
     if kind == 'reject':
-        if result['auth'] == 0:
+        if result['auth'] == PAM_SUCCESS:
             return {'ok': False, 'reason': 'unexpected_match',
                     'message': 'Howdy reported a face match, so this diagnostic did not confirm rejection. '
                                'To retry, move completely out of view. This optional diagnostic does not change login settings.'}
         return {'ok': True, 'reason': 'rejected',
                 'message': 'No face was accepted. This is the expected result — the optional no-face diagnostic passed.'}
-    if result['auth'] != 0:
+    if result['auth'] != PAM_SUCCESS:
         return {'ok': False, 'reason': 'not_authenticated',
                 'message': 'No face match was found. Look at the camera and try again.'}
-    if result['account'] != 0:
+    if result['account'] != PAM_SUCCESS:
         return {'ok': False, 'reason': 'account_denied',
                 'message': 'Authentication succeeded, but the account check did not allow login. ' + result['message']}
     return {'ok': True, 'reason': 'verified', 'message': 'Face recognition passed.'}
@@ -149,6 +157,12 @@ def verification_result(kind, result):
 def verify(user, kind, timeout=45, delay=0):
     if kind not in ('face', 'reject'):
         raise ValueError('Unknown verification step')
+    # Keep concurrent verifications ordered without holding the recovery lock.
+    with ops.locked_state_file('verification.lock'):
+        return _verify(user, kind, timeout, delay)
+
+
+def _verify(user, kind, timeout, delay):
     with ops.locked_state():
         before = fingerprint(user)
         proof = read_json('verified.json')
@@ -160,26 +174,27 @@ def verify(user, kind, timeout=45, delay=0):
         if kind == 'reject' and time.time() - proof['checks'].get('face', 0) > PROOF_AGE:
             return {'ok': False, 'reason': 'face_check_required',
                     'message': 'Repeat the face recognition check before the no-face check.'}
-        if not 0 <= delay <= 10:
-            raise ValueError('Verification countdown must be between 0 and 10 seconds')
-        for remaining in range(delay, 0, -1):
-            print(f'No-face scan starts in {remaining}…', file=sys.stderr, flush=True)
-            time.sleep(1)
-        if delay:
-            print('Scanning now. Stay out of view until the result appears.', file=sys.stderr, flush=True)
-        try:
-            result = ops.run_pam_service(ops.PAM_FACE, user, timeout, structured=True, account=kind != 'reject')
-        except subprocess.TimeoutExpired:
-            return {'ok': False, 'reason': 'timeout',
-                    'message': 'The test process stopped responding. Check the camera and retry; this does not count as a pass.'}
-        outcome = verification_result(kind, result)
-        if not outcome['ok']:
-            return outcome
-        if fingerprint(user) != before:
-            raise ValueError('Configuration changed during verification; repeat the checks')
+    if not 0 <= delay <= 10:
+        raise ValueError('Verification countdown must be between 0 and 10 seconds')
+    for remaining in range(delay, 0, -1):
+        print(f'No-face scan starts in {remaining}…', file=sys.stderr, flush=True)
+        time.sleep(1)
+    if delay:
+        print('Scanning now. Stay out of view until the result appears.', file=sys.stderr, flush=True)
+    try:
+        result = ops.run_pam_service(ops.PAM_FACE, user, timeout, structured=True, account=kind != 'reject')
+    except subprocess.TimeoutExpired:
+        return {'ok': False, 'reason': 'timeout',
+                'message': 'The test process stopped responding. Check the camera and retry; this does not count as a pass.'}
+    outcome = verification_result(kind, result)
+    if not outcome['ok']:
+        return outcome
+    with ops.locked_state():
+        if fingerprint(user) != before or read_json('verified.json') != proof:
+            raise ValueError('Configuration or verification state changed during the check; repeat it')
         proof['checks'][kind] = time.time()
         write_json('verified.json', proof)
-        return outcome
+    return outcome
 
 
 def require_proof(user):
@@ -209,7 +224,13 @@ def verification_status(user):
 def recovery_unit():
     return ('# Managed by sensible-biometrics\n[Unit]\nDescription=Undo unconfirmed face login setup\n'
             'After=local-fs.target\nBefore=display-manager.service\n'
-            '[Service]\nType=oneshot\nRestart=on-failure\nRestartSec=5s\nExecStart=/usr/bin/python3 -Es '
+            # Bound restarts: a persistent I/O error (e.g. read-only /var) must not
+            # loop every 5s forever and hold display-manager behind the Before=
+            # ordering. After the burst the unit fails and login proceeds; the
+            # backup is retained for manual recovery, as the guide promises.
+            'StartLimitIntervalSec=120\nStartLimitBurst=5\n'
+            '[Service]\nType=oneshot\nRestart=on-failure\nRestartSec=5s\n'
+            f'RestartPreventExitStatus={RECOVERY_RECONCILE}\nExecStart=/usr/bin/python3 -Es '
             f'{RECOVERY_DIR}/recover.py\n[Install]\nWantedBy=multi-user.target\n').encode()
 
 
@@ -227,7 +248,10 @@ def install_recovery():
         ops.atomic_write(dest, (here / name).read_bytes(), 0o644, 0, 0)
     unit = recovery_unit()
     ops.check_directory(UNIT.parent)
-    if UNIT.exists() and ops.checked_read(UNIT)[0] != unit:
+    # Recognize any version of our own unit by its managed-marker first line, so
+    # changing the unit's contents never trips this guard; only refuse a
+    # same-named unit that some other software installed.
+    if UNIT.exists() and not ops.checked_read(UNIT)[0].startswith(b'# Managed by sensible-biometrics\n'):
         raise ValueError('Recovery service name is already used by another configuration')
     ops.atomic_write(UNIT, unit, 0o644, 0, 0)
     subprocess.run(['systemctl', 'daemon-reload'], check=True)
@@ -243,21 +267,24 @@ def arm_recovery():
     subprocess.run(['systemd-run', '--quiet', '--collect', '--unit=sensible-biometrics-rollback',
                     f'--on-active={WINDOW}s', '--timer-property=AccuracySec=1s',
                     '--property=Restart=on-failure', '--property=RestartSec=5s',
+                    '--property=StartLimitIntervalSec=120', '--property=StartLimitBurst=5',
+                    f'--property=RestartPreventExitStatus={RECOVERY_RECONCILE}',
                     '/usr/bin/python3', '-Es', str(RECOVERY_DIR / 'recover.py')], check=True)
     subprocess.run(['systemctl', 'is-active', '--quiet', 'sensible-biometrics-rollback.timer'], check=True)
 
 
 def _rollback(state):
     errors = []
+    reconciliation = False
     for name, entry in state['files'].items():
         try:
             path = PAM_DIR / name
             current, info = ops.checked_read(path)
             original = base64.b64decode(entry['original'], validate=True)
-            if ops.sha(current) == entry['before_sha256']:
-                continue  # Also handles a crash before this file was written.
             if (stat.S_IMODE(info.st_mode), info.st_uid, info.st_gid) != (entry['mode'], entry['uid'], entry['gid']):
                 raise ValueError(f'{name}: permissions changed outside setup')
+            if ops.sha(current) == entry['before_sha256']:
+                continue  # Also handles a crash before this file was written.
             if ops.sha(current) == entry['after_sha256']:
                 restored = original
             elif current.count(entry['block'].encode()) == 1:
@@ -265,25 +292,26 @@ def _rollback(state):
                 restored = current.replace(entry['block'].encode(), entry['include'].encode(), 1)
             else:
                 raise ValueError(f'{name}: managed block changed; backup is retained in {ops.STATE}/pam.json')
-            ops.atomic_write(path, restored, entry['mode'], entry['uid'], entry['gid'])
+            ops.atomic_write(path, restored, entry['mode'], entry['uid'], entry['gid'], expected=(current, info))
         except (OSError, ValueError) as error:
+            reconciliation |= isinstance(error, ValueError)
             errors.append(str(error))
     if errors:
-        raise ValueError('; '.join(errors))
+        raise (ReconciliationError if reconciliation else OSError)('; '.join(errors))
     (ops.STATE / 'pam.json').unlink(missing_ok=True)
     (ops.STATE / 'verified.json').unlink(missing_ok=True)
     print('Previous PAM configuration restored. Face login is off.')
 
 
 def rollback(pending_only=False):
-    with ops.locked_state():
+    with ops.configuration_writes(), ops.locked_state():
         state = read_json('pam.json')
         if state and (not pending_only or state['status'] == 'pending'):
             _rollback(state)
 
 
 def enable(user, services):
-    with ops.locked_state():
+    with ops.configuration_writes(), ops.locked_state():
         if read_json('pam.json'):
             raise ValueError('An activation already exists; confirm it or turn it off before reconfiguring')
         proof = require_proof(user)
@@ -296,10 +324,12 @@ def enable(user, services):
             for name, entry in plan.items():
                 path = PAM_DIR / name
                 current, info = ops.checked_read(path)
-                if ops.sha(current) != entry['before_sha256']:
+                if ops.sha(current) != entry['before_sha256'] or (
+                    stat.S_IMODE(info.st_mode), info.st_uid, info.st_gid
+                ) != (entry['mode'], entry['uid'], entry['gid']):
                     raise ValueError(f'{name} changed during setup')
                 updated, _ = proposed(current, user)
-                ops.atomic_write(path, updated, entry['mode'], entry['uid'], entry['gid'])
+                ops.atomic_write(path, updated, entry['mode'], entry['uid'], entry['gid'], expected=(current, info))
         except BaseException:
             _rollback(state)
             raise
@@ -311,7 +341,8 @@ def pending_state():
     if not state or state['status'] != 'pending':
         raise ValueError('There is no pending activation')
     if time.time() >= state['deadline']:
-        _rollback(state)
+        with ops.configuration_writes():
+            _rollback(state)
         raise ValueError('The test window expired; previous PAM configuration restored')
     if state['fingerprint'] != fingerprint(state['user']):
         raise ValueError('Authentication configuration changed; turn off and repeat setup')

@@ -221,7 +221,24 @@ session file name); with only `User=` autologin never engages.
 Session authentication and decrypting saved secrets are separate operations.
 Password login can unlock a matching password-backed wallet/keyring through
 the desktop's PAM integration; this needs image-level verification, not just
-package presence. KDE's GPG wallet backend instead requires an encryption-capable
+package presence.
+
+**GNOME autologin keyring (implemented).** Autologin gives `pam_gnome_keyring`
+no password, so the first session has no login keyring and the first app to
+store a secret forks its own keyring with a separate password, prompting again
+per app. On a **GNOME autologin** install the installer therefore writes an
+**empty-password `login` keyring** (`installer/lib/keyring.sh`, plaintext
+`~/.local/share/keyrings/login.keyring` + `default`, owned by the user): the
+daemon auto-unlocks it and it is the default collection from the first login, so
+secret access never prompts and no second keyring appears. This is scoped to
+autologin only, where the LUKS passphrase is already the access boundary; a
+GNOME **password** login keeps its PAM-unlocked encrypted keyring, and **face
+login without autologin** keeps an encrypted keyring asked for once per session.
+`seahorse` (Passwords and Keys) ships so users can add a password to the Login
+keyring, or opt other accounts into auto-unlock. KDE Wallet is separate work
+(see below); this covers GNOME only.
+
+KDE's GPG wallet backend instead requires an encryption-capable
 OpenPGP key, and the KDE Wallet Service new-wallet dialog preselects GPG
 (`knewwalletdialogintro.ui`, kwallet 6.28.0). The KDE live-session error
 reported on 2026-09-10 is therefore the expected result of accepting that
@@ -261,9 +278,11 @@ prompt when the secret is unavailable; no custom persistent password handoff.
 Two tiers, because fingerprint and face have very different maturity on Debian:
 
 - **Fingerprint — always installed.** `fprintd` + `libpam-fprintd` (Debian main). Enrollment lives in GNOME Settings / Plasma System Settings; nothing to configure at install time, dormant without a supported reader.
-- **Face — local development.** [Standalone Howdy-next tools](BIOMETRICS.md)
-  build/install a native package, configure a camera and support enrollment and
-  isolated PAM tests. The launcher guides service-specific login activation with timed rollback.
+- **Face — baked, opt-in.** [Howdy-next](BIOMETRICS.md) is compiled from pinned
+  sources in a Debian Testing container and staged into both editions with its
+  recognition models and the **Face Login Setup** launcher; installation touches
+  no PAM service. The wizard enables login per account after a verified
+  enrollment, with a timed rollback, and can turn it off again.
 
 Facts to not relearn later:
 
@@ -282,7 +301,7 @@ Facts to not relearn later:
 | Audio | PipeWire, WirePlumber, `pipewire-pulse`, `pipewire-audio`, `pipewire-alsa`, `alsa-ucm-conf` (nothing in PipeWire depends on it; without the UCM profiles SOF and SoundWire laptops expose no device), `alsa-topology-conf`, `alsa-utils`; `sensible-audio-check` is baked as a read-only diagnostic with an opt-in `--unmute`, and the installer runs its `--summary` in the live session to record findings as completion warnings |
 | GPU | `mesa-vulkan-drivers`, `va-driver-all` (VDPAU comes from `mesa-libgallium` via mesa; `vdpau-driver-all` was removed from Testing); the offline closure includes `nvidia-driver`, while NVIDIA KMS configuration is enabled only when `lspci` sees matching hardware |
 | Power | `power-profiles-daemon` (not TLP — it fights PPD and both DEs) |
-| Biometrics | `fprintd`, `libpam-fprintd` (baked); Howdy-next opt-in setup — see §5 (guided setup with timed rollback) |
+| Biometrics | `fprintd`, `libpam-fprintd` (baked); `howdy-next` compiled from pinned sources and baked inert, enabled per account by Face Login Setup — see §5 |
 | Print / scan | `cups`, `ipp-usb` (driverless IPP-over-USB), `sane-airscan`; `simple-scan` with GNOME, `skanlite` with KDE |
 | Updates | `fwupd` (LVFS), `wireless-regdb` |
 | Repos on the target | `main`, `contrib`, `non-free`, `non-free-firmware` |
@@ -439,7 +458,7 @@ optional. No AI tools or installer checkboxes are currently added. Approved
 image artifacts would be pinned and verified at build time; optional online
 recipes and desktop-client support require separate validation.
 
-**Planned (post-install tool):** Howdy-next face setup (standalone tools, see §5); Developer tools — `docker.io`, `docker-compose` (the v2 rewrite in Testing), `lazygit`, `gh`. Developer tools deliberately do **not** add the user to the `docker` group — membership is root-equivalent, so the default is `sudo docker` (a user can opt in later, knowing the tradeoff).
+**Planned (post-install catalog):** Developer tools — `docker.io`, `docker-compose` (the v2 rewrite in Testing), `lazygit`, `gh`. Developer tools deliberately do **not** add the user to the `docker` group — membership is root-equivalent, so the default is `sudo docker` (a user can opt in later, knowing the tradeoff).
 
 ### Explicitly not installed
 
@@ -460,7 +479,7 @@ from the copy, suppresses interactive UI and exits after verification/cleanup.
 There is no automatic reboot; the caller owns the next boot. Fixture evidence
 does not replace installed-disk acceptance. See [INSTALLER_SPEC.md](INSTALLER_SPEC.md#unattended-mode).
 
-**Planned (post-install tool):** developer tools and Howdy-next catalog integration (§5, §7); the standalone setup launcher is available.
+**Planned (post-install tool):** developer tools (§7). Face login is baked (§5); a signed Sensible APT repository for `howdy-next` and the Sensible tools is the planned delivery path for updates between images.
 
 **Later:** Btrfs Snapper and evaluated `grub-btrfs` recovery integration (a separate follow-up after desktop apps; see the layout/restore acceptance requirements in [PLAN.md](PLAN.md)), TPM2 LUKS auto-unlock (`systemd-cryptenroll` or clevis; PCR policy must account for the unencrypted `/boot`), FIDO2 keys for sudo/polkit (`libpam-u2f`), GUI NVIDIA/MOK enrollment flow, Calamares if someone wants a GUI, other arches.
 

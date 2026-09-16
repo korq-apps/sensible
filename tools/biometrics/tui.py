@@ -38,11 +38,12 @@ class Style:
     def __init__(self, stream=None, color=None, unicode=None, width=None):
         stream = sys.stdout if stream is None else stream
         tty = bool(getattr(stream, 'isatty', lambda: False)())
+        interactive = tty and not os.environ.get('NO_COLOR') and os.environ.get('TERM', '') not in ('', 'dumb')
         if color is None:
-            color = tty and not os.environ.get('NO_COLOR') and os.environ.get('TERM', '') not in ('', 'dumb')
+            color = interactive
         if unicode is None:
             encoding = (getattr(stream, 'encoding', None) or '').lower().replace('-', '').replace('_', '')
-            unicode = encoding == 'utf8'
+            unicode = interactive and encoding == 'utf8'
         if width is None:
             width = shutil.get_terminal_size((80, 24)).columns if tty else 80
         self.color = bool(color)

@@ -72,12 +72,39 @@ def source_filter(member, destination):
     return member
 
 
+def inputs_key():
+    """Identity of everything that shapes the package: pins, this script, patches, packaging."""
+    # rglob + is_file so a future debian/ subdirectory (e.g. debian/source/)
+    # is included rather than crashing digest() on a directory.
+    debian_files = sorted(p for p in (HERE / "debian").rglob("*") if p.is_file())
+    inputs = [HERE / "sources.json", Path(__file__),
+              *sorted((HERE / "patches").glob("*.patch")), *debian_files]
+    return hashlib.sha256("".join(digest(p) for p in inputs).encode()).hexdigest()[:16]
+
+
+def check(work):
+    """Return the built package when dist matches the current inputs; raise ValueError otherwise."""
+    dist = work / "dist"
+    manifest_path = dist / "build.json"
+    if not manifest_path.is_file():
+        raise ValueError(f"No package manifest at {manifest_path}")
+    manifest = json.loads(manifest_path.read_text())
+    if manifest.get("sources") != json.loads((HERE / "sources.json").read_text()):
+        raise ValueError("Package was built from different source pins; rebuild it")
+    if manifest.get("inputs") != inputs_key():
+        raise ValueError("Package was built from different patches or packaging files; rebuild it")
+    package = dist / Path(manifest["package"]).name
+    if not package.is_file():
+        raise ValueError(f"Package file is missing: {package}")
+    if digest(package) != manifest["sha256"]:
+        raise ValueError(f"Package checksum does not match its manifest: {package}")
+    return package
+
+
 def prepare(work):
     secure_build_path(work)
     pins = json.loads((HERE / "sources.json").read_text())
-    inputs = [HERE / "sources.json", Path(__file__), *sorted((HERE / "patches").glob("*.patch")),
-              *sorted((HERE / "debian").iterdir())]
-    key = hashlib.sha256("".join(digest(p) for p in inputs).encode()).hexdigest()[:16]
+    key = inputs_key()
     sources = work / f"source-{key}"
     if (sources / ".prepared").is_file():
         return sources, pins
@@ -141,25 +168,33 @@ def build(work, jobs):
     shutil.copy2(package, target)
     checksum = digest(target)
     target.with_suffix(".deb.sha256").write_text(f"{checksum}  {target.name}\n")
-    (output / "build.json").write_text(json.dumps({"package": target.name, "sha256": checksum, "sources": pins}, indent=2) + "\n")
+    (output / "build.json").write_text(json.dumps({"package": target.name, "sha256": checksum, "sources": pins,
+                                                    "inputs": inputs_key()}, indent=2) + "\n")
     print(f"Built {target}")
     return target
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("deps", "prepare", "build"))
+    parser.add_argument("action", choices=("deps", "prepare", "build", "check", "inputs"),
+                        help="check: print the package built from the current inputs, or fail; "
+                             "inputs: print the identity of those inputs")
     parser.add_argument("--work-dir", type=Path, default=DEFAULT_WORK)
     parser.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
+    parser.add_argument("--yes", action="store_true", help="deps: answer apt-get's prompt (unattended container builds)")
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error("--jobs must be positive")
     if args.action == "deps":
         prefix = [] if os.geteuid() == 0 else ["sudo"]
         run([*prefix, "apt-get", "update"])
-        run([*prefix, "apt-get", "--no-remove", "install", *DEPENDENCIES])
+        run([*prefix, "apt-get", "--no-remove", *(["--assume-yes"] if args.yes else []), "install", *DEPENDENCIES])
     elif args.action == "prepare":
         print(prepare(args.work_dir.resolve())[0])
+    elif args.action == "check":
+        print(check(args.work_dir.resolve()))
+    elif args.action == "inputs":
+        print(inputs_key())
     else:
         build(args.work_dir.resolve(), args.jobs)
 
