@@ -265,6 +265,11 @@ non-UTF-8 terminal gets ASCII glyphs. `probe` without `--json` uses the same
 layout. Presentation lives in `tui.py`, which the root-owned recovery copy never
 imports. Graphical presentation and image integration can follow the local flow. Fingerprint uses Debian's existing fprintd tools.
 Face authentication does not supply a LUKS or wallet/keyring decryption password.
+Because PAM receives no password on a face login, GNOME Keyring is not unlocked
+by it: the first login after a boot or logout still uses the account password to
+open the keyring, and face login then covers the lock screen and `sudo`. This is
+the same limitation as autologin and is documented for users in the manual's
+[saved-passwords guidance](../manual/index.html#desktop-credentials).
 
 Earlier local evaluation found BioPass performed poorly compared with older
 Howdy; it is not part of the current implementation path.

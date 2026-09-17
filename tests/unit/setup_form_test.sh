@@ -120,7 +120,10 @@ t_section "static styling does not query the terminal or consume prompt input"
 PYTHONDONTWRITEBYTECODE=1 python3 "${REPO_ROOT}/tests/lib/check_terminal.py"
 assert_rc "PTY styling and following input remain isolated" 0 $?
 
-t_section "autologin prompt carries the saved-password note in both renderers"
+t_section "autologin prompt is opt-in, not recommended, and warns per edition"
+# Password login is the default; automatic login defaults to No in both renderers.
+assert_contains "gum autologin defaults to keeping the password" "$(declare -f _autologin_confirm_gum)" "--default=false"
+assert_contains "text autologin defaults to No" "$(declare -f sensible_prompt_autologin)" '"no"'
 say_calls="${fixture}/say-calls"; confirm_calls="${fixture}/confirm-calls"
 : > "$say_calls"; : > "$confirm_calls"
 # Gum branch: the styled lines and the confirm question are captured at the
@@ -132,22 +135,24 @@ say() { printf '%s\n' "$*" >> "$say_calls"; }
 _autologin_confirm_gum() { printf '%s\n' "$1" >> "$confirm_calls"; return "${MOCK_CONFIRM_RC:-0}"; }
 MOCK_CONFIRM_RC=0
 sensible_prompt_autologin kde alice; assert_rc "gum confirm yes selects autologin" 0 $?
-assert_contains "gum path renders the KDE Wallet note" "$(<"$say_calls")" "does not unlock KDE Wallet: it may ask for its own password the first time a program saves or reads a password."
-assert_contains "gum path keeps the disk-passphrase line" "$(<"$say_calls")" "The disk passphrase at boot will unlock the system."
-assert_contains "gum path asks the skip-login question" "$(<"$confirm_calls")" "Boot straight into the desktop (no login password)?"
+assert_contains "gum path warns KDE Wallet still prompts" "$(<"$say_calls")" "cannot unlock KDE Wallet, so saved-password access still prompts"
+assert_contains "gum path marks autologin not recommended" "$(<"$say_calls")" "Automatic login skips the password at startup. It is not recommended."
+assert_contains "gum path asks the opt-in question" "$(<"$confirm_calls")" "Enable automatic login anyway (not recommended)?"
 : > "$say_calls"; MOCK_CONFIRM_RC=1
 sensible_prompt_autologin gnome alice; assert_rc "gum confirm no keeps password login" 1 $?
-assert_contains "gum path renders the GNOME Keyring note" "$(<"$say_calls")" "does not unlock GNOME Keyring: it may ask for its own password the first time a program saves or reads a password."
+assert_contains "gum path warns GNOME Keyring is unencrypted under autologin" "$(<"$say_calls")" "GNOME Keyring is set up without one and your saved passwords are stored unencrypted"
 # Text branch: ui_yesno receives the user name and the same note.
 _setup_use_gum() { return 1; }
 yesno_calls="${fixture}/yesno-calls"; : > "$yesno_calls"
 ui_yesno() { printf '%s\n%s\n' "$1" "$2" >> "$yesno_calls"; return "${MOCK_YESNO_RC:-0}"; }
 MOCK_YESNO_RC=0
 sensible_prompt_autologin kde alice; assert_rc "text yes selects autologin" 0 $?
-assert_contains "text prompt names the account" "$(<"$yesno_calls")" "Boot straight into the desktop as alice (no login password)?"
-assert_contains "text prompt carries the note" "$(<"$yesno_calls")" "does not unlock KDE Wallet: it may ask for its own password the first time a program saves or reads a password."
+assert_contains "text prompt names the account" "$(<"$yesno_calls")" "Enable automatic login for alice, skipping the password at startup?"
+assert_contains "text prompt title marks it not recommended" "$(<"$yesno_calls")" "Automatic Login (not recommended)"
+assert_contains "text prompt carries the KDE note" "$(<"$yesno_calls")" "cannot unlock KDE Wallet, so saved-password access still prompts"
 MOCK_YESNO_RC=1
 sensible_prompt_autologin gnome alice; assert_rc "text no keeps password login" 1 $?
-assert_eq "note names the edition's store" "GNOME Keyring" "$(autologin_secret_store_note gnome | sed -nE 's/.*unlock (GNOME Keyring|KDE Wallet):.*/\1/p')"
+assert_contains "GNOME note warns of unencrypted secrets" "$(autologin_secret_store_note gnome)" "stored unencrypted"
+assert_contains "KDE note warns of prompts" "$(autologin_secret_store_note kde)" "KDE Wallet"
 
 t_summary

@@ -199,47 +199,64 @@ Super tap alone stays with the DE (GNOME Overview). We do **not** map Super+A / 
 
 Panel, launcher, tray, Alt+Tab. The KDE image leaves `keyd` disabled.
 
-### Login: autologin with LUKS, idle lock always
+### Login: password login by default, autologin an insecure opt-in
 
-Single-user, disk-encrypted desktop: the LUKS passphrase at boot is the
-authentication, so the installer offers to **skip the login password**
-(GDM `AutomaticLogin` / SDDM `[Autologin]`), default **on**, **only when LUKS
-is enabled** — without disk encryption autologin would leave the machine wide
-open. The user's password is still set (sudo, keyring, screen unlock).
+**Password login is the default and the recommended choice.** At the greeter the
+user types the account password, which is the same string as the LUKS passphrase;
+`pam_gnome_keyring` uses it to unlock the single `login` keyring in the same
+step. Result: the disk passphrase at boot, one login password, and then no
+per-app keyring prompts — a single encrypted keyring for everything.
+
+**Automatic login is offered only as an opt-in, defaults to off, and is marked
+insecure** (GDM `AutomaticLogin` / SDDM `[Autologin]`, offered only when LUKS is
+enabled). It buys little: because no password is entered, nothing can derive the
+keyring key, so a GNOME autologin install falls back to an **empty-password
+(unencrypted) keyring** (see below) and anyone who powers the machine on reaches
+the desktop and files. Autologin plus an encrypted keyring plus zero prompts is
+impossible — no secret is entered, so the key cannot be derived. Choose autologin
+only when disk-encryption convenience outweighs credential safety.
 
 Idle screen lock is always enforced, independent of the choice: GNOME gets
 system dconf defaults (`idle-delay=300`, `lock-enabled`, `lock-delay=0`), KDE
 gets `/etc/xdg/kscreenlockerrc` with `Autolock` + `LockOnResume` (resume from
-suspend is covered). Known tradeoffs: logout logs back in immediately;
-autologin alone does not supply a wallet/keyring decryption password, so secret
-access may still prompt. SDDM autologin requires `Session=`
-alongside `User=` — the installer writes `Session=plasma` (the Wayland
-session file name); with only `User=` autologin never engages.
+suspend is covered). Logout logs back in immediately under autologin. SDDM
+autologin requires `Session=` alongside `User=` — the installer writes
+`Session=plasma` (the Wayland session file name); with only `User=` autologin
+never engages.
+
+Neither autologin nor biometric (fingerprint/face) login supplies the keyring
+key: PAM never receives a password on those paths, and the LUKS passphrase is
+consumed by systemd-cryptsetup in the initramfs with no supported path to the
+session keyring. So the first login after boot always needs the account password
+to open the keyring; biometrics cover lock-screen re-unlock and `sudo`, not the
+keyring.
 
 ### Desktop wallets and saved credentials
 
 Session authentication and decrypting saved secrets are separate operations.
-Password login can unlock a matching password-backed wallet/keyring through
-the desktop's PAM integration; this needs image-level verification, not just
-package presence.
 
-**GNOME autologin keyring (implemented).** Autologin gives `pam_gnome_keyring`
-no password, so the first session has no login keyring and the first app to
-store a secret forks its own keyring with a separate password, prompting again
-per app. On a **GNOME autologin** install the installer therefore writes an
+**Default (password login):** `pam_gnome_keyring` unlocks a single encrypted
+`login` keyring from the greeter password at the first login, and that keyring
+is the default collection every app uses. One password unlock, encrypted at
+rest, no per-app prompts, and no second keyring is forked. This is the intended
+GNOME behavior and needs no Sensible-specific code.
+
+**Autologin opt-in (insecure, GNOME):** autologin gives `pam_gnome_keyring` no
+password, so nothing can create or unlock an encrypted login keyring, and the
+first app to store a secret would otherwise fork its own keyring and prompt per
+app. On a GNOME **autologin** install the installer therefore writes an
 **empty-password `login` keyring** (`installer/lib/keyring.sh`, plaintext
-`~/.local/share/keyrings/login.keyring` + `default`, owned by the user): the
-daemon auto-unlocks it and it is the default collection from the first login, so
-secret access should not prompt and no second keyring appears (the empty-password
-keyring is stored unencrypted, which is how the daemon unlocks it unattended;
-on-hardware acceptance across a real GDM autologin session start is still due).
-This is scoped to
-autologin only, where the LUKS passphrase is already the access boundary; a
-GNOME **password** login keeps its PAM-unlocked encrypted keyring, and **face
-login without autologin** keeps an encrypted keyring asked for once per session.
-`seahorse` (Passwords and Keys) ships so users can add a password to the Login
-keyring, or opt other accounts into auto-unlock. KDE Wallet is separate work
-(see below); this covers GNOME only.
+`~/.local/share/keyrings/login.keyring` + `default`, owned by the user): it is
+the default collection and unlocks with no prompt because an empty-password
+keyring is stored unencrypted. The tradeoff is explicit — saved secrets are not
+encrypted at rest — and matches autologin's own posture. Confirmed on-machine
+that the daemon accepts this file and unlocks it without a prompt; on-hardware
+acceptance across a real GDM autologin session start is still due. Scoped to
+GNOME autologin only.
+
+`seahorse` (Passwords and Keys) ships on GNOME so users can put a password on
+the Login keyring (making it encrypted, one prompt), remove one, or inspect and
+delete stored secrets. KDE Wallet is separate work (see below).
 
 KDE's GPG wallet backend instead requires an encryption-capable
 OpenPGP key, and the KDE Wallet Service new-wallet dialog preselects GPG

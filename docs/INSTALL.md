@@ -199,21 +199,28 @@ in the live session for diagnostics.
 
 - With encryption enabled, expect a graphical disk-unlock prompt first. Enter
   the LUKS passphrase, which is the same password created for the desktop user.
-- If skip-login was enabled, the desktop opens after disk unlock. Otherwise,
-  log in with the username and user password created during installation.
+- Log in with the username and user password created during installation. This
+  password unlocks your saved-password keyring in the same step, so apps do not
+  prompt again. It is the same string as the LUKS passphrase.
+- If you enabled automatic login, the desktop opens after disk unlock with no
+  password. This is insecure and not recommended (see below).
 - Without encryption, there is no disk-unlock prompt; log in normally.
 
-On a GNOME autologin install Sensible pre-creates an empty-password login
-keyring so GNOME Keyring should unlock it without prompting; if an app still
-asks, or you prefer a prompt, adjust it in Passwords and Keys. Otherwise,
-skipping desktop login does not guarantee that saved application passwords are
-already unlocked: KDE Wallet, or GNOME Keyring after a face login without
-autologin, may ask for its password on first use. A wallet/keyring password can
-differ from the account password; do not delete the store if an unlock fails. The
+Your saved application passwords live in GNOME Keyring (or KDE Wallet). Only a
+password entered at login can unlock them: neither automatic login nor
+fingerprint/face login supplies it, because no password reaches the system on
+those paths and the disk passphrase is not available to the keyring. So the
+first login after a boot uses your account password; fingerprint/face then
+cover the lock screen and `sudo`. If you chose automatic login on GNOME, there
+is no password to unlock the keyring, so Sensible stores it unencrypted to avoid
+prompts — your saved passwords are then not protected by a password. Use
+**Passwords and Keys** to put a password back on it, or to inspect saved
+secrets. A keyring password can differ from the account password only if you
+later change the account password with `passwd` alone; do not delete the store
+if an unlock fails. The
 [manual's saved-credentials guidance](../manual/index.html#desktop-credentials)
-also explains KDE's GPG-key setup error. Cross-desktop integration improvements
-are tracked in [#29](https://github.com/korq-apps/sensible/issues/29); automatic
-reuse of the disk-unlock secret is not yet a verified Sensible guarantee.
+covers this and KDE's GPG-key setup error. Reusing the disk-unlock secret for
+the keyring is not a supported Sensible feature.
 
 Connect to the network, then install Debian updates in a terminal:
 

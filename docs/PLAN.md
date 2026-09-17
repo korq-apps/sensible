@@ -53,7 +53,7 @@ than asked, and third-party software leaves the install path entirely.
 | Live desktop and audio | merged in PR #18 (`aa1c44e`); user confirms Try Sensible works as expected; specific installed-security and physical-audio checks remain separate |
 | First beta | `v1.0.0-beta.1` published from `ed3db23`; both seeded ISO builds and live boot checks passed; hardware testing accepted; exhaustive matrix and expanded hardware records remain follow-ups |
 | Hybrid ZRAM swap (#11) | merged in PR #33 (`58b1d02`); installed KDE swap/compression and VGA hibernate/resume accepted; PR merge checklist additionally records pressure, failure fallback and shutdown checks; per-edition/layout comparisons remain |
-| Wallet/keyring first use (#29) | source diagnosis and manual guidance merged in #30/#31; autologin explanation merged in #32; GNOME autologin now gets an empty-password auto-unlocking login keyring so secret access should not prompt (`installer/lib/keyring.sh`, `seahorse` shipped; on-hardware auto-unlock across a real GDM session start still to verify); KDE Wallet, fresh-session/PAM acceptance and optional boot-secret reuse remain distinct |
+| Wallet/keyring first use (#29) | login model reworked (2026-09-17): **password login is the default**, so `pam_gnome_keyring` unlocks one encrypted keyring from the login password with no app prompts; **autologin is a default-off, insecure opt-in** that on GNOME uses an unencrypted empty-password keyring (`installer/lib/keyring.sh`), and neither autologin nor face login unlocks the keyring (documented caveat). `seahorse` shipped. On-hardware acceptance of both paths, KDE Wallet, and optional boot-secret reuse remain distinct |
 | Phase 6 extras | re-scoped below: baked into the ISO, or moved to the post-install tool |
 | Desktop profiles | PR #16 merged; both ISO builds/live UEFI smoke checks pass; GNOME and KDE validation reported successful by the user; targeted acceptance and native KDE configuration remain; see [DESKTOP_PROFILES.md](DESKTOP_PROFILES.md) |
 | Offline first-login manual | implemented from PR #2 on the current installer; real desktop first-login validation remains pending |
@@ -288,13 +288,19 @@ Not included: profile export, a general dry-run/diagnostics tool, the expanded
 **Desktop credentials (#29, bugfix lane):** distinguish KDE's GPG-key setup
 error from a missing password for wallet decryption. Verify actual package/PAM
 integration, provide a supported password-backed fresh-user path and preserve
-existing encrypted stores. **GNOME autologin is handled:** the installer writes
-an empty-password `login` keyring (`installer/lib/keyring.sh`) so autologin
-sessions auto-unlock without prompting or forking a second keyring, `seahorse`
-ships for users to add a password or opt other accounts in, and the manual
-documents it; scoped to GNOME autologin, where LUKS is already the boundary.
-Remaining: the same for KDE Wallet's classic backend, and on-hardware
-acceptance of the GNOME behavior across a real GDM autologin session start.
+existing encrypted stores. **Login model reworked (2026-09-17):** password
+login is the default and recommended path — `pam_gnome_keyring` unlocks one
+encrypted keyring from the login password (the same string as the LUKS
+passphrase), so there is one unlock, no per-app prompts, and no forked second
+keyring, with no Sensible-specific code. Autologin is a default-off, explicitly
+insecure opt-in; on GNOME it uses an unencrypted empty-password keyring
+(`installer/lib/keyring.sh`) to avoid prompts, with the trade documented.
+Neither autologin nor fingerprint/face login unlocks the keyring (no password
+reaches PAM; the LUKS passphrase is not exposed to the session), so the first
+login after boot always uses the account password — a documented caveat.
+`seahorse` ships so users can encrypt the Login keyring or inspect secrets.
+Remaining: the same single-keyring/one-prompt story for KDE Wallet's classic
+backend, and on-hardware acceptance of both login paths.
 Test password login, autologin, available biometrics,
 password changes/resets and live-to-installed isolation. Evaluate upstream GDM
 disk-secret reuse separately; package configuration alone is not boot evidence.
