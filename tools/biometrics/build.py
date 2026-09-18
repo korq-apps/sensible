@@ -79,7 +79,11 @@ def inputs_key():
     debian_files = sorted(p for p in (HERE / "debian").rglob("*") if p.is_file())
     inputs = [HERE / "sources.json", Path(__file__),
               *sorted((HERE / "patches").glob("*.patch")), *debian_files]
-    return hashlib.sha256("".join(digest(p) for p in inputs).encode()).hexdigest()[:16]
+    # Hash each relative path together with its content: filenames themselves
+    # shape the package (debian/rules vs anything else, patch apply order), so a
+    # rename must change the identity even when the bytes do not.
+    payload = "".join(f"{p.relative_to(HERE).as_posix()}\0{digest(p)}\n" for p in inputs)
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
 def check(work):

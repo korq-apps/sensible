@@ -169,6 +169,21 @@ esac
 
 
 class BuildManifest(unittest.TestCase):
+    def test_inputs_key_changes_when_a_packaging_file_is_renamed(self):
+        # Filenames shape the package (debian/rules, patch order), so a rename with
+        # identical bytes must not leave a cached package acceptable.
+        with tempfile.TemporaryDirectory() as temp:
+            tools = Path(temp) / "biometrics"
+            shutil.copytree(TOOLS, tools, ignore=shutil.ignore_patterns("__pycache__"))
+            key = lambda: subprocess.run([sys.executable, "-B", str(tools / "build.py"), "inputs"],
+                                         text=True, capture_output=True, check=True).stdout.strip()
+            before = key()
+            (tools / "debian/rules").rename(tools / "debian/rules.renamed")
+            self.assertNotEqual(before, key())
+            # Same content back under the original name restores the identity.
+            (tools / "debian/rules.renamed").rename(tools / "debian/rules")
+            self.assertEqual(before, key())
+
     def test_check_and_inputs_use_the_real_build_script(self):
         with tempfile.TemporaryDirectory() as work:
             work = Path(work)
