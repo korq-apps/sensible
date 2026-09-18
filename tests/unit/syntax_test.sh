@@ -113,7 +113,8 @@ for f in "${REPO_ROOT}"/live/config/hooks/*/*; do
 done
 
 t_section "executable bits"
-for f in installer/sensible-install.sh live/build.sh scripts/run-qemu.sh scripts/smoke-boot.sh live/auto/config tests/run-tests.sh; do
+for f in installer/sensible-install.sh live/build.sh scripts/run-qemu.sh scripts/smoke-boot.sh live/auto/config tests/run-tests.sh \
+    scripts/build-howdy-package.sh scripts/stage-biometrics.sh live/config/hooks/live/0280-biometrics.hook.chroot; do
     if [ -x "${REPO_ROOT}/${f}" ]; then t_ok; else t_fail "${f} is not executable" ""; fi
 done
 
@@ -239,10 +240,15 @@ assert_contains "CI only cancels superseded PR runs" "$workflow_source" "cancel-
 assert_contains "CI keeps both desktop editions" "$workflow_source" 'variant: [gnome, kde]'
 assert_contains "CI caches the actual live-build downloads" "$workflow_source" 'live/.cache/live-build'
 assert_contains "CI caches verified pinned assets" "$workflow_source" 'live/local/pins'
-direct_uploads=$(grep -cF 'uses: actions/upload-artifact@v7' <<< "$workflow_source")
+total_uploads=$(grep -cF 'uses: actions/upload-artifact@v7' <<< "$workflow_source")
 direct_files=$(grep -cF 'archive: false' <<< "$workflow_source")
-assert_eq "CI uploads ISO, checksum, torrent and magnet separately" 4 "$direct_uploads"
-assert_eq "all CI uploads bypass archive wrapping" 4 "$direct_files"
+assert_eq "CI uploads ISO, checksum, torrent and magnet as direct files" 4 "$direct_files"
+assert_eq "CI adds exactly one archived upload: the Howdy-next package directory" 5 "$total_uploads"
+assert_contains "CI builds the Howdy-next package once and hands it to both ISO builds" "$workflow_source" 'name: howdy-next-package'
+assert_contains "ISO jobs wait for the package job" "$workflow_source" 'needs: [tests, package]'
+assert_contains "container build stages the face-login stack after pins" "$(<"${REPO_ROOT}/live/build-stages.sh")" 'bash /workspace/scripts/stage-biometrics.sh'
+assert_contains "container build prepares the Howdy-next package on the host" "$(<"${REPO_ROOT}/live/build.sh")" 'scripts/build-howdy-package.sh'
+assert_contains "native build stages the face-login stack after pins" "$(<"${REPO_ROOT}/scripts/build-native.sh")" 'scripts/stage-biometrics.sh'
 assert_not_contains "CI no longer uses archive compression settings" "$workflow_source" 'compression-level:'
 assert_contains "release job supports direct-file artifacts" "$workflow_source" 'uses: actions/download-artifact@v8'
 assert_contains "release job collects ISO and checksum artifacts" "$workflow_source" 'pattern: sensible-*-debian-testing-amd64.iso.*'

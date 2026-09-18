@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Face Login Setup
+Comment=Set up, test or turn off face login
+Exec=/usr/local/bin/sensible-biometrics setup --keep-open
+Icon=preferences-system-privacy
+Terminal=true
+Categories=Settings;Security;
+StartupNotify=false

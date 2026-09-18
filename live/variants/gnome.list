@@ -27,6 +27,10 @@ amberol
 shotwell
 gnome-shell-extension-manager
 gnome-tweaks
+# Passwords and Keys: inspect and change GNOME Keyring, including turning a
+# keyring's password on or off. Needed so users can manage the auto-unlock
+# behavior autologin installs get by default.
+seahorse
 
 # User-overridable appearance defaults: Paper icons and Orchis GTK 3.
 # gtk2-engines-murrine was removed from Testing; do not mix in Stable's GTK 2.

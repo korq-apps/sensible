@@ -116,6 +116,9 @@ done
 # git defaults into includes.chroot, so every user of the installed system
 # inherits them. Fails the build on a rotted pin (see live/pins.env).
 bash /workspace/scripts/fetch-pins.sh
+# Face login: the locally built Howdy-next package (prepared on the host by
+# scripts/build-howdy-package.sh), its pinned models and the setup tool.
+bash /workspace/scripts/stage-biometrics.sh
 
 lb config
 lb bootstrap

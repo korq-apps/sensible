@@ -53,7 +53,7 @@ suite (`tests/`) can run the full flow unprivileged against a temp directory.
 | Timezone | `timedatectl` or `UTC` | zoneinfo |
 | Locale | `en_US.UTF-8` | Must be in `/usr/share/i18n/SUPPORTED` |
 | Keyboard | live console layout | Validate and apply to the live console before either password; write the same layout through target `keyboard-configuration` |
-| Skip login password (autologin) | On (only offered with LUKS) | GDM/SDDM autologin after disk unlock; saved-secret access may still prompt; idle screen lock remains enabled |
+| Skip login password (autologin) | Off (only offered with LUKS) | Explicit insecure opt-in after disk unlock; GNOME creates a new login keyring without a password, KDE preserves wallet encryption and may prompt; idle screen lock remains enabled |
 | Full name | empty | Optional GECOS + git `user.name` |
 | Email | empty | Optional git `user.email`, written only to the user's `~/.gitconfig` |
 
@@ -65,7 +65,7 @@ variant-native utilities are always installed — not checkboxes.
 
 | Field | Default | Notes |
 | :--- | :--- | :--- |
-| BioPass face login | Off | Pinned `.deb` + SHA256; IR camera recommended. Fingerprint (`fprintd`) is not a prompt — always installed |
+| Howdy-next face setup | Off | Standalone local build/configuration/test tools ([guide](BIOMETRICS.md)); guided login activation with timed rollback. Fingerprint (`fprintd`) is always installed |
 | Developer tools | Off | `docker.io` + `docker-compose`, `lazygit`, `gh`; user **not** added to the docker group |
 
 <a id="unattended-mode-planned--release-test-infrastructure"></a>
@@ -91,7 +91,7 @@ disk            = "/dev/vda"
 confirm_wipe    = false              # change to true only after reviewing the target
 filesystem      = "btrfs"            # btrfs or ext4
 luks            = true
-autologin       = true              # rejected when luks = false
+autologin       = false             # true is an insecure opt-in; rejected when luks = false
 hostname        = "debian"
 username        = "alice"
 full_name       = ""                # optional: GECOS + git user.name
@@ -527,9 +527,9 @@ Brave Origin:     official Brave apt source + brave-origin (never from Debian);
 Audacious:        optional alternative media player from Debian
 Developer tools:  docker.io docker-compose lazygit gh; systemctl enable docker;
                   the user is NOT added to the docker group (root-equivalent)
-BioPass:          pinned biopass_<ver>_amd64.deb from GitHub releases, SHA256
-                  verified; PAM wiring via the package's pam-auth-update
-                  profile; enrollment happens post-install in the BioPass app
+Howdy-next:       standalone build/install, camera configuration, enrollment
+                  and guided PAM activation with testing and timed rollback;
+                  see BIOMETRICS.md
 ```
 
 ---
@@ -599,15 +599,18 @@ x = C-x
 
 ## 12. Session login and screen lock
 
-With LUKS enabled the installer offers autologin (default **on**): the boot
-passphrase unlocks the disk, the desktop starts without a login prompt, and
-the password remains set for sudo, screen unlock, and the keyring. Without
-LUKS the prompt is never shown. The prompt also states that skipping the
-login prompt does not unlock the edition's saved-password store, KDE Wallet
-or GNOME Keyring, which may ask for its own password the first time a program
-uses it. Autologin passes no typed password to PAM; whether GDM's cached
-disk-passphrase path unlocks GNOME Keyring on real hardware is unverified, so
-the wording promises neither outcome (see #29 and
+Password login is the default. With LUKS enabled the installer offers autologin
+as an explicitly warned, insecure opt-in (default **off**): the boot passphrase
+unlocks the disk and the desktop starts without a login prompt. The account
+password remains set for sudo and screen unlock. Without LUKS the autologin
+prompt is never shown, and unattended input requesting it is rejected.
+
+Autologin passes no typed password to PAM. On GNOME, opting in also selects the
+new empty-password login keyring described below, which the prompt warns stores
+saved passwords without separate keyring encryption. On KDE, the installer does
+not remove or replace KDE Wallet encryption; its prompt warns that the wallet
+may still ask for a password. GDM's cached disk-passphrase path is a separate,
+unverified integration candidate (see #29 and
 [Architecture: desktop wallets](ARCHITECTURE.md#desktop-wallets-and-saved-credentials)).
 
 Screen lock defaults are written for both desktops regardless of the choice:
@@ -660,9 +663,28 @@ installed screen locking or the LUKS-only autologin choice. It separately
 evaluates GDM's upstream cached disk-password mechanism; current package
 configuration is not proof of working boot-to-keyring unlock. See
 [Architecture: desktop wallets](ARCHITECTURE.md#desktop-wallets-and-saved-credentials).
-Neither empty-password persistent wallets nor plaintext saved passwords are
-an acceptable way to suppress a prompt. This is a planned integration contract,
-not a claim that the fix or a new secret-handoff mechanism has shipped.
+
+**Scoped GNOME autologin exception (policy updated 2026-09-18):** the installer
+ships a fresh, empty-password `login` keyring only for a GNOME account that
+explicitly opted into autologin on a LUKS installation. `installer/lib/keyring.sh`
+creates the empty store and default-collection pointer with private ownership
+and permissions; it preserves existing keyrings and does nothing for password
+login or KDE. This deliberately supersedes the previous blanket prohibition on
+persistent empty-password stores for this one case.
+
+The rationale is the user's explicit choice to reach the desktop after disk
+unlock without another credential prompt. LUKS still protects the files while
+the disk is locked, but the keyring adds no encryption of its own: after disk
+unlock, anyone able to read the account's files can read the saved secrets.
+Screen locking and file permissions do not restore that cryptographic boundary,
+and a file-level backup needs its own encryption. The installer warning and
+manual must state the tradeoff. The secure default remains password login with
+an encrypted keyring; users can set a keyring password in Passwords and Keys.
+
+Outside that explicit exception, do not remove wallet passwords, replace
+encrypted stores with plaintext, disable secret storage or persist login
+passwords to suppress prompts. KDE first-use/PAM acceptance and boot-secret
+reuse remain planned integration work; this exception does not implement them.
 
 ---
 

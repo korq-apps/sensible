@@ -446,29 +446,32 @@ sensible_prompt_locale() {
 # disk-passphrase path (pam_gdm) unlocks GNOME Keyring on real hardware is
 # unverified, hence "may ask" (issue #29).
 autologin_secret_store_note() { # desktop
-    local store="GNOME Keyring"
-    [ "$1" = "kde" ] && store="KDE Wallet"
-    printf '%s' "Skipping the login prompt does not unlock ${store}: it may ask for its own password the first time a program saves or reads a password."
+    if [ "$1" = "kde" ]; then
+        printf '%s' "Automatic login is insecure: anyone who powers on this machine reaches your desktop and files. It also cannot unlock KDE Wallet, so saved-password access still prompts. Choose it only if you accept that."
+    else
+        printf '%s' "Automatic login is insecure: anyone who powers on this machine reaches your desktop and files. Because no password is entered at startup, your keyring is set up without one and your saved passwords are stored unencrypted. Choose it only if you accept both."
+    fi
 }
 
 # Separate so unit tests can exercise the Gum branch without a controlling TTY.
 _autologin_confirm_gum() { # question
-    gum confirm --affirmative "Yes, skip login" --negative "No, ask for login" "$1" 2>/dev/tty
+    # Default to keeping the login password: automatic login is opt-in.
+    gum confirm --affirmative "Enable automatic login" --negative "Keep the login password" --default=false "$1" 2>/dev/tty
 }
 
-# Returns 0 when the user chooses autologin, 1 otherwise. Both renderers carry
-# the same saved-password note.
+# Returns 0 when the user chooses autologin, 1 otherwise. Password login is the
+# default and the recommended choice; both renderers default to No.
 sensible_prompt_autologin() { # desktop username
     local note
     note=$(autologin_secret_store_note "$1")
     if _setup_use_gum; then
         clear_logo; ui_blank
-        say "The disk passphrase at boot will unlock the system."
+        say "Automatic login skips the password at startup. It is not recommended."
         say "$note"
         ui_blank
-        _autologin_confirm_gum "Boot straight into the desktop (no login password)?"
+        _autologin_confirm_gum "Enable automatic login anyway (not recommended)?"
     else
-        ui_yesno "Skip Login Password" "Boot straight into the desktop as $2 (no login password)?\n\nThe disk passphrase at boot stays required, the screen still locks on idle,\nand the password is kept for sudo and screen unlock.\n${note}\nWithout LUKS this is not offered." "yes"
+        ui_yesno "Automatic Login (not recommended)" "Enable automatic login for $2, skipping the password at startup?\n\n${note}\nThe screen still locks on idle and the password is kept for sudo and screen unlock." "no"
     fi
 }
 

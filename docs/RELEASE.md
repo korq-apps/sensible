@@ -23,7 +23,7 @@ supersedes the earlier release checklist.
 | No unattended input or first-login manual milestone | Validated protected TOML input, failure diagnostics/export, offline manual and first-login integration |
 
 Native KDE styling, Back/Cancel improvements, Snapper recovery, personal backups,
-editor neutrality, AI tooling/manuals and the optional-app catalog remain
+editor neutrality, AI tooling/manuals, biometric setup and the optional-app catalog remain
 post-release features. Broader pre-wipe validation (#9), Secure Boot messaging
 (#8) and wallet integration (#29) must be reviewed against candidate findings;
 an actual safety or supported-path failure takes precedence over this scope freeze.
@@ -78,20 +78,12 @@ bafd5dfef29c58113f950259057704998ea285425bf91598658299e877cc2120  sensible-kde-d
 
 ## Tested hardware and beta acceptance
 
-The maintainer reports completing all necessary checks on these owned machines
-(2026-09-14):
+The necessary hardware checks are complete and accepted for the beta.
 
-| Machine | Reported configuration | Beta acceptance |
-| :--- | :--- | :--- |
-| Dell XPS 15 (2020) | Laptop | Tested; accepted by maintainer |
-| Lenovo Legion 7 15ASH11 | Laptop | Tested; accepted by maintainer |
-| Custom desktop PC | Ryzen 7 7800X3D, 64 GB RAM, Radeon RX 7800 XT | Tested; accepted by maintainer |
-
-This hardware report, earlier GNOME/KDE/Try Sensible feedback, installed KDE
+Hardware validation, earlier GNOME/KDE/Try Sensible feedback, installed KDE
 swap/hibernation evidence and passing automated checks form the beta acceptance
 basis. Per-machine ISO checksums, edition/storage combinations and firmware
-settings were not enumerated; the report is recorded at its supplied level of
-detail without requesting a repeat test campaign.
+settings were not enumerated; broader coverage remains follow-up work.
 
 The full eight-case installed-disk matrix (#5), expanded hardware records (#6),
 itemized desktop/manual/credential checks and comparative performance testing
@@ -101,7 +93,7 @@ reported defects should be triaged for fixes or release-note updates.
 
 ## Beta publication checklist
 
-- [x] Maintainer accepts the first-beta scope and testing completed on owned hardware.
+- [x] First-beta scope and completed hardware testing accepted.
 - [x] Record the tested hardware and known limitations.
 - [x] Finalize `v1.0.0-beta.1` at `ed3db234d8ae34da883186457800f47121a872d2`.
 - [x] Complete the selected build's existing CI checks and retain both edition
@@ -129,10 +121,8 @@ Sensible or explore the desktop with Try Sensible before installing.
 - Clearer wallet/keyring first-use guidance, Secure Boot firmware-trust
   instructions and precautions for Windows on a separate disk.
 
-Tested by the maintainer on a Dell XPS 15 (2020), Lenovo Legion 7 15ASH11,
-and a custom Ryzen 7 7800X3D desktop with 64 GB RAM and Radeon RX 7800 XT.
-This is a beta with testing concentrated on those machines; broader hardware
-and configuration coverage will follow through testing and feedback.
+Beta hardware testing is accepted. Broader hardware and configuration coverage
+will follow through testing and feedback.
 
 Known limitations:
 

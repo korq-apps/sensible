@@ -1,0 +1,21 @@
+Source: howdy-next
+Section: admin
+Priority: optional
+Maintainer: Sensible contributors <noreply@example.invalid>
+Build-Depends: debhelper-compat (= 13), cmake (>= 3.31), ninja-build,
+ pkgconf, gettext, g++, libpam0g-dev, libevdev-dev, libacl1-dev,
+ libcurl4-openssl-dev, libssl-dev, libinih-dev (>= 59),
+ libyyjson-dev (>= 0.12.0), libgtk-3-dev
+Rules-Requires-Root: no
+Standards-Version: 4.7.2
+Homepage: https://codeberg.org/nathawat/howdy-next
+
+Package: howdy-next
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Provides: howdy
+Conflicts: howdy
+Replaces: howdy
+Description: Howdy-next facial authentication for local evaluation
+ Native Debian build with private OpenCV 5 libraries and compatible FP32
+ recognition models. No login PAM configuration is enabled by installation.

@@ -1,0 +1,115 @@
+--- a/howdy/tests/compare/compare_sandbox_test.cpp
++++ b/howdy/tests/compare/compare_sandbox_test.cpp
+@@ -136,18 +136,18 @@
+ 		FakeSandboxContext context;
+ 		context.inherited = {
+ 		    {RLIMIT_CPU, make_limit(100, 100)},
+-		    {RLIMIT_NOFILE, make_limit(128, 128)},
++		    {RLIMIT_NOFILE, make_limit(512, 512)},
+ 		    {RLIMIT_CORE, make_limit(1024, 1024)},
+-		    {RLIMIT_AS, make_limit(4 * kGibibyte, 4 * kGibibyte)},
++		    {RLIMIT_AS, make_limit(16 * kGibibyte, 16 * kGibibyte)},
+ 		};
+ 
+ 		const auto result = apply(context);
+ 		bool       ok     = true;
+ 		ok &= expect(result.status == CompareSandboxStatus::kOk, "accept preferred limits");
+ 		ok &= expect_limit(context, RLIMIT_CPU, 15, 20, "apply preferred CPU limit");
+-		ok &= expect_limit(context, RLIMIT_NOFILE, 32, 32, "apply preferred open-file limit");
++		ok &= expect_limit(context, RLIMIT_NOFILE, 256, 256, "apply preferred open-file limit");
+ 		ok &= expect_limit(context, RLIMIT_CORE, 0, 0, "disable core dumps");
+-		ok &= expect_limit(context, RLIMIT_AS, 5 * kGibibyte / 2, 5 * kGibibyte / 2,
++		ok &= expect_limit(context, RLIMIT_AS, 8 * kGibibyte, 8 * kGibibyte,
+ 		                   "apply preferred address-space limit");
+ 		ok &= expect(context.events == expected_success_events(), "preserve syscall order");
+ 		return ok;
+@@ -159,9 +159,9 @@
+ 		bool               ok     = true;
+ 		ok &= expect(result.status == CompareSandboxStatus::kOk, "accept unlimited inheritance");
+ 		ok &= expect_limit(context, RLIMIT_CPU, 15, 20, "finite CPU limit from infinity");
+-		ok &= expect_limit(context, RLIMIT_NOFILE, 32, 32, "finite open-file limit from infinity");
++		ok &= expect_limit(context, RLIMIT_NOFILE, 256, 256, "finite open-file limit from infinity");
+ 		ok &= expect_limit(context, RLIMIT_CORE, 0, 0, "finite core limit from infinity");
+-		ok &= expect_limit(context, RLIMIT_AS, 5 * kGibibyte / 2, 5 * kGibibyte / 2,
++		ok &= expect_limit(context, RLIMIT_AS, 8 * kGibibyte, 8 * kGibibyte,
+ 		                   "finite address-space limit from infinity");
+ 		return ok;
+ 	}
+@@ -177,14 +177,14 @@
+ 		}
+ 		{
+ 			FakeSandboxContext context;
+-			context.inherited[RLIMIT_NOFILE] = make_limit(24, 24);
++			context.inherited[RLIMIT_NOFILE] = make_limit(128, 128);
+ 			ok &= expect(apply(context).status == CompareSandboxStatus::kOk,
+ 			             "accept lower usable open-file hard limit");
+-			ok &= expect_limit(context, RLIMIT_NOFILE, 24, 24, "clamp open-file hard limit");
+-		}
+-		{
+-			FakeSandboxContext context;
+-			const rlim_t       inherited = 9 * kGibibyte / 4;
++			ok &= expect_limit(context, RLIMIT_NOFILE, 128, 128, "clamp open-file hard limit");
++		}
++		{
++			FakeSandboxContext context;
++			const rlim_t       inherited = 6 * kGibibyte;
+ 			context.inherited[RLIMIT_AS] = make_limit(inherited, inherited);
+ 			ok &= expect(apply(context).status == CompareSandboxStatus::kOk,
+ 			             "accept lower usable address-space hard limit");
+@@ -205,18 +205,18 @@
+ 		}
+ 		{
+ 			FakeSandboxContext context;
+-			context.inherited[RLIMIT_NOFILE] = make_limit(24, 100);
++			context.inherited[RLIMIT_NOFILE] = make_limit(128, 512);
+ 			ok &= expect(apply(context).status == CompareSandboxStatus::kOk,
+ 			             "accept lower usable open-file soft limit");
+-			ok &= expect_limit(context, RLIMIT_NOFILE, 24, 32, "preserve open-file soft limit");
+-		}
+-		{
+-			FakeSandboxContext context;
+-			const rlim_t       inherited = 9 * kGibibyte / 4;
+-			context.inherited[RLIMIT_AS] = make_limit(inherited, 4 * kGibibyte);
++			ok &= expect_limit(context, RLIMIT_NOFILE, 128, 256, "preserve open-file soft limit");
++		}
++		{
++			FakeSandboxContext context;
++			const rlim_t       inherited = 6 * kGibibyte;
++			context.inherited[RLIMIT_AS] = make_limit(inherited, 16 * kGibibyte);
+ 			ok &= expect(apply(context).status == CompareSandboxStatus::kOk,
+ 			             "accept lower usable address-space soft limit");
+-			ok &= expect_limit(context, RLIMIT_AS, inherited, 5 * kGibibyte / 2,
++			ok &= expect_limit(context, RLIMIT_AS, inherited, 8 * kGibibyte,
+ 			                   "preserve address-space soft limit");
+ 		}
+ 		return ok;
+@@ -233,15 +233,15 @@
+ 		}
+ 		{
+ 			FakeSandboxContext context;
+-			context.inherited[RLIMIT_NOFILE] = make_limit(RLIM_INFINITY, 24);
++			context.inherited[RLIMIT_NOFILE] = make_limit(RLIM_INFINITY, 128);
+ 			ok &= expect(apply(context).status == CompareSandboxStatus::kOk,
+ 			             "accept infinite open-file soft and finite hard");
+-			ok &= expect_limit(context, RLIMIT_NOFILE, 24, 24,
++			ok &= expect_limit(context, RLIMIT_NOFILE, 128, 128,
+ 			                   "clamp open-file soft to inherited hard");
+ 		}
+ 		{
+ 			FakeSandboxContext context;
+-			const rlim_t       inherited = 9 * kGibibyte / 4;
++			const rlim_t       inherited = 6 * kGibibyte;
+ 			context.inherited[RLIMIT_AS] = make_limit(RLIM_INFINITY, inherited);
+ 			ok &= expect(apply(context).status == CompareSandboxStatus::kOk,
+ 			             "accept infinite address-space soft and finite hard");
+@@ -290,8 +290,8 @@
+ 
+ 		const std::vector<Case> cases{
+ 		    {.resource = RLIMIT_CPU, .inherited = make_limit(8, 100)},
+-		    {.resource = RLIMIT_NOFILE, .inherited = make_limit(15, 100)},
+-		    {.resource = RLIMIT_AS, .inherited = make_limit((2 * kGibibyte) - 1, 4 * kGibibyte)},
++		    {.resource = RLIMIT_NOFILE, .inherited = make_limit(63, 512)},
++		    {.resource = RLIMIT_AS, .inherited = make_limit((4 * kGibibyte) - 1, 16 * kGibibyte)},
+ 		};
+ 
+ 		bool ok = true;
