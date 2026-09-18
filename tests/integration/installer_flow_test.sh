@@ -561,7 +561,7 @@ build_answers yes yes alice reboot
 LIVE_ROOT_SENTINEL="${WORK}"
 MOCK_NVIDIA=0
 run_flow
-assert_contains "autologin prompt warns GNOME Keyring is unencrypted" "$(output_text)" "GNOME Keyring is set up without one and your saved passwords are stored unencrypted"
+assert_contains "autologin prompt warns the keyring is unencrypted" "$(output_text)" "your keyring is set up without one and your saved passwords are stored unencrypted"
 assert_file_contains "GNOME autologin gets an auto-unlocking login keyring" "${MNT}/home/alice/.local/share/keyrings/login.keyring" "[keyring]"
 assert_file_contains "the login keyring is the default collection" "${MNT}/home/alice/.local/share/keyrings/default" "login"
 assert_contains "login keyring is owned by the user" "$(log_text)" "chown alice:alice /home/alice/.local/share/keyrings/login.keyring /home/alice/.local/share/keyrings/default"

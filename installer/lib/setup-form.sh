@@ -449,7 +449,7 @@ autologin_secret_store_note() { # desktop
     if [ "$1" = "kde" ]; then
         printf '%s' "Automatic login is insecure: anyone who powers on this machine reaches your desktop and files. It also cannot unlock KDE Wallet, so saved-password access still prompts. Choose it only if you accept that."
     else
-        printf '%s' "Automatic login is insecure: anyone who powers on this machine reaches your desktop and files. Because no password is entered at startup, GNOME Keyring is set up without one and your saved passwords are stored unencrypted. Choose it only if you accept both."
+        printf '%s' "Automatic login is insecure: anyone who powers on this machine reaches your desktop and files. Because no password is entered at startup, your keyring is set up without one and your saved passwords are stored unencrypted. Choose it only if you accept both."
     fi
 }
 

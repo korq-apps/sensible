@@ -140,7 +140,7 @@ assert_contains "gum path marks autologin not recommended" "$(<"$say_calls")" "A
 assert_contains "gum path asks the opt-in question" "$(<"$confirm_calls")" "Enable automatic login anyway (not recommended)?"
 : > "$say_calls"; MOCK_CONFIRM_RC=1
 sensible_prompt_autologin gnome alice; assert_rc "gum confirm no keeps password login" 1 $?
-assert_contains "gum path warns GNOME Keyring is unencrypted under autologin" "$(<"$say_calls")" "GNOME Keyring is set up without one and your saved passwords are stored unencrypted"
+assert_contains "gum path warns the keyring is unencrypted under autologin" "$(<"$say_calls")" "your keyring is set up without one and your saved passwords are stored unencrypted"
 # Text branch: ui_yesno receives the user name and the same note.
 _setup_use_gum() { return 1; }
 yesno_calls="${fixture}/yesno-calls"; : > "$yesno_calls"

@@ -206,7 +206,8 @@ in the live session for diagnostics.
   password. This is insecure and not recommended (see below).
 - Without encryption, there is no disk-unlock prompt; log in normally.
 
-Your saved application passwords live in GNOME Keyring (or KDE Wallet). Only a
+Your saved application passwords live in a keyring, managed by the Passwords
+and Keys app on GNOME (KDE Wallet on KDE). Only a
 password entered at login can unlock them: neither automatic login nor
 fingerprint/face login supplies it, because no password reaches the system on
 those paths and the disk passphrase is not available to the keyring. So the

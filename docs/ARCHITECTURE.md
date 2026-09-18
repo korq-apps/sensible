@@ -239,7 +239,12 @@ Session authentication and decrypting saved secrets are separate operations.
 `login` keyring from the greeter password at the first login, and that keyring
 is the default collection every app uses. One password unlock, encrypted at
 rest, no per-app prompts, and no second keyring is forked. This is the intended
-GNOME behavior and needs no Sensible-specific code.
+GNOME behavior and needs no Sensible-specific code. If a second keyring exists
+anyway (an autologin-era artifact), gnome-keyring's own "Automatically unlock
+this keyring whenever I'm logged in" option stores that keyring's password
+inside `login`, so it unlocks with it; verified on a real install. Sensible
+cannot pre-set that flag (it needs the other keyring's password, and a fresh
+install has no second keyring), so it is documented, not automated.
 
 **Autologin opt-in (insecure, GNOME):** autologin gives `pam_gnome_keyring` no
 password, so nothing can create or unlock an encrypted login keyring, and the
