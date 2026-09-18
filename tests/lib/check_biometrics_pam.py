@@ -28,6 +28,8 @@ import tui
 import wizard
 
 COMMON = b'auth [success=1 default=ignore] pam_unix.so nullok\nauth requisite pam_deny.so\nauth required pam_permit.so\n'
+KDE_COMMON = COMMON + b'auth optional pam_kwallet5.so\n'
+KDE_SERVICE = b'@include common-auth\n@include common-account\n@include common-password\n@include common-session\n'
 SERVICE = b'# Fixture service\nauth requisite pam_nologin.so\n@include common-auth\nauth optional pam_gnome_keyring.so\n@include common-account\nsession required pam_limits.so\n'
 
 
@@ -163,6 +165,44 @@ class Transactions(unittest.TestCase):
         with self.assertRaises(ValueError): pam.proposed(SERVICE + b'auth required pam_faillock.so\n', 'fixture')
         self.assertEqual((pam.PAM_DIR / 'gdm-password').read_bytes(), SERVICE)
 
+    def test_stock_kde_wallet_profile_can_activate_and_restore_without_changing_common_auth(self):
+        path = pam.PAM_DIR / 'common-auth'
+        path.write_bytes(KDE_COMMON)
+        (pam.PAM_DIR / 'kde').write_bytes(KDE_SERVICE)
+        (pam.PAM_DIR / 'kde').chmod(0o644)
+        (pam.PAM_DIR / 'sddm').write_bytes(SERVICE)
+        (pam.PAM_DIR / 'sddm').chmod(0o644)
+        self.assertEqual(pam.validate_password_stack(), KDE_COMMON)
+        self.activate(('kde', 'sudo'))
+        self.assertEqual(pam.status()['services'], ['kde', 'sudo'])
+        self.assertIn(pam.block('fixture', 'kde'), (pam.PAM_DIR / 'kde').read_bytes())
+        self.assertEqual(path.read_bytes(), KDE_COMMON)
+        self.assertEqual((pam.PAM_DIR / 'sddm').read_bytes(), SERVICE)
+        pam.rollback()
+        self.assertEqual((pam.PAM_DIR / 'kde').read_bytes(), KDE_SERVICE)
+        self.assertEqual(path.read_bytes(), KDE_COMMON)
+
+    def test_wallet_allowance_does_not_accept_changed_primary_rules_or_extra_modules(self):
+        candidates = [
+            KDE_COMMON.replace(b'auth optional pam_kwallet5', b'auth sufficient pam_kwallet5'),
+            KDE_COMMON.replace(b'auth optional pam_kwallet5', b'auth required pam_kwallet5'),
+            KDE_COMMON.replace(b'pam_kwallet5.so\n', b'pam_kwallet5.so force_run\n'),
+            KDE_COMMON + b'auth optional pam_kwallet5.so\n',
+            b'auth optional pam_kwallet5.so\n' + COMMON,
+            KDE_COMMON.replace(b'success=1', b'success=2'),
+            KDE_COMMON.replace(b'pam_unix.so', b'pam_sss.so'),
+            b'',
+        ]
+        candidates += [KDE_COMMON + f'auth {control} {module}\n'.encode()
+                       for control in ('optional', 'required')
+                       for module in ('pam_u2f.so', 'pam_faillock.so', 'pam_sss.so')]
+        for content in candidates:
+            with self.subTest(content=content):
+                (pam.PAM_DIR / 'common-auth').write_bytes(content)
+                with self.assertRaises(ValueError): pam.service_plan('fixture', ['gdm-password'])
+                self.assertFalse((ops.STATE / 'pam.json').exists())
+        self.timer.assert_not_called()
+
     def test_guard_before_writes_and_backup_precedes_timer(self):
         self.proof()
         def arm():
@@ -278,6 +318,32 @@ class Transactions(unittest.TestCase):
         pam.rollback()
         self.assertEqual(pam.status()['status'], 'off')
 
+    def test_recovery_survives_more_than_five_package_lock_failures(self):
+        code = ('import fcntl,sys,os; f=open(sys.argv[1], "a+"); os.fchmod(f.fileno(), 0o640); '
+                'fcntl.lockf(f, fcntl.LOCK_EX); print("locked", flush=True); sys.stdin.read(1)')
+        for path in ops.PACKAGE_LOCKS:
+            with self.subTest(lock=path):
+                self.activate()
+                before = (pam.PAM_DIR / 'gdm-password').read_bytes()
+                child = subprocess.Popen([sys.executable, '-c', code, str(path)], stdin=subprocess.PIPE,
+                                         stdout=subprocess.PIPE, text=True)
+                try:
+                    self.assertEqual(child.stdout.readline().strip(), 'locked')
+                    # Bypass only recover.py's root entry-point check; fixture
+                    # file ownership validation still uses the real test UID.
+                    with patch.object(recover, 'os', SimpleNamespace(geteuid=lambda: 0)), \
+                         contextlib.redirect_stderr(io.StringIO()):
+                        for _ in range(7):
+                            self.assertEqual(recover.main(), 1)
+                            self.assertEqual((pam.PAM_DIR / 'gdm-password').read_bytes(), before)
+                            self.assertEqual(pam.status()['status'], 'pending')
+                finally:
+                    child.communicate('x', timeout=5)
+                with patch.object(recover, 'os', SimpleNamespace(geteuid=lambda: 0)):
+                    self.assertEqual(recover.main(), 0)
+                self.assertEqual(pam.status()['status'], 'off')
+                self.assertEqual((pam.PAM_DIR / 'gdm-password').read_bytes(), SERVICE)
+
 
 class GdmGuard(unittest.TestCase):
     def setUp(self):
@@ -371,7 +437,10 @@ class RecoveryExit(unittest.TestCase):
             pam.arm_recovery()
             command = next(call.args[0] for call in run.call_args_list if call.args[0][0] == 'systemd-run')
             self.assertIn('--property=RestartPreventExitStatus=78', command)
-            self.assertIn('--property=StartLimitBurst=5', command)
+            self.assertIn('--property=Restart=on-failure', command)
+            self.assertIn('--property=RestartSec=5s', command)
+            self.assertIn('--property=StartLimitIntervalSec=0', command)
+            self.assertFalse(any(arg.startswith('--property=StartLimitBurst=') for arg in command))
 
 
 class ResultChannel(unittest.TestCase):
@@ -420,14 +489,16 @@ class RealPam(unittest.TestCase):
         cls.user = pwd.getpwuid(os.getuid()).pw_name
 
     def authenticate(self, face=0, password=7, account=0, target=None, prefix='', suffix='', missing_guard=False,
-                     unlock=0, service='gdm-password'):
+                     unlock=0, service='gdm-password', wallet=None):
         generated = pam.block(target or self.user, service).decode().replace('pam_howdy.so', f'{self.module} {face}' if face is not None else '/nonexistent/module.so')
         guard_command = f'pam_exec.so quiet quiet_log /usr/bin/python3 -I -B {pam.RECOVERY_DIR}/pam_guard.py'
         generated = generated.replace(guard_command, f'{self.module} {unlock}' if unlock is not None else '/nonexistent/guard.so')
         if missing_guard: generated = generated.replace('pam_succeed_if.so', '/nonexistent/guard.so')
         (self.root / 'check').write_text(prefix + generated + suffix + f'account required {self.module} {account}\n')
-        (self.root / 'common-auth').write_text(f'auth [success=1 default=ignore] {self.module} {password}\n'
-                                               'auth requisite pam_deny.so\nauth required pam_permit.so\n')
+        common = KDE_COMMON if wallet is not None else COMMON
+        common = common.decode().replace('pam_unix.so nullok', f'{self.module} {password}')
+        common = common.replace('pam_kwallet5.so', f'{self.module} {wallet}')
+        (self.root / 'common-auth').write_text(common)
         handle = ctypes.c_void_p()
         # No fixture module prompts. A non-NULL conversation structure is required.
         conversation = (ctypes.c_void_p * 2)()
@@ -465,6 +536,14 @@ class RealPam(unittest.TestCase):
             self.assertEqual(self.authenticate(service=service, unlock=7), 0)
             self.assertNotIn(b'pam_exec', pam.block(self.user, service))
         with self.assertRaises(ValueError): pam.block(self.user, 'sddm')
+
+    def test_kde_wallet_hook_cannot_authenticate_or_veto_valid_authentication(self):
+        for wallet in (0, 7, 25):
+            with self.subTest(wallet=wallet):
+                self.assertEqual(self.authenticate(service='kde', face=0, password=7, wallet=wallet), 0)
+                self.assertEqual(self.authenticate(service='kde', face=7, password=0, wallet=wallet), 0)
+                self.assertNotEqual(self.authenticate(service='kde', face=7, password=7, wallet=wallet), 0)
+                self.assertNotEqual(self.authenticate(service='kde', account=13, wallet=wallet), 0)
 
     def test_real_guard_rejects_pamtester_context_even_with_spoofed_environment(self):
         # Execute the actual helper through libpam/pam_exec; this Python process

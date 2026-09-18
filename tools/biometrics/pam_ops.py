@@ -49,9 +49,14 @@ def validate_password_stack():
     data = ops.checked_read(PAM_DIR / 'common-auth')[0]
     lines = statements(data)
     # Do not turn a site-specific MFA/domain/lockout policy into face OR password.
-    if len(lines) != 3 or not re.fullmatch(
+    # Debian's KDE profile appends this optional wallet hook to the same three
+    # password rules. It consumes the password; it is not an authentication
+    # factor. Accept only that exact trailing addition, without extra arguments.
+    if len(lines) < 3 or not re.fullmatch(
         r'auth \[success=1 default=ignore\] pam_unix\.so(?: (?:nullok|try_first_pass))*', lines[0]
-    ) or lines[1:] != ['auth requisite pam_deny.so', 'auth required pam_permit.so']:
+    ) or lines[1:3] != ['auth requisite pam_deny.so', 'auth required pam_permit.so'] or lines[3:] not in (
+        [], ['auth optional pam_kwallet5.so']
+    ):
         raise ValueError('The existing authentication policy needs a dedicated adapter. '
                          'Automatic setup supports the standard Debian local-password stack.')
     return data
@@ -269,10 +274,14 @@ def arm_recovery():
                     'sensible-biometrics-rollback.service'], check=False, capture_output=True)
     subprocess.run(['systemctl', 'reset-failed', 'sensible-biometrics-rollback.service'],
                    check=False, capture_output=True)
+    # Unlike the boot recovery unit, this background service does not order
+    # before the display manager. Keep retrying transient failures (e.g. APT
+    # holding a dpkg lock) until recovery succeeds; exit 78 still stops retries
+    # when external edits require reconciliation.
     subprocess.run(['systemd-run', '--quiet', '--collect', '--unit=sensible-biometrics-rollback',
                     f'--on-active={WINDOW}s', '--timer-property=AccuracySec=1s',
                     '--property=Restart=on-failure', '--property=RestartSec=5s',
-                    '--property=StartLimitIntervalSec=120', '--property=StartLimitBurst=5',
+                    '--property=StartLimitIntervalSec=0',
                     f'--property=RestartPreventExitStatus={RECOVERY_RECONCILE}',
                     '/usr/bin/python3', '-Es', str(RECOVERY_DIR / 'recover.py')], check=True)
     subprocess.run(['systemctl', 'is-active', '--quiet', 'sensible-biometrics-rollback.timer'], check=True)

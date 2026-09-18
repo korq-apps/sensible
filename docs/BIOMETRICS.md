@@ -40,7 +40,8 @@ timer expiry and unconfirmed setup after a reboot. Enrollment/configuration
 progress stays local so setup can resume.
 
 Automatic activation currently supports the standard Debian local-password
-stack with GDM screen unlock, or KDE screen unlock (with SDDM left unchanged). It refuses unfamiliar/MFA/domain
+stack, including KDE's trailing `auth optional pam_kwallet5.so` hook, with GDM
+screen unlock or KDE screen unlock (with SDDM left unchanged). It refuses unfamiliar/MFA/domain
 authentication policies before setup changes them. A camera that needs additional
 IR emitter support stops at the preview check. Live desktop behavior still needs
 the guided acceptance check on each system; automated tests do not prove it.
@@ -74,8 +75,13 @@ original bytes in `/var/lib/sensible-biometrics/pam.json` for reconciliation.
 This protects against setup failures; it is not a guarantee against arbitrary
 system or administrator changes. A confirmed setup retains its recovery backup.
 Unreconcilable edits stop automatic retries and leave an error in the recovery
-service's journal. Transient I/O errors or a busy package manager remain retryable.
-These can delay restoration beyond the nominal five-minute deadline.
+service's journal. After the five-minute deadline, the background rollback
+service retries transient I/O errors or a busy package manager every five seconds
+without a start limit, until restoration succeeds or reconciliation is required.
+These failures can delay restoration beyond the nominal deadline. The separate
+boot recovery service retains a five-start limit over 120 seconds so persistent
+errors cannot indefinitely hold up the display manager; it leaves the backup
+for manual recovery if that limit is exhausted.
 
 Configuration writes take the APT/dpkg frontend and database locks and recheck
 contents, file identity and permissions immediately before replacement. These
