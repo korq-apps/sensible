@@ -503,7 +503,7 @@ records and additional hardware coverage remain follow-up work.
 
 - [x] GNOME (`gnome-core`, gdm3) or Plasma (`kde-plasma-desktop`, sddm), Wayland default
 - [x] Plymouth theme: spinner / breeze
-- [x] Optional autologin (LUKS only, default on) + enforced idle screen lock on both DEs
+- [x] Optional autologin (LUKS only, default off; GNOME empty-password keyring is an explicit insecure opt-in) + enforced idle screen lock on both DEs
 - [x] `keyd` + `configs/keyd-default.conf` when Mac clipboard is on
 - [x] Desktop app configuration: Firefox ESR + Chromium, ONLYOFFICE Desktop Editors, Thunderbird, KeePassXC, VLC, Neovim + pinned LazyVim skel, archive support, CLI set, Flatpak, and native GNOME/KDE utilities
 - [x] Office replacement source: complete upstream ONLYOFFICE `9.4.0-129`
