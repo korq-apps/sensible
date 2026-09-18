@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+import runpy
 import shutil
 import subprocess
 import sys
@@ -421,6 +422,21 @@ class GdmGuard(unittest.TestCase):
 
 
 class RecoveryExit(unittest.TestCase):
+    def test_interactive_disable_preserves_recovery_exit_status_and_handles_confirmed_setup(self):
+        for error, expected in ((pam.ReconciliationError('external edit'), 78),
+                                (ValueError('unsafe backup'), 78), (OSError('busy'), 1), (None, 0)):
+            with self.subTest(error=error), patch.object(recover.os, 'geteuid', return_value=0), \
+                 patch.object(pam, 'rollback', side_effect=error) as rollback, \
+                 patch.object(sys, 'argv', ['sensible-biometrics', 'pam-disable']), \
+                 contextlib.redirect_stderr(io.StringIO()):
+                if expected:
+                    with self.assertRaises(SystemExit) as caught:
+                        runpy.run_path(str(TOOLS / 'sensible-biometrics'), run_name='__main__')
+                    self.assertEqual(caught.exception.code, expected)
+                else:
+                    runpy.run_path(str(TOOLS / 'sensible-biometrics'), run_name='__main__')
+                rollback.assert_called_once_with(pending_only=False)
+
     def test_only_transient_errors_remain_retryable(self):
         for error, expected in ((pam.ReconciliationError('external edit'), 78),
                                 (ValueError('invalid backup'), 78), (OSError('busy'), 1), (None, 0)):
@@ -591,6 +607,7 @@ class FakeBackend:
                                  'cameras': [{'capture': True, 'ir_candidate': True,
                                  'stable_paths': ['/dev/v4l/by-path/fixture'], 'name': 'IR', 'node': '/dev/video2'}]}
     def installed(self): return True
+    def reusable_build(self): return False
     def desktop_services(self): return ['gdm-password']
     def run(self, *args, **kwargs):
         self.calls.append(args)
@@ -660,6 +677,34 @@ class WizardFlow(unittest.TestCase):
             with self.assertRaises(expected): self.execute(answers, backend)
             self.assertEqual(backend.calls[-1][0], 'pam-disable')
 
+    def test_failed_recovery_distinguishes_reconciliation_from_transient_errors(self):
+        for error in (subprocess.CalledProcessError(78, ['pam-disable']),
+                      subprocess.CalledProcessError(1, ['pam-disable']), OSError('could not launch')):
+            with self.subTest(error=error):
+                backend = FakeBackend()
+                original = backend.run
+                def fail_recovery(*args, **kwargs):
+                    result = original(*args, **kwargs)
+                    if args[0] == 'pam-disable':
+                        raise error
+                    return result
+                backend.run = fail_recovery
+                ui = FakeUI([True, False, True, False, True, False])
+                with patch.object(ops, 'target_user', return_value='fixture'), \
+                     patch.object(wizard.os, 'geteuid', return_value=1000), self.assertRaises(wizard.Cancelled):
+                    wizard.setup(ui, backend)
+                messages = '\n'.join(ui.messages)
+                self.assertIn('/var/lib/sensible-biometrics/pam.json', messages)
+                self.assertIn('journalctl -u sensible-biometrics-rollback.service', messages)
+                if getattr(error, 'returncode', None) == 78:
+                    self.assertIn('Recovery requires manual reconciliation', messages)
+                    self.assertIn('waiting or rebooting will not resolve it', messages)
+                else:
+                    self.assertIn('retries temporary package-lock or I/O failures', messages)
+                    self.assertIn('restoration is not guaranteed', messages)
+                self.assertNotIn('wait five minutes or reboot to restore', messages)
+                self.assertNotIn('pam-confirm', [c[0] for c in backend.calls])
+
     def test_bad_camera_stops_before_enrollment(self):
         backend = FakeBackend()
         with self.assertRaises(wizard.Cancelled): self.execute([True, False, False, False], backend)
@@ -716,20 +761,22 @@ class WizardFlow(unittest.TestCase):
 
 
 class InstallLayout(unittest.TestCase):
-    """A packaged install never compiles; a checkout builds when no package exists."""
+    """A packaged install never compiles; a checkout reuses only a validated build."""
 
     def run_setup(self, layout, backend):
         with patch.object(wizard, 'HERE', layout), patch.object(ops, 'target_user', return_value='fixture'), \
              patch.object(wizard.os, 'geteuid', return_value=1000):
             wizard.setup(FakeUI([True, False]), backend)
 
-    def test_missing_package_without_build_recipe_asks_for_apt(self):
+    def test_missing_package_without_build_recipe_explains_supported_recovery(self):
         backend = FakeBackend()
         backend.installed = lambda: False
         with tempfile.TemporaryDirectory() as baked:
             with self.assertRaises(ValueError) as caught:
                 self.run_setup(Path(baked), backend)
-        self.assertIn('Reinstall it with APT', str(caught.exception))
+        self.assertIn('Debian APT does not provide it', str(caught.exception))
+        self.assertIn('matching Sensible source checkout', str(caught.exception))
+        self.assertIn('deps, then build, then install', str(caught.exception))
         self.assertFalse({'deps', 'build', 'install'} & {c[0] for c in backend.calls})
 
     def test_checkout_without_package_builds_then_installs(self):
@@ -741,6 +788,52 @@ class InstallLayout(unittest.TestCase):
                 self.run_setup(Path(checkout), backend)
         calls = [c[0] for c in backend.calls]
         self.assertEqual([c for c in calls if c in ('deps', 'build', 'install')], ['deps', 'build', 'install'])
+
+    def test_checkout_cache_uses_real_build_validation_without_version_bump(self):
+        for change in ('none', 'pins', 'patch', 'packaging', 'artifact', 'missing', 'manifest'):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as checkout:
+                root = Path(checkout)
+                tools = root / 'tools/biometrics'
+                shutil.copytree(TOOLS, tools, ignore=shutil.ignore_patterns('__pycache__'))
+                inputs = subprocess.check_output([sys.executable, '-B', str(tools / 'build.py'), 'inputs'],
+                                                 text=True).strip()
+                dist = root / '.build/biometrics/dist'
+                dist.mkdir(parents=True)
+                package = dist / 'howdy-next.deb'
+                package.write_bytes(b'fixture package')
+                pins = json.loads((tools / 'sources.json').read_text())
+                manifest = {'package': package.name, 'sha256': ops.sha(package.read_bytes()),
+                            'sources': pins, 'inputs': inputs}
+                (dist / 'build.json').write_text(json.dumps(manifest))
+                if change == 'pins':
+                    pins['howdy']['sha256'] = 'changed without a version bump'
+                    (tools / 'sources.json').write_text(json.dumps(pins))
+                elif change == 'patch':
+                    (tools / 'patches/new.patch').write_text('new patch')
+                elif change == 'packaging':
+                    (tools / 'debian/rules').write_text('changed packaging')
+                elif change == 'artifact':
+                    package.write_bytes(b'changed artifact')
+                elif change == 'missing':
+                    package.unlink()
+                elif change == 'manifest':
+                    (dist / 'build.json').write_text('{')
+                backend = FakeBackend()
+                backend.installed = lambda: False
+                backend.reusable_build = wizard.Backend().reusable_build
+                with self.assertRaises(StopIteration):  # Stop at the first camera prompt.
+                    self.run_setup(tools, backend)
+                expected = ['install'] if change == 'none' else ['deps', 'build', 'install']
+                self.assertEqual([c[0] for c in backend.calls if c[0] in ('deps', 'build', 'install')], expected)
+
+    def test_failed_rebuild_does_not_install_stale_package_or_enroll(self):
+        backend = FakeBackend(fail='build')
+        backend.installed = lambda: False
+        with tempfile.TemporaryDirectory() as checkout:
+            (Path(checkout) / 'build.py').write_text('')
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.run_setup(Path(checkout), backend)
+        self.assertFalse({'install', 'configure', 'enroll', 'pam-enable'} & {c[0] for c in backend.calls})
 
 
 class TerminalPrompts(unittest.TestCase):

@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-from pam_ops import SERVICES
+from pam_ops import RECOVERY_RECONCILE, SERVICES
 import tui
 
 HERE = Path(__file__).resolve().parent
@@ -71,6 +71,11 @@ class Backend:
         pins = json.loads((HERE / 'sources.json').read_text())
         return result.returncode == 0 and result.stdout == pins['version'] + ' install ok installed'
 
+    def reusable_build(self):
+        result = subprocess.run([sys.executable, '-B', str(HERE / 'build.py'), 'check'],
+                                text=True, capture_output=True)
+        return result.returncode == 0
+
     def desktop_services(self):
         path = Path('/etc/X11/default-display-manager')
         dm = path.read_text().strip() if path.exists() else ''
@@ -113,7 +118,7 @@ def remaining_test_time(ui, backend):
     remaining = int((state.get('deadline') or 0) - time.time())
     if state['status'] != 'pending' or remaining <= 0:
         raise Cancelled('The login test window ended. The changes will not be kept; run setup again to retry.')
-    ui.say(f'Automatic rollback in {remaining // 60}:{remaining % 60:02d}.', kind='info')
+    ui.say(f'Automatic recovery starts in {remaining // 60}:{remaining % 60:02d}.', kind='info')
 
 
 def setup(ui=None, backend=None):
@@ -150,12 +155,16 @@ def setup(ui=None, backend=None):
     if backend.installed():
         ui.say('Recognition software is already installed.', kind='ok')
     elif not (HERE / 'build.py').is_file():
-        # Baked into a Sensible image: the package ships preinstalled, and only
-        # APT may replace it. The build recipe deliberately stays in the checkout.
-        raise ValueError('The howdy-next package is missing. Reinstall it with APT, then reopen Face Login Setup.')
+        # The image ships the package, but neither a build recipe nor an APT
+        # repository from which a removed package could be fetched again.
+        raise ValueError('The required howdy-next package is missing or has a different version. '
+                         'Debian APT does not provide it. Restore it from a matching Sensible source checkout: '
+                         'run tools/biometrics/sensible-biometrics deps, then build, then install. '
+                         'See docs/BIOMETRICS.md (Build and install) in that checkout, '
+                         'then reopen Face Login Setup.')
     else:
         ui.say('The first source build can take several minutes.', kind='info')
-        if not (HERE.parents[1] / '.build/biometrics/dist/build.json').is_file():
+        if not backend.reusable_build():
             backend.run('deps')
             backend.run('build')  # build.py sizes --jobs from the CPU count.
         backend.run('install')
@@ -180,8 +189,9 @@ def setup(ui=None, backend=None):
            'Your login password also opens a matching saved-password keyring. Face unlock does not '
            'decrypt a keyring that was locked separately. Automatic login and fingerprint settings '
            'are separate from this setup.', kind='info')
-    ui.say('Changes are automatically undone after five minutes unless you keep them. '
-           'Closing this window or rebooting during the test also leaves recovery armed.', kind='warn')
+    ui.say('Automatic recovery starts after five minutes unless you keep the changes. '
+           'Closing this window or rebooting during the test also leaves recovery armed. '
+           'A busy package manager can delay recovery; conflicting PAM edits require manual repair.', kind='warn')
     if not ui.yes('Enable face login for testing?'):
         raise Cancelled('Setup paused. Enrollment is saved locally; face login is still off.')
     activated = False
@@ -211,9 +221,25 @@ def setup(ui=None, backend=None):
         if activated:
             try:
                 backend.run('pam-disable', root=True)
-            except (OSError, subprocess.CalledProcessError):
-                ui.say('Immediate recovery could not run. The independent rollback timer is still armed; '
-                       'wait five minutes or reboot to restore the previous login configuration.', kind='fail')
+            except (OSError, subprocess.CalledProcessError) as error:
+                recovery_failure(ui, error)
+
+
+def recovery_failure(ui, error):
+    if isinstance(error, subprocess.CalledProcessError) and error.returncode == RECOVERY_RECONCILE:
+        ui.say('Recovery requires manual reconciliation: the PAM configuration or permissions could not '
+               'be safely restored. Automatic recovery stops retrying on this error; waiting or rebooting '
+               'will not resolve it.', kind='fail')
+    else:
+        ui.say('Immediate recovery did not complete. The independent recovery service retries temporary '
+               'package-lock or I/O failures, so restoration may take longer than five minutes. '
+               'A conflicting PAM edit stops those retries and needs manual reconciliation; '
+               'restoration is not guaranteed by waiting or rebooting.', kind='fail')
+    ui.say('Keep this session open. The recovery backup is retained at '
+           '/var/lib/sensible-biometrics/pam.json. Review the error above and the recovery journal: '
+           'sudo journalctl -u sensible-biometrics-rollback.service -u sensible-biometrics-recover.service. '
+           'Use the backup to reconcile the selected PAM files while preserving later administrator changes; '
+           'get administrator help if needed.', kind='warn')
 
 
 def check_camera_and_enroll(ui, backend, user):

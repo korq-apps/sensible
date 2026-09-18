@@ -347,7 +347,7 @@ def enable(user, services):
         except BaseException:
             _rollback(state)
             raise
-        print('Face login is enabled for testing. Unconfirmed changes roll back in five minutes.')
+        print('Face login is enabled for testing. Automatic recovery starts in five minutes unless confirmed.')
 
 
 def pending_state():

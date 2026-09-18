@@ -87,7 +87,7 @@ def inputs_key():
 
 
 def check(work):
-    """Return the built package when dist matches the current inputs; raise ValueError otherwise."""
+    """Return the package and its verified hash when dist matches the current inputs."""
     dist = work / "dist"
     manifest_path = dist / "build.json"
     if not manifest_path.is_file():
@@ -102,7 +102,7 @@ def check(work):
         raise ValueError(f"Package file is missing: {package}")
     if digest(package) != manifest["sha256"]:
         raise ValueError(f"Package checksum does not match its manifest: {package}")
-    return package
+    return package, manifest["sha256"]
 
 
 def prepare(work):
@@ -196,7 +196,7 @@ def main():
     elif args.action == "prepare":
         print(prepare(args.work_dir.resolve())[0])
     elif args.action == "check":
-        print(check(args.work_dir.resolve()))
+        print(check(args.work_dir.resolve())[0])
     elif args.action == "inputs":
         print(inputs_key())
     else:

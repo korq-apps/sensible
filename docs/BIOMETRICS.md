@@ -34,8 +34,9 @@ predates this tool and is out of scope. The final lock-screen test asks
 separately about face unlock, password fallback and keeping the changes.
 
 Activation has a five-minute rollback timer. Closing the wizard, cancelling,
-failing a service test or declining the final confirmation restores the previous
-PAM configuration. A root-owned recovery copy outside the checkout handles
+failing a service test or declining the final confirmation triggers recovery of
+the previous PAM configuration, subject to the failure handling below.
+A root-owned recovery copy outside the checkout handles
 timer expiry and unconfirmed setup after a reboot. Enrollment/configuration
 progress stays local so setup can resume.
 
@@ -83,6 +84,21 @@ boot recovery service retains a five-start limit over 120 seconds so persistent
 errors cannot indefinitely hold up the display manager; it leaves the backup
 for manual recovery if that limit is exhausted.
 
+The interactive `pam-disable` command uses the same failure classification as
+automatic recovery: exit status 78 means manual reconciliation is required;
+transient I/O or package-lock failures return 1. If recovery fails during setup,
+the wizard identifies those cases and points to the retained backup and journal.
+Keep the current session open while investigating:
+
+```bash
+sudo journalctl -u sensible-biometrics-rollback.service -u sensible-biometrics-recover.service
+```
+
+Compare the selected PAM files with `/var/lib/sensible-biometrics/pam.json` and
+reconcile the conflicting edits or permissions with administrator help. Preserve
+later legitimate changes. Waiting or rebooting does not resolve a reconciliation
+error.
+
 Configuration writes take the APT/dpkg frontend and database locks and recheck
 contents, file identity and permissions immediately before replacement. These
 are advisory locks: do not manually edit Howdy or the selected PAM services
@@ -112,10 +128,16 @@ Build directories and their parents must not be group/world writable because
 upstream security tests check their fixture paths. A custom `--work-dir` must
 meet the same requirement.
 
-`install` checks the package identity and hash, simulates dependency resolution,
-then installs with APT's package-removal guard. It accepts an explicit local
-artifact with `--package PATH --sha256 HASH`. No third-party APT repository is
-added. Existing Howdy packages that require removal need separate reconciliation.
+By default, `install` runs the same build validation before accepting the
+manifest: its source pins, patch/packaging inputs and artifact checksum must
+match the current checkout. The wizard uses that check to decide whether to
+reuse a build; a stale, missing or damaged build is rebuilt even if the package
+version is unchanged. Installation then checks package identity and hash,
+simulates dependency resolution, and uses APT's package-removal guard. An
+explicit local artifact can instead be supplied with `--package PATH --sha256
+HASH`; it must match the tool's pinned package version and the supplied trusted
+checksum. No third-party APT repository is added. Existing Howdy packages that
+require removal need separate reconciliation.
 
 The native build uses [Howdy-next 3.4.0](https://codeberg.org/nathawat/howdy-next)
 and a private OpenCV 5 runtime. Debian's OpenCV 4 cannot satisfy this version.
@@ -155,9 +177,17 @@ The ISO carries face login ready to enable, offline:
   Installation is inert; the wizard's per-account activation with timed
   rollback is the only path that changes login.
 
-The packaged install carries no build recipe. If the package is ever removed,
-Face Login Setup asks for it to be reinstalled with APT instead of compiling.
-The source-build commands above remain the developer path and are what CI runs.
+The packaged install carries no build recipe, and Debian APT does not provide
+`howdy-next`. If the package is removed or no longer matches the setup tool's
+pinned version, obtain a matching Sensible source checkout and run the `deps`,
+`build` and `install` commands in [Build and install](#build-and-install), then
+reopen Face Login Setup. Match the version in the installed tool's
+`/usr/local/lib/sensible/biometrics/sources.json` to the checkout's pin. This
+recovery path needs network access and the build dependencies; a plain
+`apt install howdy-next` cannot fetch the package from Debian. If you already
+have a matching package and its trusted SHA256, the installed tool also accepts
+`sensible-biometrics install --package PATH --sha256 HASH`. The source-build
+commands remain the developer path and are what CI runs.
 Fixture tests cover the staging script and the hook with tool doubles; whether
 the package installs in the chroot and Howdy accepts the models is proven only
 by the image build itself.

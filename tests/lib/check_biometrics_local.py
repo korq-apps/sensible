@@ -1,10 +1,12 @@
 """Exercise the standalone tools against temporary files, never host PAM."""
 import contextlib
+import importlib.machinery
 import importlib.util
 import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -17,7 +19,7 @@ TOOLS = Path(__file__).resolve().parents[2] / "tools/biometrics"
 
 
 def module(name, path):
-    spec = importlib.util.spec_from_file_location(name, path)
+    spec = importlib.util.spec_from_loader(name, importlib.machinery.SourceFileLoader(name, str(path)))
     loaded = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(loaded)
     return loaded
@@ -260,6 +262,63 @@ class LocalFiles(unittest.TestCase):
 
 
 class BuildAndIdentity(unittest.TestCase):
+    @contextlib.contextmanager
+    def cached_build(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            tools = root / 'tools/biometrics'
+            shutil.copytree(TOOLS, tools, ignore=shutil.ignore_patterns('__pycache__'))
+            build = module('fixture_build', tools / 'build.py')
+            cli = module('fixture_cli', tools / 'sensible-biometrics')
+            dist = build.DEFAULT_WORK / 'dist'
+            dist.mkdir(parents=True)
+            package = dist / 'howdy-next.deb'
+            package.write_bytes(b'fixture package')
+            manifest = {'package': package.name, 'sha256': ops.sha(package.read_bytes()),
+                        'sources': json.loads((tools / 'sources.json').read_text()),
+                        'inputs': build.inputs_key()}
+            (dist / 'build.json').write_text(json.dumps(manifest))
+            yield SimpleNamespace(tools=tools, build=build, cli=cli, dist=dist,
+                                  package=package, manifest=manifest)
+
+    def install_default(self, fixture):
+        with patch.dict(sys.modules, {'build': fixture.build, 'local_ops': ops}), \
+             patch.object(fixture.cli, 'os', SimpleNamespace(geteuid=lambda: 0)), \
+             patch.object(sys, 'argv', ['sensible-biometrics', 'install']):
+            fixture.cli.main()
+
+    def test_default_install_accepts_only_artifact_from_current_inputs(self):
+        changes = {
+            'pins': lambda f: (f.tools / 'sources.json').write_text(json.dumps(
+                dict(f.manifest['sources'], howdy={'sha256': 'changed without a version bump'}))),
+            'patch': lambda f: (f.tools / 'patches/new.patch').write_text('new patch'),
+            'packaging': lambda f: (f.tools / 'debian/rules').write_text('changed packaging'),
+            'artifact': lambda f: f.package.write_bytes(b'changed package'),
+            'missing artifact': lambda f: f.package.unlink(),
+            'missing manifest': lambda f: (f.dist / 'build.json').unlink(),
+            'invalid manifest': lambda f: (f.dist / 'build.json').write_text('{'),
+        }
+        for name, change in changes.items():
+            with self.subTest(change=name), self.cached_build() as fixture, \
+                 patch.object(ops, 'install_package') as install:
+                change(fixture)
+                with self.assertRaises((ValueError, OSError)):
+                    self.install_default(fixture)
+                install.assert_not_called()
+        with self.cached_build() as fixture, patch.object(ops, 'install_package') as install:
+            self.install_default(fixture)
+            install.assert_called_once_with(fixture.package, fixture.manifest['sha256'])
+
+    def test_explicit_artifact_does_not_require_checkout_build_recipe(self):
+        with self.cached_build() as fixture, patch.object(ops, 'install_package') as install:
+            (fixture.tools / 'build.py').unlink()
+            with patch.dict(sys.modules, {'local_ops': ops, 'build': None}), \
+                 patch.object(fixture.cli, 'os', SimpleNamespace(geteuid=lambda: 0)), \
+                 patch.object(sys, 'argv', ['sensible-biometrics', 'install', '--package',
+                              str(fixture.package), '--sha256', fixture.manifest['sha256']]):
+                fixture.cli.main()
+            install.assert_called_once_with(fixture.package, fixture.manifest['sha256'])
+
     def test_package_install_stages_companion_opencv_license_notices(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

@@ -405,7 +405,10 @@ def main():
         elif args.command == 'pam-confirm':
             pam_ops.confirm()
         elif args.command == 'pam-disable':
-            pam_ops.rollback()
+            import recover
+            result = recover.main(pending_only=False)
+            if result:
+                raise SystemExit(result)
         elif args.command == 'pam-status':
             print(json.dumps(pam_ops.status()))
         elif args.command == 'verify-status':
@@ -421,9 +424,11 @@ def main():
             subprocess.run(['apt-get', '--no-remove', 'install', 'pamtester'], check=True)
     elif args.command == "install":
         if args.package is None:
-            dist = here.parents[1] / ".build/biometrics/dist"
-            manifest = json.loads((dist / "build.json").read_text())
-            args.package, args.sha256 = dist / Path(manifest["package"]).name, manifest["sha256"]
+            if not (here / "build.py").is_file():
+                raise ValueError("The default install requires a source checkout. "
+                                 "For a verified local package, pass --package PATH --sha256 HASH.")
+            import build
+            args.package, args.sha256 = build.check(build.DEFAULT_WORK)
         local_ops.install_package(args.package.resolve(), args.sha256 or "")
     elif args.command == "configure":
         cameras = discover_cameras()

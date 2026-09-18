@@ -4,12 +4,12 @@ import sys
 import pam_ops
 
 
-def main():
+def main(pending_only=True):
     if os.geteuid() != 0:
         print('Recovery requires root', file=sys.stderr)
         return pam_ops.RECOVERY_RECONCILE
     try:
-        pam_ops.rollback(pending_only=True)
+        pam_ops.rollback(pending_only=pending_only)
     except ValueError as error:
         print(f'Recovery needs manual reconciliation: {error}. Backup retained; automatic retries stopped.', file=sys.stderr)
         return pam_ops.RECOVERY_RECONCILE
