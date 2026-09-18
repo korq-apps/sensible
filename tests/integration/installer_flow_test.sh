@@ -160,7 +160,8 @@ cryptsetup()  {
     if [ "${SENSIBLE_UNATTENDED:-false}" = true ] && [[ "$1" = luksFormat || "$1" = open ]]; then
         local supplied
         supplied=$(cat)
-        if env | grep -qF 'config-$ecret-123'; then return 1; fi
+        # Drain env under pipefail: grep -q can SIGPIPE its writer and hide a leak.
+        if env | grep -F 'config-$ecret-123' >/dev/null; then return 1; fi
         [ "$supplied" = 'config-$ecret-123' ] || return 1
         mlog 'validated LUKS secret on stdin'
     fi
@@ -244,7 +245,7 @@ chroot() {
     if [ "${SENSIBLE_UNATTENDED:-false}" = true ] && [ "${1:-}" = chpasswd ]; then
         local supplied
         supplied=$(cat)
-        if env | grep -qF 'config-$ecret-123'; then return 1; fi
+        if env | grep -F 'config-$ecret-123' >/dev/null; then return 1; fi
         [[ "$supplied" = 'alice:config-$ecret-123' || "$supplied" = 'root:config-$ecret-123' ]] || return 1
         mlog 'validated account secret on stdin'
         return 0
@@ -976,17 +977,26 @@ for diagnostic_rc in 0 1 124; do
 done
 
 t_section "Unattended secrets stay private with inherited tracing/export flags"
+set +e
 (
     export password='config-$ecret-123' USERPASS='config-$ecret-123' LUKS_PASSPHRASE='config-$ecret-123' passphrase='inherited'
     MOCK_TRACE=1
     # main turns both tracing and automatic exports off before consuming input.
     set -a
     run_flow --config "$CONFIG_ANSWERS"
+    if [ "$RC" -ne 0 ]; then
+        # main's output is captured by run_flow; show enough context to diagnose
+        # CI-only failures without printing the fixture password if it leaked.
+        printf 'Captured installer failure (fixture secret redacted):\n' >&2
+        output_text | sed 's/config-\$ecret-123/[REDACTED]/g' | tail -40 >&2
+    fi
     assert_rc "exported secret variable names cannot leak" 0 "$RC"
     assert_not_contains "secrets absent from debug and command logs" "$(output_text)$(log_text)" 'config-$ecret-123'
     [ "$FAIL" -eq 0 ]
 )
-assert_rc "export regression passes" 0 $?
+export_regression_rc=$?
+set -e
+assert_rc "export regression passes" 0 "$export_regression_rc"
 
 MOCK_MISSING_PACKAGE=shim-signed
 run_flow --config "$CONFIG_ANSWERS"
