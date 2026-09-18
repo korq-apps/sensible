@@ -210,9 +210,13 @@ Your saved application passwords live in a keyring, managed by the Passwords
 and Keys app on GNOME (KDE Wallet on KDE). Only a
 password entered at login can unlock them: neither automatic login nor
 fingerprint/face login supplies it, because no password reaches the system on
-those paths and the disk passphrase is not available to the keyring. So the
-first login after a boot uses your account password; fingerprint/face then
-cover the lock screen and `sudo`. If you chose automatic login on GNOME, there
+those paths and the disk passphrase is not available to the keyring. Sensible's
+Howdy setup keeps face authentication for screen unlock and optional
+`sudo`. After a boot or logout, enter your account password to start the desktop
+session and open the matching keyring. Face authentication does not reopen a
+keyring that was locked separately. Fingerprint settings are separate; a
+fingerprint login can still leave an encrypted keyring locked.
+If you chose automatic login on GNOME, there
 is no password to unlock the keyring, so Sensible stores it unencrypted to avoid
 prompts — your saved passwords are then not protected by a password. Use
 **Passwords and Keys** to put a password back on it, or to inspect saved

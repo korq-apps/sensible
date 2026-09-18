@@ -77,7 +77,7 @@ class Backend:
         if Path(dm).name in ('gdm', 'gdm3'):
             return ['gdm-password']
         if Path(dm).name == 'sddm':
-            return [s for s in ('sddm', 'kde') if (Path('/etc/pam.d') / s).is_file()]
+            return ['kde'] if Path('/etc/pam.d/kde').is_file() else []
         return []
 
 
@@ -175,6 +175,11 @@ def setup(ui=None, backend=None):
         verify_step(ui, backend, user)
     ui.step(5, 'Enable and test login',
             'Use face login for: ' + ', '.join(SERVICES[s] for s in services) + '.')
+    ui.say('After a boot or logout, use your account password at the login screen. '
+           'Howdy only unlocks an existing desktop session; it cannot replace that first password login. '
+           'Your login password also opens a matching saved-password keyring. Face unlock does not '
+           'decrypt a keyring that was locked separately. Automatic login and fingerprint settings '
+           'are separate from this setup.', kind='info')
     ui.say('Changes are automatically undone after five minutes unless you keep them. '
            'Closing this window or rebooting during the test also leaves recovery armed.', kind='warn')
     if not ui.yes('Enable face login for testing?'):

@@ -20,8 +20,8 @@ same flow directly.
 
 The wizard installs the runtime if needed, selects an IR camera, previews the
 image, enrolls a face and verifies a successful match.
-It then enables the detected desktop's login/unlock
-services, tests them, and asks the user to try the real lock screen with both
+It then enables the detected desktop's screen-unlock
+service, tests it, and asks the user to try the real lock screen with both
 face and password before keeping the change. Administrator commands (`sudo`)
 are an optional selection, off by default; enabling it means a face match runs
 `sudo` without a password, with the account password kept as a fallback, so the
@@ -40,7 +40,7 @@ timer expiry and unconfirmed setup after a reboot. Enrollment/configuration
 progress stays local so setup can resume.
 
 Automatic activation currently supports the standard Debian local-password
-stack with GDM, or SDDM plus KDE screen unlock. It refuses unfamiliar/MFA/domain
+stack with GDM screen unlock, or KDE screen unlock (with SDDM left unchanged). It refuses unfamiliar/MFA/domain
 authentication policies before setup changes them. A camera that needs additional
 IR emitter support stops at the preview check. Live desktop behavior still needs
 the guided acceptance check on each system; automated tests do not prove it.
@@ -50,8 +50,10 @@ the guided acceptance check on each system; automated tests do not prove it.
 `pam-enable` is the operation that edits the selected `/etc/pam.d/` services.
 It requires a fresh `verify face` result for the same account, enrollment,
 camera configuration and authentication policy.
-`pam-check` tests the enabled services; `pam-confirm` keeps the change only after
-those tests pass. The wizard runs these operations in order.
+`pam-check` tests the enabled services; for GNOME its standalone PAM caller must
+use the password, because it is not a GDM unlock worker. The wizard then asks
+for real lock-screen face and password tests before `pam-confirm` keeps the
+change. The wizard runs these operations in order.
 
 The generated rules restrict face authentication to the selected account and
 fall back to the existing password stack on non-match, error or a missing Howdy
@@ -265,11 +267,48 @@ non-UTF-8 terminal gets ASCII glyphs. `probe` without `--json` uses the same
 layout. Presentation lives in `tui.py`, which the root-owned recovery copy never
 imports. Graphical presentation and image integration can follow the local flow. Fingerprint uses Debian's existing fprintd tools.
 Face authentication does not supply a LUKS or wallet/keyring decryption password.
-Because PAM receives no password on a face login, GNOME Keyring is not unlocked
-by it: the first login after a boot or logout still uses the account password to
-open the keyring, and face login then covers the lock screen and `sudo`. This is
-the same limitation as autologin and is documented for users in the manual's
-[saved-passwords guidance](../manual/index.html#desktop-credentials).
+The first desktop login after a boot or logout uses the account password on the
+default password-login path. Howdy is restricted to unlocking an existing
+session and optional `sudo`; it cannot start a new desktop session. A matching
+login keyring is opened by the password login. A separately locked keyring,
+a mismatched keyring password, fingerprint login or autologin can still require
+additional handling; face authentication does not decrypt saved secrets.
+
+For GNOME, `gdm-password` serves both initial login and screen unlock. The managed
+PAM block runs a root-owned `pam_guard.py` through `pam_exec` before Howdy. The
+guard verifies its parent is a root GDM session worker with a known executable
+path and checks that worker's original process environment for
+`GDM_SESSION_FOR_REAUTH=1`. This is the same signal GDM uses internally for
+reauthentication ([worker launch][gdm-job], [worker entry point][gdm-main]).
+It deliberately ignores similarly named variables in the helper/PAM environment.
+A missing helper, unknown process, unreadable context or absent signal skips
+Howdy and runs the existing password stack. There is no per-boot flag to survive
+logout, no password storage, and no session marker to clean up after a crash.
+Switching back to an existing session can use face authentication; starting a
+new session cannot. This is an internal GDM interface, so the live lock-screen
+acceptance test is required on supported GDM versions; a changed interface
+falls back to password authentication.
+
+For KDE, only `kde` (screen unlock) is selected. `sddm` (initial login) is no
+longer an activation target, including through the CLI. Autologin and fingerprint
+configuration remain separate policies; this guard only controls Howdy.
+
+Existing activations must be turned off and set up again to install the new
+rules. The wizard offers **Turn off and set up again**; enrollment is retained.
+An already-open session is not retroactively password-authenticated or given an
+unlocked keyring. To check the full behavior on hardware, save your work, log out,
+and verify that a new login requires the password without starting the camera;
+then test face unlock, covered-camera password fallback, suspend/resume and
+optional sudo. Repeat the initial-login check after reboot. Live acceptance is
+not proven by the automated PAM fixtures.
+
+Local acceptance on 2026-09-18: the updated wizard completed on Debian with GDM
+50.2, the installed root-owned guard matched the checkout, and the user confirmed
+the guided face-unlock/password-fallback flow worked. Actual fresh-login checks
+after logout/reboot, suspend/resume and KDE acceptance remain separate.
+
+[gdm-job]: https://github.com/GNOME/gdm/blob/50.2/daemon/gdm-session-worker-job.c
+[gdm-main]: https://github.com/GNOME/gdm/blob/50.2/daemon/session-worker-main.c
 
 Earlier local evaluation found BioPass performed poorly compared with older
 Howdy; it is not part of the current implementation path.

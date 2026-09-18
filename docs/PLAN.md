@@ -296,8 +296,15 @@ keyring, with no Sensible-specific code. Autologin is a default-off, explicitly
 insecure opt-in; on GNOME it uses an unencrypted empty-password keyring
 (`installer/lib/keyring.sh`) to avoid prompts, with the trade documented.
 Neither autologin nor fingerprint/face login unlocks the keyring (no password
-reaches PAM; the LUKS passphrase is not exposed to the session), so the first
-login after boot always uses the account password — a documented caveat.
+reaches PAM; the LUKS passphrase is not exposed to the session). Howdy now applies
+only to existing-session unlock and optional sudo: GNOME
+checks the root GDM worker's reauthentication signal before Howdy, and KDE uses
+only `kde`, leaving `sddm` password-only. Fresh password logins after boot/logout
+therefore still open the matching keyring. Existing activations need reactivation;
+autologin and fingerprint settings remain separate. Guard fixtures and real PAM
+control-flow checks cover the policy. Guided GNOME reactivation and lock-screen
+face/password checks were accepted on the local GDM 50.2 machine on 2026-09-18;
+fresh login after logout/reboot, suspend/resume and KDE remain separate checks.
 `seahorse` ships so users can encrypt the Login keyring or inspect secrets.
 Remaining: the same single-keyring/one-prompt story for KDE Wallet's classic
 backend, and on-hardware acceptance of both login paths.
@@ -306,7 +313,9 @@ password changes/resets and live-to-installed isolation. Evaluate upstream GDM
 disk-secret reuse separately; package configuration alone is not boot evidence.
 Keep safe fallback prompts rather than blank passwords, disabled secret storage
 or persistent plaintext credentials. No new auth mechanism is implemented by
-this plan. See [Architecture](ARCHITECTURE.md#desktop-wallets-and-saved-credentials).
+this plan. The [one-password login candidates](#storage-and-recovery-follow-ups)
+below cover both boot-secret reuse and optional encrypted homes. See
+[Architecture](ARCHITECTURE.md#desktop-wallets-and-saved-credentials).
 
 **Installed-disk harness (#5, parked):** retain this contract for when automation
 resumes; it is not the immediate next PR. Accept an explicit ISO and record its checksum;
@@ -758,6 +767,37 @@ Worth taking, not yet taken:
 These are user-facing candidates in the proposed queue, not gated on building
 an unattended harness first. Their own real-system acceptance is still required.
 
+- **One-password startup: boot-secret reuse or optional encrypted homes (#29).**
+  Proposed on 2026-09-18 after accepting the Howdy session-unlock guard. The
+  current LUKS-root setup asks for the disk password and then the account
+  password, even when they match. Keep encrypted root, including its protected
+  swapfile, as the default while evaluating these two future options:
+
+  **Retain root encryption and reuse the boot-unlock secret.** Investigate
+  upstream [GDM's `pam_gdm` mechanism](https://github.com/GNOME/gdm/blob/50.2/pam_gdm/pam_gdm.c)
+  for passing a cached cryptsetup password into PAM, with the aim of one password
+  entry unlocking the disk, starting the intended user's session and opening the
+  matching keyring. Prove compatibility with Debian's actual initramfs/password
+  cache and login stack; upstream support alone does not establish this flow.
+  Validate KDE/SDDM and KWallet separately. Define user selection, cache lifetime
+  and cleanup, recovery, and password-mismatch behavior. Missing or unsuitable
+  cached credentials must fall back to a password prompt, without an unencrypted
+  keyring or persistent plaintext credential storage.
+
+  **Offer home-only encryption as an explicit installation option.** Evaluate
+  [`systemd-homed` with LUKS home images](https://systemd.io/HOME_DIRECTORY/),
+  where the login password unlocks the home and authenticates the user; PAM can
+  also open a matching keyring. This could boot directly to the login screen and
+  keep Howdy for later screen unlocks. Explain the reduced coverage: system
+  secrets, logs and temporary data outside home need a protection policy, as do
+  offline modifications to the unencrypted OS. Redesign swap/hibernation
+  protection because the current swapfile inherits root encryption. Decide
+  whether to discard home keys on suspend: if discarded, face authentication
+  alone cannot recover them and resume needs a decryption credential. This also
+  needs a dedicated PAM adapter, migration/recovery and password-change testing;
+  the biometric wizard currently accepts only the standard local-password stack.
+  Both candidates require GNOME/KDE login, wallet, logout, reboot, suspend and
+  hibernation acceptance before being offered. Neither changes today's defaults.
 - **Hybrid ZRAM and disk swap ([#11](https://github.com/korq-apps/sensible/issues/11)).**
   Merged in PR #33 (`58b1d02`) as compressed RAM swap ahead of the persistent
   RAM-sized swapfile, not instead of it. Installed KDE swap/compression and

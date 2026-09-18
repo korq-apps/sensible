@@ -33,7 +33,7 @@ fi
 for asset in /usr/lib/x86_64-linux-gnu/security/pam_howdy.so /etc/howdy/config.ini \
     /usr/share/doc/howdy-next/copyright /usr/share/doc/sensible-biometrics/sources.txt \
     /usr/share/applications/sensible-biometrics.desktop \
-    "$tool_root/local_ops.py" "$tool_root/pam_ops.py" "$tool_root/pam_session.py" \
+    "$tool_root/local_ops.py" "$tool_root/pam_ops.py" "$tool_root/pam_guard.py" "$tool_root/pam_session.py" \
     "$tool_root/recover.py" "$tool_root/tui.py" "$tool_root/wizard.py" "$tool_root/sources.json"; do
     if [ ! -s "$asset" ]; then
         echo "Error: face-login asset is missing: $asset" >&2

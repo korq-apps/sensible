@@ -15,8 +15,8 @@ import local_ops as ops
 PAM_DIR = Path('/etc/pam.d')
 RECOVERY_DIR = Path('/usr/local/lib/sensible-biometrics')
 UNIT = Path('/etc/systemd/system/sensible-biometrics-recover.service')
-SERVICES = {'gdm-password': 'GNOME login and screen unlock',
-            'sddm': 'KDE login', 'kde': 'KDE screen unlock', 'sudo': 'Administrator commands (sudo)'}
+SERVICES = {'gdm-password': 'GNOME screen unlock',
+            'kde': 'KDE screen unlock', 'sudo': 'Administrator commands (sudo)'}
 BEGIN = '# BEGIN sensible-biometrics v1\n'
 END = '# END sensible-biometrics v1\n'
 WINDOW = 300
@@ -57,18 +57,23 @@ def validate_password_stack():
     return data
 
 
-def block(user):
+def block(user, service='gdm-password'):
     if not re.fullmatch(r'[a-z_][a-z0-9_-]*[$]?', user):
         raise ValueError('Account name cannot be represented safely in PAM')
     # A substack counts as ONE jump target and keeps required failures sticky.
     # The final permit establishes success after a jump; it cannot erase failures.
-    return (BEGIN + f'auth [success=ignore default=1] pam_succeed_if.so quiet user = {user}\n'
+    if service not in SERVICES:
+        raise ValueError('Choose supported unlock services or sudo; initial login stays password-only')
+    guard = (f'auth [success=ignore default=1] pam_exec.so quiet quiet_log /usr/bin/python3 -I -B '
+             f'{RECOVERY_DIR}/pam_guard.py\n') if service == 'gdm-password' else ''
+    return (BEGIN + f'auth [success=ignore default={2 if guard else 1}] pam_succeed_if.so quiet user = {user}\n'
+            + guard +
             '-auth [success=1 default=ignore] pam_howdy.so\n'
             'auth substack common-auth\n'
             'auth required pam_permit.so\n' + END).encode()
 
 
-def proposed(data, user):
+def proposed(data, user, service='gdm-password'):
     text = data.decode()
     if 'sensible-biometrics' in text or 'pam_howdy' in text or 'pam_python' in text or '\\\n' in text:
         raise ValueError('Existing biometric/custom PAM configuration needs reconciliation')
@@ -88,7 +93,7 @@ def proposed(data, user):
             ) and not re.fullmatch(r'auth optional pam_(?:gnome_keyring|kwallet5|kwallet6)\.so(?: auto_start)?', line):
                 raise ValueError('An unfamiliar service authentication rule needs review')
     match = includes[0]
-    replacement = block(user)
+    replacement = block(user, service)
     return text[:match.start()].encode() + replacement + text[match.end():].encode(), match[0].encode()
 
 
@@ -100,9 +105,9 @@ def service_plan(user, services):
     plan = {}
     for name in services:
         original, info = ops.checked_read(PAM_DIR / name)
-        updated, include = proposed(original, user)
+        updated, include = proposed(original, user, name)
         plan[name] = {'original': base64.b64encode(original).decode(),
-                      'include': include.decode(), 'block': block(user).decode(),
+                      'include': include.decode(), 'block': block(user, name).decode(),
                       'before_sha256': ops.sha(original), 'after_sha256': ops.sha(updated),
                       'mode': stat.S_IMODE(info.st_mode), 'uid': info.st_uid, 'gid': info.st_gid}
     return plan
@@ -241,7 +246,7 @@ def install_recovery():
     RECOVERY_DIR.mkdir(mode=0o755, exist_ok=True)
     ops.check_directory(RECOVERY_DIR)
     here = Path(__file__).resolve().parent
-    for name in ('local_ops.py', 'pam_ops.py', 'recover.py'):
+    for name in ('local_ops.py', 'pam_ops.py', 'recover.py', 'pam_guard.py'):
         dest = RECOVERY_DIR / name
         if dest.exists():
             ops.checked_read(dest)
@@ -328,7 +333,7 @@ def enable(user, services):
                     stat.S_IMODE(info.st_mode), info.st_uid, info.st_gid
                 ) != (entry['mode'], entry['uid'], entry['gid']):
                     raise ValueError(f'{name} changed during setup')
-                updated, _ = proposed(current, user)
+                updated, _ = proposed(current, user, name)
                 ops.atomic_write(path, updated, entry['mode'], entry['uid'], entry['gid'], expected=(current, info))
         except BaseException:
             _rollback(state)
@@ -362,7 +367,11 @@ def check_services():
         state['tested'] = []
         write_json('pam.json', state)
     for name in state['files']:
-        print(f'Testing {SERVICES[name]} — look at the camera.', flush=True)
+        if name == 'gdm-password':
+            print('Testing GNOME outside the lock screen — enter your account password. '
+                  'The camera must stay off; face unlock is tested on the real lock screen next.', flush=True)
+        else:
+            print(f'Testing {SERVICES[name]} — look at the camera.', flush=True)
         subprocess.run(['pamtester', name, state['user'], 'authenticate', 'acct_mgmt'], check=True, timeout=45)
         with ops.locked_state():
             current = pending_state()

@@ -17,7 +17,7 @@ import unittest
 
 REPO = Path(__file__).resolve().parents[2]
 TOOLS = REPO / "tools/biometrics"
-RUNTIME = ("local_ops.py", "pam_ops.py", "pam_session.py", "recover.py", "tui.py", "wizard.py", "sources.json")
+RUNTIME = ("local_ops.py", "pam_ops.py", "pam_guard.py", "pam_session.py", "recover.py", "tui.py", "wizard.py", "sources.json")
 MODELS = {"face_detection_yunet_2026may.onnx": b"yunet fixture bytes",
           "face_recognition_sface_2021dec.onnx": b"sface fixture bytes"}
 VERSION = json.loads((TOOLS / "sources.json").read_text())["version"]

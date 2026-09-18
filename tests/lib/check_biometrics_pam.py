@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -20,6 +21,7 @@ TOOLS = Path(__file__).resolve().parents[2] / 'tools/biometrics'
 sys.path.insert(0, str(TOOLS))
 import local_ops as ops
 import pam_ops as pam
+import pam_guard
 import pam_session
 import recover
 import tui
@@ -156,6 +158,7 @@ class Transactions(unittest.TestCase):
         (pam.PAM_DIR / 'common-auth').write_bytes(COMMON + b'auth required pam_u2f.so\n')
         with self.assertRaises(ValueError): pam.service_plan('fixture', ['gdm-password'])
         with self.assertRaises(ValueError): pam.service_plan('fixture', ['sshd'])
+        with self.assertRaises(ValueError): pam.service_plan('fixture', ['sddm'])
         with self.assertRaises(ValueError): pam.proposed(SERVICE.replace(b'@include common-account\n', b''), 'fixture')
         with self.assertRaises(ValueError): pam.proposed(SERVICE + b'auth required pam_faillock.so\n', 'fixture')
         self.assertEqual((pam.PAM_DIR / 'gdm-password').read_bytes(), SERVICE)
@@ -276,6 +279,81 @@ class Transactions(unittest.TestCase):
         self.assertEqual(pam.status()['status'], 'off')
 
 
+class GdmGuard(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.proc = Path(self.temp.name)
+        self.parent = self.proc / '42'
+        self.parent.mkdir()
+        self.worker = self.proc / 'gdm-session-worker'
+        self.worker.write_bytes(b'fixture')
+        self.worker.chmod(0o755)
+        (self.parent / 'exe').symlink_to(self.worker)
+        (self.parent / 'status').write_bytes(b'Name:\tgdm-session-worker\nUid:\t0\t0\t0\t0\n')
+        (self.parent / 'environ').write_bytes(b'PATH=/usr/bin\0GDM_SESSION_FOR_REAUTH=1\0')
+
+    def allowed(self, proc_owner=0, exe_owner=0):
+        # Fixture files belong to the test runner, not root. Only metadata is
+        # substituted: exercise the real fd-relative reads, symlinks and parser.
+        real_stat = os.stat
+        def executable_stat(*args, **kwargs):
+            info = real_stat(*args, **kwargs)
+            return SimpleNamespace(st_uid=exe_owner, st_mode=info.st_mode)
+        with patch.object(pam_guard.os, 'fstat', return_value=SimpleNamespace(st_uid=proc_owner)), \
+             patch.object(pam_guard.os, 'stat', side_effect=executable_stat):
+            return pam_guard.gdm_unlock(42, self.proc, (str(self.worker),))
+
+    def test_only_trusted_reauthentication_worker_is_allowed(self):
+        self.assertTrue(self.allowed())
+        self.assertFalse(self.allowed(proc_owner=1000))
+        self.assertFalse(self.allowed(exe_owner=1000))
+        self.worker.chmod(0o777)
+        self.assertFalse(self.allowed())
+
+    def test_initial_login_logout_and_reboot_need_no_stale_marker_cleanup(self):
+        for environment in (b'', b'PATH=/usr/bin\0', b'GDM_SESSION_FOR_REAUTH=0\0',
+                            b'GDM_SESSION_FOR_REAUTH=1suffix\0', b'XGDM_SESSION_FOR_REAUTH=1\0',
+                            b'GDM_SESSION_FOR_REAUTH=1\0GDM_SESSION_FOR_REAUTH=0\0'):
+            with self.subTest(environment=environment):
+                (self.parent / 'environ').write_bytes(environment)
+                # A spoofed helper environment must not unlock an initial-login
+                # worker, including when another user/session is already open.
+                with patch.dict(os.environ, {'GDM_SESSION_FOR_REAUTH': '1', 'XDG_SESSION_ID': '2'}):
+                    self.assertFalse(self.allowed())
+
+    def test_unprivileged_or_unfamiliar_process_cannot_claim_to_be_gdm(self):
+        for uids in (b'1000 0 0 0', b'0 1000 0 0', b'0 0 1000 0', b'0 0 0 1000', b'0 0 0'):
+            (self.parent / 'status').write_bytes(b'Uid:\t' + uids + b'\n')
+            self.assertFalse(self.allowed())
+        (self.parent / 'status').write_bytes(b'Uid:\t0 0 0 0\n')
+        (self.parent / 'exe').unlink()
+        (self.parent / 'exe').symlink_to('/usr/bin/python3')
+        self.assertFalse(self.allowed())
+
+    def test_missing_unreadable_oversized_or_symlinked_context_falls_back(self):
+        (self.parent / 'environ').write_bytes(b'GDM_SESSION_FOR_REAUTH=1\0' + b'x' * 1024 * 1024)
+        self.assertFalse(self.allowed())
+        (self.parent / 'environ').unlink()
+        self.assertFalse(self.allowed())
+        (self.parent / 'environ').symlink_to(self.worker)
+        self.assertFalse(self.allowed())
+        with patch.object(pam_guard.os, 'open', side_effect=PermissionError):
+            self.assertFalse(pam_guard.gdm_unlock(42))
+
+    def test_entry_point_rejects_other_services_and_changed_parent(self):
+        with patch.object(pam_guard.os, 'geteuid', return_value=0), \
+             patch.object(pam_guard.os, 'getppid', return_value=42), \
+             patch.object(pam_guard, 'gdm_unlock', return_value=True) as guard:
+            with patch.dict(os.environ, {'PAM_SERVICE': 'sudo', 'PAM_TYPE': 'auth'}):
+                self.assertEqual(pam_guard.main(), 1)
+                guard.assert_not_called()
+            with patch.dict(os.environ, {'PAM_SERVICE': 'gdm-password', 'PAM_TYPE': 'auth'}):
+                self.assertEqual(pam_guard.main(), 0)
+                with patch.object(pam_guard.os, 'getppid', side_effect=[42, 43]):
+                    self.assertEqual(pam_guard.main(), 1)
+
+
 class RecoveryExit(unittest.TestCase):
     def test_only_transient_errors_remain_retryable(self):
         for error, expected in ((pam.ReconciliationError('external edit'), 78),
@@ -341,8 +419,11 @@ class RealPam(unittest.TestCase):
         cls.lib.pam_end.argtypes = [ctypes.c_void_p, ctypes.c_int]
         cls.user = pwd.getpwuid(os.getuid()).pw_name
 
-    def authenticate(self, face=0, password=7, account=0, target=None, prefix='', suffix='', missing_guard=False):
-        generated = pam.block(target or self.user).decode().replace('pam_howdy.so', f'{self.module} {face}' if face is not None else '/nonexistent/module.so')
+    def authenticate(self, face=0, password=7, account=0, target=None, prefix='', suffix='', missing_guard=False,
+                     unlock=0, service='gdm-password'):
+        generated = pam.block(target or self.user, service).decode().replace('pam_howdy.so', f'{self.module} {face}' if face is not None else '/nonexistent/module.so')
+        guard_command = f'pam_exec.so quiet quiet_log /usr/bin/python3 -I -B {pam.RECOVERY_DIR}/pam_guard.py'
+        generated = generated.replace(guard_command, f'{self.module} {unlock}' if unlock is not None else '/nonexistent/guard.so')
         if missing_guard: generated = generated.replace('pam_succeed_if.so', '/nonexistent/guard.so')
         (self.root / 'check').write_text(prefix + generated + suffix + f'account required {self.module} {account}\n')
         (self.root / 'common-auth').write_text(f'auth [success=1 default=ignore] {self.module} {password}\n'
@@ -372,6 +453,29 @@ class RealPam(unittest.TestCase):
         self.assertNotEqual(self.authenticate(target='nobody'), 0)
         self.assertEqual(self.authenticate(target='nobody', password=0), 0)
         self.assertNotEqual(self.authenticate(missing_guard=True), 0)
+
+    def test_initial_login_and_guard_errors_skip_a_successful_face_match(self):
+        for unlock in (7, 4, 25, None):
+            with self.subTest(unlock=unlock):
+                self.assertNotEqual(self.authenticate(unlock=unlock, password=7), 0)
+                self.assertEqual(self.authenticate(unlock=unlock, password=0), 0)
+
+    def test_kde_and_sudo_do_not_depend_on_gdm_and_sddm_is_forbidden(self):
+        for service in ('kde', 'sudo'):
+            self.assertEqual(self.authenticate(service=service, unlock=7), 0)
+            self.assertNotIn(b'pam_exec', pam.block(self.user, service))
+        with self.assertRaises(ValueError): pam.block(self.user, 'sddm')
+
+    def test_real_guard_rejects_pamtester_context_even_with_spoofed_environment(self):
+        # Execute the actual helper through libpam/pam_exec; this Python process
+        # is not GDM. A successful face double must never be reached.
+        with patch.object(pam, 'RECOVERY_DIR', TOOLS):
+            generated = pam.block(self.user).decode().replace('pam_howdy.so', f'{self.module} 0')
+        (self.root / 'gdm-password').write_text(generated)
+        (self.root / 'common-auth').write_text('auth required pam_deny.so\n')
+        with patch.dict(os.environ, {'GDM_SESSION_FOR_REAUTH': '1', 'PAM_SERVICE': 'gdm-password'}):
+            result = pam_session.authenticate('gdm-password', self.user, account=False, confdir=self.root)
+        self.assertNotEqual(result['auth'], 0)
 
     def test_required_restrictions_before_and_after_are_preserved(self):
         self.assertNotEqual(self.authenticate(prefix=f'auth required {self.module} 7\n'), 0)
@@ -449,6 +553,8 @@ class WizardFlow(unittest.TestCase):
         self.assertEqual(ui.steps, [1, 2, 3, 4, 5, 6])
         self.assertTrue(any('run sudo without a password' in message for message in ui.messages),
                         'the sudo prompt must be preceded by a passwordless-root warning')
+        self.assertTrue(any('cannot replace that first password login' in message for message in ui.messages),
+                        'activation must explain password login after each boot or logout')
         calls = [c[0] for c in backend.calls]
         self.assertEqual([c[1] for c in backend.calls if c[0] == 'verify'], ['face'])
         self.assertLess(max(i for i, c in enumerate(calls) if c == 'verify'), calls.index('pam-enable'))

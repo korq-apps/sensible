@@ -13,8 +13,8 @@
 # Scope, matching the agreed posture (docs/PLAN.md "Desktop credentials"):
 #   - GNOME only. KDE Wallet is separate work.
 #   - Autologin accounts only. A password login still gets an encrypted,
-#     PAM-unlocked keyring; a face-login account without autologin keeps an
-#     encrypted keyring and is asked once per session.
+#     PAM-unlocked keyring; Howdy only unlocks an existing desktop session
+#     and cannot replace the initial password login.
 #
 # The empty-password keyring is a plaintext INI with no secrets, so it is
 # written directly (no daemon needed in the chroot) and is race-free: it exists

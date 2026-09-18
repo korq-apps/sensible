@@ -109,7 +109,7 @@ stage_model "SFace face recognizer" face_recognition_sface \
 TOOL_DEST="${CHROOT}/usr/local/lib/sensible/biometrics"
 rm -rf "${TOOL_DEST:?}"
 mkdir -p "${TOOL_DEST}" "${CHROOT}/usr/local/bin"
-for module in local_ops.py pam_ops.py pam_session.py recover.py tui.py wizard.py sources.json; do
+for module in local_ops.py pam_ops.py pam_guard.py pam_session.py recover.py tui.py wizard.py sources.json; do
     install -m0644 "${TOOLS}/${module}" "${TOOL_DEST}/${module}"
 done
 install -m0755 "${TOOLS}/sensible-biometrics" "${TOOL_DEST}/sensible-biometrics"

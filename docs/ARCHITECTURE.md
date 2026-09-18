@@ -227,9 +227,16 @@ never engages.
 Neither autologin nor biometric (fingerprint/face) login supplies the keyring
 key: PAM never receives a password on those paths, and the LUKS passphrase is
 consumed by systemd-cryptsetup in the initramfs with no supported path to the
-session keyring. So the first login after boot always needs the account password
-to open the keyring; biometrics cover lock-screen re-unlock and `sudo`, not the
-keyring.
+session keyring. Only a password typed at the login screen opens the keyring in
+the same step. Howdy is restricted to screen unlock and optional `sudo`, so it
+cannot replace
+the password when starting a new desktop session after boot or logout. GNOME's
+shared `gdm-password` stack uses a root-owned guard that checks GDM's own
+reauthentication-worker signal; other contexts fall back to password. KDE enables
+only the `kde` screen-locker service, leaving `sddm` unchanged. No password or
+per-boot eligibility flag is stored. A separately locked wallet can still ask
+for its password, and autologin/fingerprint policies are separate. See the
+[biometrics guide](BIOMETRICS.md) for the guard, migration and hardware checks.
 
 ### Desktop wallets and saved credentials
 

@@ -304,7 +304,7 @@ def main():
     for name in ('pam-plan', 'pam-enable'):
         sub = commands.add_parser(name, help='review login changes' if name == 'pam-plan' else 'enable login with timed rollback')
         sub.add_argument('--user')
-        sub.add_argument('--service', action='append', required=True, choices=('gdm-password', 'sddm', 'kde', 'sudo'))
+        sub.add_argument('--service', action='append', required=True, choices=('gdm-password', 'kde', 'sudo'))
     check = commands.add_parser('verify', help='verify face authentication or run an optional no-face diagnostic',
                                 description='A fresh face check is required for activation. '
                                             'The reject check is an optional no-face diagnostic.')
