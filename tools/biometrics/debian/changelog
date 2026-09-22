@@ -1,0 +1,7 @@
+howdy-next (3.4.0-6+sensible1) unstable; urgency=medium
+
+  * Build against the current Debian libraries with private OpenCV 5.
+  * Carry the Debian OpenCV compatibility patches; run upstream tests.
+  * Leave login PAM and polkit service configuration unchanged on installation.
+
+ -- Sensible contributors <noreply@example.invalid>  Tue, 15 Sep 2026 12:00:00 +0000

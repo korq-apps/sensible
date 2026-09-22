@@ -37,9 +37,59 @@ jobs:
           sudo apt-get install -y -qq shellcheck
           shellcheck -S warning installer/sensible-install.sh installer/lib/*.sh scripts/run-qemu.sh live/build.sh
 
+  # Howdy-next is compiled from pinned sources rather than downloaded. Build it
+  # once per run in a Debian Testing container (scripts/build-howdy-package.sh
+  # reuses a cached package only while it still installs on current Testing),
+  # then hand the package to both edition builds.
+  package:
+    name: Build Howdy-next package
+    needs: tests
+    runs-on: [self-hosted, debian-13]
+    env:
+      SENSIBLE_BUILD_CONTAINER: sensible-ci-${{ github.run_id }}-${{ github.run_attempt }}-package
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Cache the Howdy-next build tree
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build/biometrics/dist
+            .build/biometrics/downloads
+          key: ${{ runner.os }}-${{ runner.arch }}-howdy-v1-${{ hashFiles('tools/biometrics/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-howdy-v1-${{ hashFiles('tools/biometrics/**') }}-
+
+      - name: Build or validate the package in a Testing container
+        run: bash scripts/build-howdy-package.sh
+
+      - name: Stop package container
+        if: always()
+        run: |
+          if command -v podman >/dev/null 2>&1; then ENGINE=podman; else ENGINE=docker; fi
+          name="${SENSIBLE_BUILD_CONTAINER}-howdy"
+          names="$("${ENGINE}" ps -a --format '{{.Names}}' --filter "name=${name}")"
+          if grep -Fxq -- "${name}" <<< "${names}"; then
+            "${ENGINE}" rm -f "${name}"
+          fi
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: howdy-next-package
+          path: .build/biometrics/dist
+          if-no-files-found: error
+          retention-days: 14
+
   build:
     name: Build Live ISO & UEFI Smoke Test (${{ matrix.variant }})
-    needs: tests
+    needs: [tests, package]
     runs-on: [self-hosted, debian-13]
     env:
       SENSIBLE_BUILD_CONTAINER: sensible-ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.variant }}
@@ -152,6 +202,14 @@ jobs:
             ${{ runner.os }}-${{ runner.arch }}-downloads-v2-${{ matrix.variant }}-${{ hashFiles('live/config/package-lists/**', 'live/variants/**', 'live/pins.env', 'live/Dockerfile') }}-
             ${{ runner.os }}-${{ runner.arch }}-downloads-v2-${{ matrix.variant }}-
 
+      # live/build.sh re-validates this package against current Testing in a
+      # container before staging it; a stale package is rebuilt there.
+      - name: Download the Howdy-next package
+        uses: actions/download-artifact@v8
+        with:
+          name: howdy-next-package
+          path: .build/biometrics/dist
+
       - name: Build Live ISO in Container
         env:
           SENSIBLE_VARIANT: ${{ matrix.variant }}
@@ -164,7 +222,7 @@ jobs:
         if: always()
         run: |
           if command -v podman >/dev/null 2>&1; then ENGINE=podman; else ENGINE=docker; fi
-          for name in "${SENSIBLE_BUILD_CONTAINER}" "${SENSIBLE_BUILD_CONTAINER}-packages"; do
+          for name in "${SENSIBLE_BUILD_CONTAINER}" "${SENSIBLE_BUILD_CONTAINER}-packages" "${SENSIBLE_BUILD_CONTAINER}-howdy"; do
             names="$("${ENGINE}" ps -a --format '{{.Names}}' --filter "name=${name}")"
             if grep -Fxq -- "${name}" <<< "${names}"; then
               "${ENGINE}" rm -f "${name}"

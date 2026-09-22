@@ -35,6 +35,8 @@ source "${LIB_DIR}/desktop.sh"
 source "${LIB_DIR}/apps.sh"
 # shellcheck source=lib/manual.sh
 source "${LIB_DIR}/manual.sh"
+# shellcheck source=lib/keyring.sh
+source "${LIB_DIR}/keyring.sh"
 # shellcheck source=lib/verify.sh
 source "${LIB_DIR}/verify.sh"
 
@@ -925,6 +927,10 @@ EOF
     fi
 
     configure_login "$DESKTOP_CHOICE" "$ENABLE_AUTOLOGIN" "$USERNAME" "$CONFIG_DIR"
+    # Autologin gives PAM no password to unlock GNOME Keyring; pre-create an
+    # empty-password login keyring so secret access never prompts and no second
+    # keyring is forked. No-op for KDE or password/face login without autologin.
+    configure_user_login_keyring "$DESKTOP_CHOICE" "$ENABLE_AUTOLOGIN" "$USERNAME"
 
     CURRENT_STAGE="preparing installed applications"
     install_progress_update 8 "Preparing installed applications"

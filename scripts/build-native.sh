@@ -90,6 +90,11 @@ SENSIBLE_PACKAGE_CHECK_NATIVE=1 \
 
 # Keep build-time third-party/default assets identical to live/build.sh.
 bash "${REPO_ROOT}/scripts/fetch-pins.sh"
+# Howdy-next: reuse or rebuild the package in a Testing container when an
+# engine exists; otherwise a package built by `sensible-biometrics build` as
+# your normal user must already be present. Then stage it with its models.
+bash "${REPO_ROOT}/scripts/build-howdy-package.sh"
+bash "${REPO_ROOT}/scripts/stage-biometrics.sh"
 
 echo "==> Running live-build (lb clean --purge && lb config && lb build)..."
 cd "${REPO_ROOT}/live"

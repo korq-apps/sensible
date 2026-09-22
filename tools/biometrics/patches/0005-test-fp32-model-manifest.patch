@@ -1,0 +1,19 @@
+--- a/howdy/tests/cli/download_models_manifest_test.cpp
++++ b/howdy/tests/cli/download_models_manifest_test.cpp
+@@ -36,12 +36,12 @@
+ 		    },
+ 		    PinnedModelArtifact{
+ 		        .type     = howdy::native::OpenCvModelType::kSface,
+-		        .filename = "face_recognition_sface_2021dec_int8.onnx",
++		        .filename = "face_recognition_sface_2021dec.onnx",
+ 		        .url      = "https://github.com/opencv/opencv_zoo/raw/"
+ 		                    "088c3571ec70df15100a5e4c26894d95951e92e9/models/face_recognition_sface/"
+-		                    "face_recognition_sface_2021dec_int8.onnx",
+-		        .sha256   = "2b0e941e6f16cc048c20aee0c8e31f569118f65d702914540f7bfdc14048d78a",
+-		        .size     = 9896933,
++		                    "face_recognition_sface_2021dec.onnx",
++		        .sha256   = "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
++		        .size     = 38696353,
+ 		    },
+ 		};
+ 

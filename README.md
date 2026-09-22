@@ -15,10 +15,8 @@ Sensible has grown beyond the original v1 plan: offline GNOME/KDE images,
 hybrid ZRAM/disk swap are implemented. The first official beta,
 [**v1.0.0-beta.1**](https://github.com/korq-apps/sensible/releases/tag/v1.0.0-beta.1), is available
 with intact GNOME and KDE ISOs distributed over BitTorrent.
-The maintainer has completed the necessary checks on a Dell XPS 15 (2020),
-Lenovo Legion 7 15ASH11, and a Ryzen 7 7800X3D desktop with 64 GB RAM and
-Radeon RX 7800 XT. The [release record](docs/RELEASE.md) documents
-that acceptance, build results and download verification. Broader test coverage
+The [release record](docs/RELEASE.md) documents accepted hardware testing,
+build results and download verification. Broader test coverage
 is follow-up work in the [plan](docs/PLAN.md#where-we-are).
 
 ## Why this exists
@@ -121,8 +119,11 @@ Real installed-disk tests follow; mocked flow coverage is not boot evidence.
 
 **Planned ([shared priority queue](docs/PLAN.md#reconciled-priorities)):**
 a later post-install catalog will cover approved optional apps and
-developer tools (Docker + Compose, `lazygit`, `gh`); BioPass needs separate
-authentication/removal validation. These are not additional installer checkboxes.
+developer tools (Docker + Compose, `lazygit`, `gh`). **Face login is the active
+feature**: the [Howdy-next fork](https://codeberg.org/nathawat/howdy-next) is
+compiled from pinned sources and baked into the image with a **Face Login
+Setup** launcher; the [tool guide](docs/BIOMETRICS.md) covers the wizard and
+the developer build path.
 
 Slack, WhatsApp, Zoom, Discord, and the rest belong on **Flathub**, not in the base image.
 
@@ -139,7 +140,7 @@ Make as much hardware work as Debian Testing allows, on first boot:
 - Power: `power-profiles-daemon`
 - Device firmware updates: `fwupd` + LVFS
 - Secure Boot: shim + Debian-signed GRUB chain on the **installed system** (NVIDIA module and hibernation are blocked under lockdown — documented in Architecture). Secure Boot on the live installer ISO is enabled via live-build (`--uefi-secure-boot enable`) and verified under OVMF with Microsoft keys (`SMOKE_FIRMWARE=sb scripts/smoke-boot.sh`): the kernel reports `secureboot: Secure boot enabled` and loads the Debian Secure Boot CA. Firmware must trust the certificate signing the image's shim; some Windows PCs disable Microsoft's third-party UEFI CA by default. See the [install guide](docs/INSTALL.md#3-boot-the-live-installer) for firmware settings and BitLocker preparation.
-- Biometrics: fingerprint via `fprintd` + `libpam-fprintd` (baked; dormant without a reader). Printing/scanning (CUPS driverless + `sane-airscan`) is baked too. BioPass face login is a planned post-install opt-in.
+- Biometrics: fingerprint via `fprintd` + `libpam-fprintd` (baked; dormant without a reader). Printing/scanning (CUPS driverless + `sane-airscan`) is baked too. Howdy-next is baked inert and enabled per account by [Face Login Setup](docs/BIOMETRICS.md), with testing and rollback.
 
 The current target is **amd64 + UEFI**. Legacy BIOS and other architectures are unsupported.
 

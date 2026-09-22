@@ -76,6 +76,15 @@ printf '%s\n' "${SENSIBLE_VARIANT}" > "${VARIANT_MARKER}"
 echo "==> Checking package names resolve against Debian Testing..."
 "${REPO_ROOT}/scripts/check-packages.sh" "${SENSIBLE_VARIANT}"
 
+# One name prefix for every container of this build, so CI cleanup finds them.
+BUILD_CONTAINER="${SENSIBLE_BUILD_CONTAINER:-sensible-build-${BUILD_LOCK_ID}-$$}"
+
+# Face login: build the Howdy-next package, or validate the cached one, in a
+# Debian Testing container so its dependencies match today's archive. The
+# staging into the image happens inside build-stages.sh.
+SENSIBLE_BUILD_CONTAINER="${BUILD_CONTAINER}" \
+    bash "${REPO_ROOT}/scripts/build-howdy-package.sh" "${CONTAINER_ENGINE}"
+
 # Build the builder container image
 IMAGE_TAG="sensible-live-builder:latest"
 echo "==> Building container image ${IMAGE_TAG}..."
@@ -86,7 +95,7 @@ ${CONTAINER_ENGINE} build -t "${IMAGE_TAG}" -f "${REPO_ROOT}/live/Dockerfile" "$
 # be repaired between bootstrap and package installation -- see that script.
 echo "==> Running live-build inside container..."
 bash "${REPO_ROOT}/scripts/run-build-container.sh" "${CONTAINER_ENGINE}" \
-    "${SENSIBLE_BUILD_CONTAINER:-sensible-build-${BUILD_LOCK_ID}-$$}" --privileged \
+    "${BUILD_CONTAINER}" --privileged \
     -e SENSIBLE_VARIANT="${SENSIBLE_VARIANT}" \
     -v "${REPO_ROOT}:/workspace:rw" \
     -w /workspace/live \

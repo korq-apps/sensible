@@ -34,6 +34,7 @@ esac
 declare -A KNOWN_ABSENT=(
     [brave-browser]="installed from Brave's own apt origin, not packaged by Debian"
     [onlyoffice-desktopeditors]="checksum-pinned upstream .deb staged by fetch-pins.sh; checked by the office build hook"
+    [howdy-next]="built locally from pinned sources and staged by stage-biometrics.sh; checked by the biometrics build hook"
 )
 
 collect_names() {

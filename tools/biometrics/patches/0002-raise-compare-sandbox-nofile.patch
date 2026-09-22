@@ -1,0 +1,25 @@
+--- a/howdy/src/compare/sandbox.cpp
++++ b/howdy/src/compare/sandbox.cpp
+@@ -17,14 +17,15 @@
+ 	using howdy::native::compare_sandbox_internal::CompareSandboxDependencies;
+ 	using howdy::native::compare_sandbox_internal::RlimitResource;
+ 
+-	constexpr rlim_t kPreferredOpenFiles = 32;
+-	// Measured peak is five descriptors; 16 leaves room beyond stdio, camera, config/model files,
+-	// and OpenCV's internal descriptors.
+-	constexpr rlim_t kMinimumOpenFiles = 16;
++	constexpr rlim_t kPreferredOpenFiles = 256;
++	// OpenCV 5's new DNN engine opens many descriptors while loading YuNet+SFace.
++	// The upstream 32/16 policy is too tight for the vendored OpenCV 5.0.0 build.
++	constexpr rlim_t kMinimumOpenFiles = 64;
+ 	constexpr rlim_t kPreferredAddressSpace =
+-	    static_cast<rlim_t>(5ULL * 1024ULL * 1024ULL * 1024ULL / 2ULL);
+-	// Measured VmPeak is 1.672 GiB. Keep a conservative 2 GiB policy floor.
+-	constexpr rlim_t kMinimumAddressSpace = static_cast<rlim_t>(2ULL * 1024ULL * 1024ULL * 1024ULL);
++	    static_cast<rlim_t>(8ULL * 1024ULL * 1024ULL * 1024ULL);
++	// OpenCV 5's new graph engine plus FP32 SFace exceeds the upstream 2.5 GiB
++	// RLIMIT_AS (FaceRecognizerSF::create throws std::bad_alloc).
++	constexpr rlim_t kMinimumAddressSpace = static_cast<rlim_t>(4ULL * 1024ULL * 1024ULL * 1024ULL);
+ 	constexpr rlim_t kCpuSoftMargin       = 5;
+ 	constexpr rlim_t kCpuHardMargin       = 10;
+ 	constexpr rlim_t kCpuSoftFloor        = 15;

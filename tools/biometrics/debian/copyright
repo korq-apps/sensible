@@ -1,0 +1,41 @@
+Howdy Next
+==========
+Source: https://codeberg.org/nathawat/howdy-next/archive/v3.4.0.tar.gz
+SHA256: 8454f74ae48f3284b25b74c16ab6f9806ba2b8b1857a6c5f740c8c62b24937fd
+
+Source tree: howdy-next/
+Copyright: Howdy Next contributors
+License: GPL-3.0-or-later
+See /usr/share/common-licenses/GPL-3 and the installed upstream notices.
+
+Sensible packaging: howdy-next/debian/
+Copyright: 2026 Sensible contributors
+License: GPL-3.0-or-later
+See /usr/share/common-licenses/GPL-3.
+
+OpenCV 5.0.0 companion source
+=============================
+Source: https://github.com/opencv/opencv/archive/refs/tags/5.0.0.tar.gz
+SHA256: b0528f5a1d379d59d4701cb28c36e22214cc51cf64594e5b56f2d3e6c0233095
+
+The build tool extracts opencv-5.0.0/ alongside howdy-next/, compiles selected
+OpenCV modules, and bundles their private shared libraries in this package at
+/usr/lib/howdy-next/. OpenCV is a separate source input, not a path within the
+Howdy source tree. This declaration covers those bundled libraries.
+
+Copyright (C) 2000-2022, Intel Corporation, all rights reserved.
+Copyright (C) 2009-2011, Willow Garage Inc., all rights reserved.
+Copyright (C) 2009-2016, NVIDIA Corporation, all rights reserved.
+Copyright (C) 2010-2013, Advanced Micro Devices, Inc., all rights reserved.
+Copyright (C) 2015-2023, OpenCV Foundation, all rights reserved.
+Copyright (C) 2008-2016, Itseez Inc., all rights reserved.
+Copyright (C) 2019-2023, Xperience AI, all rights reserved.
+Copyright (C) 2019-2022, Shenzhen Institute of Artificial Intelligence and Robotics for Society, all rights reserved.
+Copyright (C) 2022-2023, Southern University of Science And Technology, all rights reserved.
+Copyright (C) 2023-2025, OpenCV AI, all rights reserved.
+Copyright (C) 2024, Bigvision LLC, all rights reserved.
+
+License: Apache-2.0
+See /usr/share/common-licenses/Apache-2.0 and OpenCV-LICENSE in this directory.
+Third-party copyrights belong to their respective owners. OpenCV's installed
+dependency license notices are included in the opencv-licenses/ subdirectory.

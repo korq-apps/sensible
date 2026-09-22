@@ -199,18 +199,36 @@ in the live session for diagnostics.
 
 - With encryption enabled, expect a graphical disk-unlock prompt first. Enter
   the LUKS passphrase, which is the same password created for the desktop user.
-- If skip-login was enabled, the desktop opens after disk unlock. Otherwise,
-  log in with the username and user password created during installation.
+- Log in with the username and user password created during installation. On
+  GNOME, password login is intended to unlock a matching login keyring through
+  PAM, avoiding a separate keyring prompt. KDE Wallet's real-session integration
+  is still awaiting acceptance testing; it may prompt to create or unlock a
+  wallet. At installation, the account and LUKS passwords are the same string.
+- If you enabled automatic login, the desktop opens after disk unlock with no
+  password. This is insecure and not recommended (see below).
 - Without encryption, there is no disk-unlock prompt; log in normally.
 
-Skipping desktop login does not guarantee that saved application passwords are
-already unlocked. KDE Wallet or GNOME Keyring may ask for its password on first
-use after autologin or biometric login. A wallet/keyring password can differ
-from the account password; do not delete the store if an unlock fails. The
+Your saved application passwords live in a keyring, managed by **Passwords and
+Keys** on GNOME or **KDE Wallet** on KDE. Automatic login and fingerprint/face
+authentication do not supply the password needed to decrypt an encrypted store.
+Sensible's Howdy setup keeps face authentication for screen unlock and optional
+`sudo`. On the default password-login path, enter your account password after a
+boot or logout; PAM can also open a matching keyring. A separately locked store,
+a different keyring password or wallet locking settings can still cause prompts.
+Fingerprint and automatic-login settings remain separate from Howdy setup.
+
+If you explicitly chose automatic login on GNOME, Sensible creates a new login
+keyring without separate encryption to avoid keyring prompts. LUKS protects the
+files while the disk is locked, but after disk unlock anyone able to read your
+account's files can read those saved secrets. Existing keyrings are preserved
+and may still prompt. Use **Passwords and Keys** to set a keyring password or
+inspect saved secrets. KDE autologin preserves wallet encryption and may still
+prompt to create or unlock a wallet. A keyring password can differ from the
+account password after a password change/reset or a separate wallet-password
+choice; do not delete the store if an unlock fails. The
 [manual's saved-credentials guidance](../manual/index.html#desktop-credentials)
-also explains KDE's GPG-key setup error. Cross-desktop integration improvements
-are tracked in [#29](https://github.com/korq-apps/sensible/issues/29); automatic
-reuse of the disk-unlock secret is not yet a verified Sensible guarantee.
+covers this and KDE's GPG-key setup error. Reusing the disk-unlock secret for
+the keyring is not a supported Sensible feature.
 
 Connect to the network, then install Debian updates in a terminal:
 

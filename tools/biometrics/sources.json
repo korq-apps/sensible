@@ -1,0 +1,14 @@
+{
+  "version": "3.4.0-6+sensible1",
+  "howdy": {
+    "url": "https://codeberg.org/nathawat/howdy-next/archive/v3.4.0.tar.gz",
+    "sha256": "8454f74ae48f3284b25b74c16ab6f9806ba2b8b1857a6c5f740c8c62b24937fd",
+    "directory": "howdy-next"
+  },
+  "opencv": {
+    "url": "https://github.com/opencv/opencv/archive/refs/tags/5.0.0.tar.gz",
+    "sha256": "b0528f5a1d379d59d4701cb28c36e22214cc51cf64594e5b56f2d3e6c0233095",
+    "directory": "opencv-5.0.0"
+  },
+  "patch_source": "https://github.com/JochemKuipers/howdy-next-apt/tree/a79e6489dce24cdd86fd8846559beb33141d2360/debian/patches"
+}
