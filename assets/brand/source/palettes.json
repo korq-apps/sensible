@@ -1,0 +1,26 @@
+[
+  {
+    "id": "teal",
+    "name": "Teal",
+    "onLight": "#087f75",
+    "onDark": "#5eead4"
+  },
+  {
+    "id": "cobalt",
+    "name": "Cobalt",
+    "onLight": "#315bd6",
+    "onDark": "#8ca9ff"
+  },
+  {
+    "id": "violet",
+    "name": "Violet",
+    "onLight": "#7352b8",
+    "onDark": "#bca3f5"
+  },
+  {
+    "id": "raspberry",
+    "name": "Raspberry",
+    "onLight": "#ae3167",
+    "onDark": "#f49abc"
+  }
+]

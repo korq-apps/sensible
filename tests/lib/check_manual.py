@@ -23,6 +23,9 @@ class Page(HTMLParser):
         for key in ("href", "src"):
             if key in attrs:
                 self.links.append((tag, attrs[key]))
+        for source in attrs.get("srcset", "").split(","):
+            if source.strip():
+                self.links.append((tag, source.split()[0]))
 
 
 def check(manual, repo):

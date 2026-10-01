@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="514" height="108" viewBox="0 0 514 108" role="img" aria-labelledby="title desc">
+<title id="title">Sensible</title>
+<desc id="desc">Sensible in custom angular lettering. The Folded S is the first letter of the word.</desc>
+<g transform="translate(16 16)"><path data-letter="S" transform="translate(0 0)" fill="#8ca9ff" fill-rule="evenodd" d="M64 0H20L0 20V34L48 54V60H0V76H44L64 56V42L16 22V16H64Z"/>
+<path data-letter="e" transform="translate(78 0)" fill="#8ca9ff" fill-rule="evenodd" d="M16 16H56V52H14V64H56L44 76H0V32ZM14 34V40H42V28H20Z"/>
+<path data-letter="n" transform="translate(148 0)" fill="#8ca9ff" fill-rule="evenodd" d="M0 16H14V22L20 16H40L56 32V76H42V38L34 30H22L14 38V76H0Z"/>
+<path data-letter="s" transform="translate(218 0)" fill="#8ca9ff" fill-rule="evenodd" d="M56 16H16L0 32V43L42 58V64H0V76H40L56 60V49L14 34V28H56Z"/>
+<path data-letter="i" transform="translate(288 0)" fill="#8ca9ff" fill-rule="evenodd" d="M4 0H14V10H0V4ZM0 16H14V76H0Z"/>
+<path data-letter="b" transform="translate(316 0)" fill="#8ca9ff" fill-rule="evenodd" d="M0 0H14V22L20 16H40L56 32V60L40 76H0ZM14 38V62H34L42 54V38L34 30H22Z"/>
+<path data-letter="l" transform="translate(386 0)" fill="#8ca9ff" fill-rule="evenodd" d="M0 0H14V62H30L16 76H0Z"/>
+<path data-letter="e" transform="translate(426 0)" fill="#8ca9ff" fill-rule="evenodd" d="M16 16H56V52H14V64H56L44 76H0V32ZM14 34V40H42V28H20Z"/></g>
+</svg>

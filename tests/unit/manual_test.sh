@@ -289,12 +289,13 @@ if python3 "${REPO_ROOT}/tests/lib/check_manual.py" "${MNT}/usr/share/sensible/m
 else
     t_fail "staged manual links and app coverage" "chapter validation failed"
 fi
-for chapter in applications.html terminal-tools.html; do
-    mv "${MNT}/usr/share/sensible/manual/${chapter}" "${TMP_DIR}/${chapter}"
+for asset in applications.html terminal-tools.html \
+    assets/sensible-logo-light.svg assets/sensible-logo-dark.svg assets/sensible-favicon.svg; do
+    mv "${MNT}/usr/share/sensible/manual/${asset}" "${TMP_DIR}/saved-manual-asset"
     rc=0
     require_manual_payload "$MNT" >/dev/null 2>&1 || rc=$?
-    assert_rc "missing ${chapter} rejected by payload check" 1 "$rc"
-    mv "${TMP_DIR}/${chapter}" "${MNT}/usr/share/sensible/manual/${chapter}"
+    assert_rc "missing ${asset} rejected by payload check" 1 "$rc"
+    mv "${TMP_DIR}/saved-manual-asset" "${MNT}/usr/share/sensible/manual/${asset}"
 done
 assert_eq "staged opener is executable" 755 "$(stat -c %a "${MNT}/usr/local/bin/sensible-manual")"
 assert_eq "staged HTML is readable" 644 "$(stat -c %a "${MNT}/usr/share/sensible/manual/index.html")"

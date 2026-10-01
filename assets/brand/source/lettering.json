@@ -1,0 +1,46 @@
+{
+  "name": "Sensible Folded S lettering",
+  "basePalette": "teal",
+  "word": "Sensible",
+  "height": 76,
+  "padding": 16,
+  "gap": 14,
+  "gapAfter": {
+    "l": 10
+  },
+  "colours": {
+    "amber": "#f0b429",
+    "charcoal": "#20251f",
+    "paper": "#faf9f5"
+  },
+  "glyphs": {
+    "S": {
+      "width": 64,
+      "path": "M64 0H20L0 20V34L48 54V60H0V76H44L64 56V42L16 22V16H64Z"
+    },
+    "e": {
+      "width": 56,
+      "path": "M16 16H56V52H14V64H56L44 76H0V32ZM14 34V40H42V28H20Z"
+    },
+    "n": {
+      "width": 56,
+      "path": "M0 16H14V22L20 16H40L56 32V76H42V38L34 30H22L14 38V76H0Z"
+    },
+    "s": {
+      "width": 56,
+      "path": "M56 16H16L0 32V43L42 58V64H0V76H40L56 60V49L14 34V28H56Z"
+    },
+    "i": {
+      "width": 14,
+      "path": "M4 0H14V10H0V4ZM0 16H14V76H0Z"
+    },
+    "b": {
+      "width": 56,
+      "path": "M0 0H14V22L20 16H40L56 32V60L40 76H0ZM14 38V62H34L42 54V38L34 30H22Z"
+    },
+    "l": {
+      "width": 30,
+      "path": "M0 0H14V62H30L16 76H0Z"
+    }
+  }
+}
