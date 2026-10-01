@@ -76,6 +76,13 @@ for dependency_rc in 0 1; do
         systemctl() { echo NETWORK_MANAGER_ENABLED; }
         parser_status="$2"
         python3() { return "$parser_status"; }
+        # Host-independent package state: chrony installed, no competing daemon.
+        dpkg-query() {
+            case "${*: -1}" in
+                chrony) echo "install ok installed" ;;
+                *) return 1 ;;
+            esac
+        }
         source "$1"
     ' _ "${REPO_ROOT}/live/config/hooks/live/0100-sensible-setup.hook.chroot" "$dependency_rc" 2>&1)
     assert_rc "hook handles parser status $dependency_rc" "$dependency_rc" $?

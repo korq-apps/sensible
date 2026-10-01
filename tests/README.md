@@ -114,7 +114,7 @@ and path confinement even for a known reference.
 | `live_desktop_test.sh` | `sensible-live-desktop` against fixture roots: inert on the console entry, GNOME lock-off and dash pinning without duplicates, KDE lock-off, desktop icon and SDDM session completion, live username from the kernel command line, and degraded roots that never block the display manager |
 | `verify_test.sh` | Installed boot artifacts and extracted initramfs mapping/source identity, including stale UUIDs and literal mapping-name matching |
 | `zram_test.sh` | Hybrid ZRAM swap (#11): `zram-tools` in the offline closure outside the manual-checked app section, the explicit `/etc/default/zramswap` values, swapfile `pri=` below the ZRAM priority in both fstab layouts, unchanged resume handling, and non-fatal service enablement |
-| `chrony_test.sh` | `chrony` is the only time daemon in the offline closure, outside the manual-checked app section; the image hook enables it and rejects a second daemon; the installer enablement failure is a warning; Debian's `chrony.conf` is not replaced; UFW does not open port 123 |
+| `chrony_test.sh` | `chrony` is the only time daemon in the offline closure, outside the manual-checked app section; the setup hook is executed under mocked `dpkg-query`/`systemctl` for every branch (healthy image, chrony absent or half-installed, each competing daemon installed) and `chrony.service` is enabled only when chrony is installed alone; the installer enablement failure is a warning; Debian's `chrony.conf` is not replaced; UFW does not open port 123 |
 
 ### Integration test (`tests/integration/installer_flow_test.sh`)
 
