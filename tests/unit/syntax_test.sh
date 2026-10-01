@@ -74,6 +74,7 @@ sh_files=(
     tests/unit/build_cache_test.sh
     tests/unit/package_check_test.sh
     tests/unit/audio_test.sh
+    tests/unit/chrony_test.sh
     tests/unit/live_desktop_test.sh
     tests/integration/installer_flow_test.sh
 )

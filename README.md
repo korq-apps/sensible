@@ -61,7 +61,7 @@ The live ISO does **not** ship both desktops. Choose the GNOME or KDE release as
 
 ### Software (defaults vs optional)
 
-**Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, BlueZ, Flatpak, fonts, `fwupd`, Secure Boot chain on the installed system (shim + Debian-signed GRUB). Flathub is preconfigured system-wide with its signing key; app browsing/downloads require a connection, but installation does not.
+**Always installed (working machine):** latest Testing kernel, full `non-free-firmware` set, microcode, PipeWire, NetworkManager, chrony, BlueZ, Flatpak, fonts, `fwupd`, Secure Boot chain on the installed system (shim + Debian-signed GRUB). Flathub is preconfigured system-wide with its signing key; app browsing/downloads require a connection, but installation does not.
 
 **Default apps:** Firefox ESR and Chromium; ONLYOFFICE Desktop Editors; Thunderbird; KeePassXC; VLC; Neovim (LazyVim starter in `/etc/skel`); archive support; and modern CLI tools (`ripgrep`, `fd-find`, `fzf`, `bat`, `eza`, `zoxide`, `btop`, `fastfetch`). GNOME adds File Roller and Amberol; KDE adds Okular, Ark, Gwenview, Kate, KCalc, Spectacle, and Elisa. Flatpak and the desktop store integration are ready for use after installation.
 

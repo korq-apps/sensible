@@ -855,6 +855,10 @@ virtual disk, or less RAM."
     install_progress_update 5 "Configuring hardware support"
     log_info "Offline install — hardware support is already in the copied live image"
     chroot "${MNT}" systemctl enable NetworkManager.service
+    # chrony corrects the clock once a network is up and keeps the hardware
+    # clock in UTC. A failed enable must not abort an offline install.
+    chroot "${MNT}" systemctl enable chrony.service \
+        || record_warning "Time synchronization could not be enabled; the clock stays at the hardware time until chrony is enabled."
     # Compressed RAM swap ahead of the swapfile (#11). zramswap.service is a
     # oneshot wanted by multi-user.target: if it fails, boot continues with
     # the fstab swapfile and `systemctl status zramswap` explains why.

@@ -372,6 +372,13 @@ echo "$USERNAME:$USERPASS" | chroot /mnt chpasswd
 echo "root:$USERPASS" | chroot /mnt chpasswd
 ```
 
+The timezone symlink does not set the clock. `chrony` is in the offline
+closure. The image hook enables `chrony.service` and fails the build if
+`systemd-timesyncd`, `ntpsec`, `openntpd`, or `ntp` is also installed. The
+installer enables it again on the target; a failed enable is a warning, not
+an abort, so an offline install still boots. Debian's packaged `chrony.conf`
+is not replaced. Do not open inbound UDP 123.
+
 Keyboard is selected, validated against installed XKB symbols, and applied with
 `setupcon --force --keyboard-only` before collecting LUKS or account passwords.
 After target packages are installed, write that same layout through
@@ -402,7 +409,7 @@ Always:
   cryptsetup cryptsetup-initramfs
   plymouth plymouth-themes
   grub-efi-amd64 grub-efi-amd64-signed shim-signed
-  network-manager pipewire wireplumber pipewire-pulse pipewire-audio pipewire-alsa
+  network-manager chrony pipewire wireplumber pipewire-pulse pipewire-audio pipewire-alsa
   alsa-ucm-conf alsa-topology-conf alsa-utils
   libspa-0.2-bluetooth bluez
   power-profiles-daemon fwupd

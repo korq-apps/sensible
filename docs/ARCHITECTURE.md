@@ -16,6 +16,7 @@
 │ Layer 3: Hardware services (on the target)                  │
 │   Testing kernel + microcode + non-free firmware            │
 │   PipeWire / WirePlumber / BlueZ / NetworkManager           │
+│   chrony (NTP client, hardware clock in UTC)                │
 │   Mesa + NVIDIA closure · fwupd · PPD                       │
 ├─────────────────────────────────────────────────────────────┤
 │ Layer 2: Disk, unlock, boot                                 │
@@ -336,6 +337,7 @@ Facts to not relearn later:
 | Biometrics | `fprintd`, `libpam-fprintd` (baked); `howdy-next` compiled from pinned sources and baked inert, enabled per account by Face Login Setup — see §5 |
 | Print / scan | `cups`, `ipp-usb` (driverless IPP-over-USB), `sane-airscan`; `simple-scan` with GNOME, `skanlite` with KDE |
 | Updates | `fwupd` (LVFS), `wireless-regdb` |
+| Time | `chrony`, client only. Debian's packaged config is kept: `pool 2.debian.pool.ntp.org iburst`, `makestep 1 3` (step an offset over one second on the first three updates after start), `rtcsync`, no `allow`. Enabled in the live image and again on the target. Not `systemd-timesyncd` — it watches systemd-networkd, which this image does not use — and not `ntpsec`. Outbound UDP 123 only; UFW does not gain an inbound NTP rule. A failed enable warns and does not abort an offline install. |
 | Repos on the target | `main`, `contrib`, `non-free`, `non-free-firmware` |
 
 `firmware-broadcom` is not a Debian package name; Broadcom Wi-Fi is `firmware-brcm80211`. `firmware-linux-nonfree` is a leftover name — do not list it.
@@ -352,7 +354,7 @@ Keep this list the single source of truth. README and the installer spec should 
 
 ### Base (always)
 
-`sudo`, `locales`, `keyboard-configuration`, `console-setup`, NetworkManager, `fwupd`, Flatpak, fonts (`fonts-noto-core`, `fonts-noto-color-emoji`, `fonts-liberation`), `git`, `curl`, `ca-certificates`.
+`sudo`, `locales`, `keyboard-configuration`, `console-setup`, NetworkManager, `chrony`, `fwupd`, Flatpak, fonts (`fonts-noto-core`, `fonts-noto-color-emoji`, `fonts-liberation`), `git`, `curl`, `ca-certificates`.
 
 The default interactive shell uses Oh My Bash's `powerline-multiline` theme. Debian's `fonts-powerline` supplies separator glyphs; JetBrainsMono Nerd Font comes from a pinned nerd-fonts release for the prompt and LazyVim's broader icon set. The build verifies that the pinned Oh My Bash archive still contains the configured theme. UFW defaults to deny incoming / allow outgoing, with TCP/UDP 1714–1764 for GSConnect/KDE Connect and TCP/UDP 53317 for LocalSend on both editions. With Debian's IPv6-enabled UFW defaults these cover IPv4 and IPv6, across all interfaces/source addresses rather than only trusted networks. The manual documents that exposure. The Nerd Font is baked by `scripts/fetch-pins.sh` (pin + SHA256 in `live/pins.env`); the UFW hook writes rules while UFW is still disabled and flips `ENABLED=yes` in `/etc/ufw/ufw.conf` — never `ufw enable` in a chroot.
 
