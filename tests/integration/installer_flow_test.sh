@@ -257,6 +257,9 @@ chroot() {
     if [ "${1:-}" = "systemctl" ] && [ "${2:-}" = "enable" ] && [ "${3:-}" = "zramswap.service" ]; then
         return "${MOCK_ZRAM_ENABLE_RC:-0}"
     fi
+    if [ "${1:-}" = "systemctl" ] && [ "${2:-}" = "enable" ] && [ "${3:-}" = "chrony.service" ]; then
+        return "${MOCK_CHRONY_ENABLE_RC:-0}"
+    fi
     if [ "${1:-}" = "dpkg-query" ]; then
         local queried_package="${4:-}"
         if [ "${MOCK_MISSING_PACKAGE:-}" = "${queried_package}" ]; then return 1; fi
@@ -578,6 +581,7 @@ assert_file_contains "fstab: root subvol=@" "${MNT}/etc/fstab" "UUID=ROOTFS-FS-U
 assert_file_contains "fstab: @swap subvolume" "${MNT}/etc/fstab" "UUID=ROOTFS-FS-UUID-5555  /swap        btrfs  noatime,subvol=@swap"
 assert_file_contains "fstab: swapfile on encrypted root" "${MNT}/etc/fstab" "/swap/swapfile none swap sw,pri=10 0 0"
 assert_contains "ZRAM swap service enabled on the target" "$(log_text)" "systemctl enable zramswap.service"
+assert_contains "chrony enabled on the target" "$(log_text)" "systemctl enable chrony.service"
 assert_file_contains "resume= via swapfile offset" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTFS-FS-UUID-5555 resume_offset=38400"
 assert_file_contains "initramfs RESUME set" "${MNT}/etc/initramfs-tools/conf.d/resume" "RESUME=UUID=ROOTFS-FS-UUID-5555"
 assert_file_contains "initramfs keymap carried" "${MNT}/etc/initramfs-tools/initramfs.conf" "KEYMAP=y"
@@ -680,6 +684,15 @@ assert_contains "enablement was attempted on the target" "$(log_text)" "systemct
 assert_contains "ZRAM enablement failure reaches the completion summary" "$(output_text)" "- ZRAM swap service could not be enabled; the disk swapfile still works."
 assert_file_contains "disk swapfile stays configured as the fallback" "${MNT}/etc/fstab" "/swap/swapfile none swap sw,pri=10 0 0"
 assert_file_contains "resume target unaffected by the ZRAM failure" "${MNT}/etc/default/grub.d/installer.cfg" "resume=UUID=ROOTFS-FS-UUID-5555 resume_offset=38400"
+
+t_section "chrony enablement failure degrades to a warning, never an abort"
+MOCK_CHRONY_ENABLE_RC=1
+build_answers yes
+run_flow
+MOCK_CHRONY_ENABLE_RC=0
+assert_rc "installation completes although chrony.service could not be enabled" 0 "${RC}"
+assert_contains "chrony enablement was attempted on the target" "$(log_text)" "systemctl enable chrony.service"
+assert_contains "chrony enablement failure reaches the completion summary" "$(output_text)" "- Time synchronization could not be enabled; the clock stays at the hardware time until chrony is enabled."
 
 t_section "Live-copy deploy path: excludes keep API dirs, mountpoints exist (offline skips apt)"
 build_answers no

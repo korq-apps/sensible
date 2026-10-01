@@ -293,8 +293,9 @@ Sensible disk disconnected before erasing that disk.
   until you resume it. See Microsoft's
   [suspend/resume instructions](https://learn.microsoft.com/en-us/troubleshoot/windows-client/windows-security/suspend-bitlocker-protection-non-microsoft-updates).
 - **Clock:** Windows normally treats the hardware clock as local time, while
-  Sensible uses UTC. If switching systems produces a time offset, make Windows
-  use UTC from an administrator PowerShell:
+  Sensible uses UTC. Sensible runs `chrony` and, once online, sets the clock
+  and keeps the hardware clock in UTC. If switching systems produces a time
+  offset, make Windows use UTC from an administrator PowerShell:
 
   ```powershell
   reg add "HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation" /v RealTimeIsUniversal /t REG_DWORD /d 1 /f
@@ -325,6 +326,10 @@ Sensible disk disconnected before erasing that disk.
   the key once resolves every case. See [Windows on a second disk](#7-windows-on-a-second-disk).
 - **Windows shows the wrong time after Sensible ran:** hardware clock
   convention; see [Windows on a second disk](#7-windows-on-a-second-disk).
+- **Sensible clock is wrong:** the clock stays at the hardware time until
+  the machine is online. `chrony` then steps an offset larger than one second.
+  Check `timedatectl status` and `systemctl status chrony`. A fully offline
+  machine keeps the hardware time.
 - **No install disk:** the disk may be read-only, in use as the live medium, or
   below the RAM-dependent minimum. The installer lists why detected devices
   were rejected.

@@ -668,6 +668,11 @@ Small, real, and not owned by any phase.
 - [x] **Keep one partition layout.** Btrfs and Ext4, with LUKS on or off, all
       use EFI + BOOT + ROOT with swap inside the root filesystem. The release
       matrix still covers all four storage combinations per desktop variant.
+- [x] **Time synchronization.** `chrony` is in the offline closure and enabled
+      on the live image and the installed system. Debian's packaged client
+      config is kept (pool, `makestep`, `rtcsync`, no server). `systemd-timesyncd`
+      and ntpsec are not installed. UFW does not open inbound UDP 123.
+      Enablement failure warns and does not abort an offline install.
 - [ ] **Retire the `resume=` claim where Secure Boot is on.** Hibernation is
       configured and works with SB off, but the kernel refuses it under
       lockdown. The installed system should say so rather than appearing to

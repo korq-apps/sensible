@@ -14,6 +14,23 @@ fi
 # Enable NetworkManager
 systemctl enable NetworkManager.service
 
+# Clock. chrony is the only time daemon. Enable it so the live session can
+# correct the clock once NetworkManager is online; do not start it in this
+# chroot. The installer enables it again on the target.
+if ! chrony_status=$(dpkg-query -W -f='${Status}' chrony 2>/dev/null) \
+    || [ "$chrony_status" != 'install ok installed' ]; then
+    echo 'Error: chrony is missing from the image.' >&2
+    exit 1
+fi
+for extra in systemd-timesyncd ntpsec openntpd ntp; do
+    if extra_status=$(dpkg-query -W -f='${Status}' "$extra" 2>/dev/null) \
+        && [ "$extra_status" = 'install ok installed' ]; then
+        echo "Error: ${extra} is installed; chrony is the only time daemon." >&2
+        exit 1
+    fi
+done
+systemctl enable chrony.service
+
 # "Try Sensible" boot entry: inert unless the kernel command line carries
 # sensible.session=desktop (see the unit's Condition).
 systemctl enable sensible-live-desktop.service

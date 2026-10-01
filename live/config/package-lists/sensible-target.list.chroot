@@ -37,6 +37,10 @@ alsa-ucm-conf
 alsa-topology-conf
 alsa-utils
 network-manager
+# NTP client only. Debian's packaged chrony.conf is kept: pool, makestep,
+# rtcsync, no allow. It provides time-daemon, so systemd-timesyncd must not
+# also be installed. Outbound UDP 123 is enough; do not open it inbound.
+chrony
 power-profiles-daemon
 fwupd
 bluez
