@@ -222,7 +222,7 @@ codex --version</code></pre>
         <article id="antigravity"><h3>Antigravity CLI</h3>
           <p><strong>What it is:</strong> Google's current agent-first terminal client, written in Go. It is the successor to Gemini CLI, and it is what the Gemini CLI command name now leads to.</p>
           <p><strong>Before you install:</strong> Google replaced Gemini CLI for consumer accounts on 2026-06-18. Gemini CLI remains documented only for enterprise and paid Gemini API-key use; if that is your situation, the old <code>gemini</code> command is still installed from <code>npm install -g @google/gemini-cli</code> and removed with <code>npm uninstall -g @google/gemini-cli</code>. For everyone else it stops serving requests. Sensible read those two commands and did not run them.</p>
-          <p><strong>Install:</strong> the official script places a single binary at <code>~/.local/bin/agy</code> and does not edit your shell configuration. <code>--skip-aliases</code> also stops it removing any leftover <code>agy</code> shell alias, and <code>--skip-path</code> stops it touching your profile.</p>
+          <p><strong>Install:</strong> the official script places a single binary at <code>~/.local/bin/agy</code>. By default it also appends a <code>PATH</code> line to your shell profile and purges any legacy <code>agy</code> shell alias, which is why this recipe passes <code>--skip-aliases</code> and <code>--skip-path</code> and adds the <code>PATH</code> line itself, once. That way exactly one line in <code>~/.bashrc</code> belongs to this tool, which is what the removal step below relies on. Omit the two flags if you would rather let the script manage your profile.</p>
           <pre><code># 1. Download the installer to a file instead of piping it into a shell
 curl --fail --location --output ~/Downloads/antigravity-install.sh \
   https://antigravity.google/cli/install.sh
@@ -231,7 +231,7 @@ curl --fail --location --output ~/Downloads/antigravity-install.sh \
 less ~/Downloads/antigravity-install.sh
 
 # 3. Run the file you just read, as your own user
-bash ~/Downloads/antigravity-install.sh
+bash ~/Downloads/antigravity-install.sh --skip-aliases --skip-path
 
 # If the command is not found, add it for future terminals
 echo 'export PATH="$HOME/.local/bin:$PATH"' &gt;&gt; ~/.bashrc
@@ -240,7 +240,7 @@ agy --version</code></pre>
           <p><strong>Launch and first task:</strong> run <code>agy</code> in a project directory. Sign-in opens your browser, or it reuses a session from your desktop keyring. <code>/permissions</code> and <code>/diff</code> are the two commands to know before letting it change anything.</p>
           <p><strong>Accounts and keys:</strong> browser sign-in is the normal route. A Gemini API key is API billing, needs <code>GEMINI_API_KEY</code> exported in the shell plus a <code>modelProvider</code> setting, and is meant for headless machines.</p>
           <p><strong>Updates:</strong> the installer is the update owner; download and run it again. <code>/logout</code> clears the stored session from your keyring.</p>
-          <p><strong>Remove:</strong> delete <code>~/.local/bin/agy</code> and, if you added the <code>PATH</code> line yourself, the matching line in <code>~/.bashrc</code>. Configuration lives under <code>~/.gemini/</code> and is not removed for you.</p>
+          <p><strong>Remove:</strong> delete <code>~/.local/bin/agy</code> and the one <code>PATH</code> line in <code>~/.bashrc</code> that the recipe above added. Configuration lives under <code>~/.gemini/</code> and is not removed for you.</p>
           <p><strong>Sensible validation:</strong> the script installed and <code>agy --version</code> reported 1.2.15 on Debian Testing on 2026-10-02 (roughly 200 MiB). Sign-in was not tested. <a href="https://antigravity.google/docs/cli/install">Upstream install page</a></p>
         </article>
         <article id="aider"><h3>Aider</h3>
@@ -255,8 +255,16 @@ aider-install
 
 aider --version</code></pre>
           <p><strong>Why not the shorter commands:</strong> <code>pipx install aider-chat</code> installs Aider into an environment using your system Python, and Aider's dependencies do not always have packages for a brand-new interpreter. On 2026-10-02 it failed on Debian Testing for exactly that reason. Aider's own documentation also warns that distribution packages often install it with the wrong dependencies.</p>
-          <p><strong>Launch and first task:</strong> in a Git repository, run <code>aider</code> and describe one small change. Watch the diff, and refuse anything you did not ask for. Aider commits each accepted change, so <code>git log</code> is your history and <code>git reset --hard HEAD~1</code> undoes the last one.</p>
-          <p><strong>Accounts and keys:</strong> Aider needs a model and a key for it. That is API billing. Choose the model with <code>--model</code>, and supply the key through an environment variable such as <code>OPENAI_API_KEY</code> or an untracked <code>.env</code> file in the project rather than on the command line: Aider also accepts <code>--api-key provider=&lt;key&gt;</code>, but that form puts the key into your shell history, which is exactly what the <a href="#accounts">key hygiene</a> rule above rules out.</p>
+          <p><strong>Launch and first task:</strong> in a Git repository, run <code>aider</code> and describe one small change. Watch the diff with <code>/diff</code>, and refuse anything you did not ask for. Aider commits each accepted change, so <code>git log</code> is your history.</p>
+          <p><strong>Undoing a change:</strong> inside the session, <code>/undo</code> reverses Aider's last commit. After you have left the session, use <code>git revert HEAD</code>, which adds a new commit and leaves your working files alone. Avoid <code>git reset --hard</code> as an undo: it throws away every staged and unstaged change in the repository, including work Aider never touched, and those edits are not in any commit.</p>
+          <p><strong>Accounts and keys:</strong> Aider needs a model and a key for it. That is API billing. Choose the model with <code>--model</code>, and supply the key through an environment variable such as <code>OPENAI_API_KEY</code> rather than on the command line: Aider also accepts <code>--api-key provider=&lt;key&gt;</code>, but that form puts the key into your shell history, which is exactly what the <a href="#accounts">key hygiene</a> rule above rules out.</p>
+          <p>A <code>.env</code> file is the convenient alternative, because Aider reads it from your home directory or the repository root without a command line. It needs one extra step first, because Aider adds its own <code>.aider*</code> files to <code>.gitignore</code> but never <code>.env</code>, and "untracked" is not the same as "uncommittable": a later <code>git add .</code>, or an agent asked to stage your work, would still add it.</p>
+          <pre><code># In the project, before you put a key in .env:
+printf '.env\n' &gt;&gt; .gitignore
+
+# Confirm Git will refuse it, then keep the real key out of the repository
+git check-ignore -v .env</code></pre>
+          <p>Only treat <code>.env</code> as safe once <code>git check-ignore</code> prints a matching rule. An environment variable you export in the terminal for the current session needs no file at all, which is why it is the first choice above.</p>
           <p><strong>Updates:</strong> <code>pipx upgrade aider-install</code> followed by <code>aider-install</code> again. It is the only owner of the Aider copy; do not also install the Debian or npm variant.</p>
           <p><strong>Remove:</strong> this route installs two separate things, and the order matters. <code>aider-install</code> puts its own copy of <code>uv</code> inside the pipx environment and uses it to create Aider in <code>~/.local/share/uv/tools/aider-chat</code>, with <code>~/.local/bin/aider</code> symlinked into it — and that <code>uv</code> is not on your <code>PATH</code>, so a bare <code>uv tool uninstall</code> fails with "command not found". Remove Aider first, using the copy inside the environment:</p>
           <pre><code># 1. Remove Aider's own environment and the ~/.local/bin/aider symlink
@@ -264,7 +272,11 @@ aider --version</code></pre>
 
 # 2. Now remove the installer that supplied uv
 pipx uninstall aider-install</code></pre>
-          <p>Those two steps were run in that order on 2026-10-03 as an ordinary, non-root user, and <code>aider</code> was gone afterwards. Two things still remain afterwards, and neither is removed for you: the private CPython 3.12 that <code>aider-install</code> downloaded into <code>~/.local/share/uv/python/</code> (about 112 MiB) and uv's download cache in <code>~/.cache/uv/</code> (about 572 MiB after one install). Delete those two directories yourself if you want the disk space back; check the contents first, because both are permanent deletions.</p>
+          <p>Those two steps were run in that order on 2026-10-03 as an ordinary, non-root user, and <code>aider</code> was gone afterwards. Disk is not fully reclaimed: <code>aider-install</code> also left a private CPython 3.12 in <code>~/.local/share/uv/python/</code> (about 112 MiB) and downloads in uv's cache at <code>~/.cache/uv/</code> (about 572 MiB after one install).</p>
+          <div class="callout warn">
+            <div class="callout-title">Those uv directories are shared, not Aider's alone</div>
+            <p>Other uv-managed tools keep their interpreters and cached downloads in the same two places, so deleting either directory outright can break a tool you never touched or make it re-download everything. Leave them unless you know uv is otherwise unused. If you do want the space back, look first — <code>ls ~/.local/share/uv/tools/</code> lists the tools that share the interpreters, and the cache is the safer of the two to clear because uv can rebuild it.</p>
+          </div>
           <p><strong>Sensible validation:</strong> installed on Debian Testing on 2026-10-02 and <code>aider --version</code> reported 0.86.2, with system Python 3.14.7 unchanged. The removal sequence above was then run on 2026-10-03 as an ordinary user, which is where the measured sizes and the missing <code>uv</code> on <code>PATH</code> come from. No model was called. <a href="https://aider.chat/docs/install.html">Upstream install page</a></p>
         </article>
         <article id="claude-code"><h3>Claude Code</h3>

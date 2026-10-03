@@ -669,13 +669,15 @@ planned; standalone biometric tools are implemented, with usage tracked in
 
 **AI and CLI follow-ups (planned, tracked in #22–#25; AI delivery decision pending):**
 
-- [x] [Curated AI manual](AI_TOOLS.md): tool-selection rationale, safe usage,
+- [ ] [Curated AI manual](AI_TOOLS.md): tool-selection rationale, safe usage,
   official optional installation/update/removal recipes, and current Linux
-  support for Claude Code, Claude Desktop and ChatGPT desktop. Shipped as
-  `manual/ai-tools.html` with navigation, staging, payload checks and offline
-  tests on 2026-10-02. Each recipe says what was tried and what was not,
-  including sign-in and KDE launch. The upstream re-verification log is in
-  [AI_TOOLS.md](AI_TOOLS.md).
+  support for Claude Code, Claude Desktop and ChatGPT desktop. The chapter ships
+  as `manual/ai-tools.html` with navigation, staging, payload checks and offline
+  tests, and each recipe says what was tried and what was not. **Still open:**
+  #23's acceptance also asks for both editions' launch and removal paths, and KDE
+  launch plus Claude Desktop package removal are untested, so this stays
+  unchecked until a KDE session covers them. The upstream re-verification log is
+  in [AI_TOOLS.md](AI_TOOLS.md).
 - [ ] Evaluate OpenCode as the first open-source CLI candidate and LLM as a
   complement. Decide small preinstalled core versus all-opt-in delivery before
   packaging; keep proprietary clients optional and installation/first login

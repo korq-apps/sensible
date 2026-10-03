@@ -135,9 +135,11 @@ Findings that changed earlier notes:
 - The chapter says what was tried. Sign-in, model calls, prices, quotas and
   KDE launch stay untested.
 
-## Delivered: the AI tools manual chapter
+## Delivered so far: the AI tools manual chapter
 
-`manual/ai-tools.html` ships the chapter that this plan used to specify. It
+`manual/ai-tools.html` ships the chapter that this plan used to specify. The
+chapter is complete; #23 itself stays open until the untested KDE launch and
+Claude Desktop removal paths are exercised, as recorded in [PLAN.md](PLAN.md). It
 covers a selection guide, permissions and untrusted code, accounts/keys/billing,
 the two desktop clients and the six terminal clients, an update-owner and
 leftover-state table, and a dated statement of what Sensible did and did not
@@ -263,11 +265,15 @@ Debian's editor selection, with LazyVim configuration opt-in. It is not a
 prerequisite for this AI scope and does not imply selecting an AI tool's editor
 on the user's behalf.
 
-1. **[Curated AI manual and optional client recipes (#23)](https://github.com/korq-apps/sensible/issues/23). Delivered 2026-10-02.** The AI chapter and
-   navigation ship as `manual/ai-tools.html`, covering the shortlist,
-   privacy/account distinctions and the current Linux desktop options. Manual
-   staging, the payload check and the offline tests include the new chapter.
-   Optional installation itself is online.
+1. **[Curated AI manual and optional client recipes (#23)](https://github.com/korq-apps/sensible/issues/23). Chapter shipped 2026-10-02; still open.** The AI
+   chapter and navigation ship as `manual/ai-tools.html`, covering the
+   shortlist, privacy/account distinctions and the current Linux desktop
+   options. Manual staging, the payload check and the offline tests include the
+   new chapter. Optional installation itself is online. **Not yet met:** the
+   acceptance list asks for both editions' launch and removal paths "where
+   available", and GNOME launch is the only session evidence so far. KDE launch
+   for both desktop clients and Claude Desktop package removal still need a KDE
+   session, so #23 stays open rather than being called complete.
 2. **[AI delivery decision and candidate packaging (#22)](https://github.com/korq-apps/sensible/issues/22).** Resolve the preinstall/opt-in decision,
    then package OpenCode and evaluate LLM against the requirements above.
    Include rationale, safe usage examples, update support and both-edition

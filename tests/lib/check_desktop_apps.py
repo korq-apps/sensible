@@ -831,6 +831,26 @@ esac
         # Cowork packages are architecture-specific.
         self.assertIn("qemu-system-arm", manual)
         self.assertIn("qemu-efi-aarch64", manual)
+        # A destructive Git command must never be presented as an undo. It may
+        # still be named, but only in the warning that rules it out.
+        self.assertNotIn("git reset --hard HEAD~1", manual)
+        self.assertNotIn("and <code>git reset --hard HEAD~1</code> undoes", manual)
+        self.assertIn("Avoid <code>git reset --hard</code> as an undo", manual)
+        self.assertIn("<code>/undo</code> reverses Aider's last commit", manual)
+        self.assertIn("git revert HEAD", manual)
+        # A .env file is only safe once Git is told to ignore it.
+        self.assertIn("git check-ignore", manual)
+        self.assertIn("but never <code>.env</code>", manual)
+        self.assertNotIn("an untracked <code>.env</code> file", manual)
+        # The Antigravity recipe owns its single profile change.
+        self.assertIn("antigravity-install.sh --skip-aliases --skip-path", manual)
+        self.assertIn("the one <code>PATH</code> line in <code>~/.bashrc</code>", manual)
+        # Shared uv directories must not be presented as safe Aider cleanup.
+        self.assertIn("Those uv directories are shared, not Aider's alone", manual)
+        self.assertNotIn("Delete those two directories yourself", manual)
+        # The chapter text ships in the image; the clients do not.
+        index = (REPO / "manual/index.html").read_text()
+        self.assertIn("The text ships in the image; the clients do not", index)
 
     def test_firewall_both_editions_and_failure(self):
         script = self.hook("0300-ufw.hook.chroot")
