@@ -2,8 +2,9 @@
 
 Status: **manual chapter shipped; no AI client is installed**. Originally
 recorded 2026-09-06; ticket links added 2026-09-10; upstream re-verified
-2026-10-02 and the [curated manual chapter](#delivered-the-ai-tools-manual-chapter)
-added then. No AI client, provider account, model weights or new repository is
+2026-10-02 and again on 2026-10-03, with the
+[curated manual chapter](#delivered-the-ai-tools-manual-chapter) added
+2026-10-02. No AI client, provider account, model weights or new repository is
 added to any image by this plan. The upstream availability recorded before
 2026-10-02 was a dated starting point; the table and verification log below
 supersede it.
@@ -58,9 +59,11 @@ environment, not `sudo pip` or changes to Debian's system Python.
 ## Upstream verification log, 2026-10-02
 
 Checked against the vendors' own documentation and, where the tool is a
-downloadable client, installed and removed in a disposable Debian Testing
-(forky) container on x86_64. No account, API key or paid service was used, so
-no sign-in, session, price or quota claim was made.
+downloadable client, installed in a disposable Debian Testing (forky)
+container on x86_64. Removal was exercised only where the table below says so:
+the ChatGPT desktop package, `claude-code` and the Aider route. Every other
+entry was installed and version-checked, not removed. No account, API key or
+paid service was used, so no sign-in, session, price or quota claim was made.
 
 | Entry | Debian Testing package | Verified upstream route | What was exercised |
 | :--- | :--- | :--- | :--- |
@@ -82,9 +85,13 @@ performed. KDE launch remains untested, as does Claude Desktop package removal.
 Findings that changed earlier notes:
 
 - **Claude Desktop now has an official Linux beta.** The earlier "unavailable on
-  Linux" statement is obsolete; the current status, requirements, keyring
-  conflict on KDE and Cowork's KVM requirement are recorded in the chapter.
-  Do not present an unofficial wrapper as the official client.
+  Linux" statement is obsolete. The chapter records the current status and the
+  requirements that were resolved on Debian Testing; two further items are
+  recorded as unvalidated vendor caveats rather than as Sensible findings,
+  because KDE launch and sign-in were not tested here: the two-keyring warning
+  on the KDE image and Cowork's KVM requirement. Do not present an unofficial
+  wrapper as the official client, and do not turn either caveat into a
+  remediation recipe until it has been reproduced on the KDE image.
 - **The ChatGPT desktop `.deb` registers a repository** at
   `/etc/apt/sources.list.d/chatgpt.sources` with a keyring, an AppArmor profile
   and `/etc/default/chatgpt`; `apt remove` leaves all of them behind. The two
@@ -110,6 +117,21 @@ Findings that changed earlier notes:
 - **ChatGPT publishes an ARM64 package** (`chatgpt_arm64.deb`) and APT refuses
   the amd64 build on aarch64; the manual documents both downloads instead of
   implying the amd64 file is universal.
+- **Anthropic plan requirements differ per surface, checked 2026-10-03.**
+  Claude Desktop Chat is available on the free claude.ai plan
+  ([support](https://support.claude.com/en/articles/10065433-install-claude-desktop)),
+  while Cowork "is available to paid Claude plans (Pro, Max, Team, Enterprise)
+  only" ([support](https://support.claude.com/en/articles/13345190-get-started-with-claude-cowork))
+  and Claude Code "requires a Pro, Max, Team, Enterprise, or Console account.
+  The free claude.ai plan does not include Claude Code access"
+  ([docs](https://code.claude.com/docs/en/setup)). A subscription "doesn't
+  include access to the Claude API or Console"
+  ([support](https://support.claude.com/en/articles/9876003-i-have-a-paid-claude-subscription-pro-max-team-or-enterprise-plans-why-do-i-have-to-pay-separately-to-use-the-claude-api-and-console)).
+  The chapter must not describe the desktop app as paid-only.
+- **Installers are downloaded and read, never piped into a shell.** Four recipes
+  fetch a shell script; each now downloads to `~/Downloads/`, is inspected with
+  `less`, and only then run, matching the advice in the terminal chapter. A
+  `curl | bash` pipeline starts executing before the transfer completes.
 - The chapter says what was tried. Sign-in, model calls, prices, quotas and
   KDE launch stay untested.
 
@@ -150,9 +172,10 @@ log above and in the chapter itself:
   now exists and is installed from Anthropic's signed APT repository, so the
   earlier "unavailable on Linux" note is obsolete. It requires Debian 12+ or
   Ubuntu 22.04+ on x86_64 or ARM64, Testing meets that but is not officially
-  tested, Cowork needs hardware virtualization with QEMU/KVM, and its sign-in
-  conflicts with a second keyring on the KDE image. Recommend Claude in the
-  browser as the simpler route. Do not silently substitute an unofficial Linux
+  tested. Two items stay untested caveats, not Sensible findings: Cowork's
+  hardware-virtualization requirement, and the vendor's warning about a second
+  keyring on the KDE image. Desktop Chat needs no paid plan, while Cowork and
+  Claude Code do. Recommend Claude in the browser as the simpler route. Do not silently substitute an unofficial Linux
   repackaging; that would require a separate provenance, licensing,
   credential-handling and update review.
 - **Optional does not mean preconfigured:** these clients, their accounts and

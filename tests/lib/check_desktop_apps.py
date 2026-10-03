@@ -745,7 +745,9 @@ esac
         manual = chapter.read_text()
         # Nothing may be presented as preinstalled, and no credential may appear.
         self.assertIn("Sensible ships no AI client, no provider account and no model", manual)
-        self.assertIn("Nothing here needs an AI account", manual)
+        self.assertIn("<strong>Installing</strong> nothing here needs an AI account", manual)
+        self.assertNotIn("Nothing here needs an AI account.", manual)
+        self.assertIn("<strong>Using</strong> the documented, cloud-backed setups does need one", manual)
         self.assertNotIn("sk-", manual)
         # Client, model, subscription and API billing must stay distinguished.
         self.assertIn("does not make the model open source, free, private or offline", manual)
@@ -805,6 +807,30 @@ esac
         self.assertNotIn("a subscription plan is what pays for it", manual)
         # OpenCode removal uses the documented command, not manual guesswork.
         self.assertIn("opencode uninstall", manual)
+        # No installer may be piped into a shell; each is downloaded and read first.
+        self.assertNotIn("| bash", manual)
+        self.assertNotIn("| sh", manual)
+        self.assertNotIn("|bash", manual)
+        for script in ("opencode-install.sh", "codex-install.sh", "antigravity-install.sh"):
+            self.assertIn(script, manual)
+            self.assertLess(manual.index(f"--output ~/Downloads/{script}"),
+                            manual.index(f"less ~/Downloads/{script}"))
+        self.assertIn("Piping a download straight into a shell starts executing it", manual)
+        # Remote use is the documented route, not an intrinsic property.
+        self.assertIn("In their documented default configuration they send your prompts to a provider's service", manual)
+        self.assertIn("none of them installs a local runtime or a model for you", manual)
+        self.assertIn("neither route was exercised", manual)
+        # Desktop Chat is free; only Cowork and Claude Code need a paid plan.
+        self.assertIn("A free account is enough for Chat; the Cowork tab needs a paid plan", manual)
+        # An unused key is harmless; a source without its key is what breaks APT.
+        self.assertIn("Only one of those two leftovers can break APT", manual)
+        self.assertIn("an unused key file on its own is harmless", manual)
+        # The KDE keyring item stays a caveat, never a remediation recipe.
+        self.assertNotIn("sudo apt remove gnome-keyring", manual)
+        self.assertIn("Sensible has not reproduced this on the KDE image", manual)
+        # Cowork packages are architecture-specific.
+        self.assertIn("qemu-system-arm", manual)
+        self.assertIn("qemu-efi-aarch64", manual)
 
     def test_firewall_both_editions_and_failure(self):
         script = self.hook("0300-ufw.hook.chroot")

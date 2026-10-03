@@ -33,15 +33,15 @@
         <p>Every recipe in this chapter needs internet access, and every one of them is a deliberate choice you make after installation. Sensible adds no AI client, no vendor repository, no model weights and no background service. If you skip this chapter entirely, nothing in the image changes.</p>
         <div class="callout info">
           <div class="callout-title">Installing a client is not the same as using one</div>
-          <p>These programs are <strong>clients</strong>: interfaces that send your prompts to somebody else's service and display the replies. Four separate things are easy to confuse, and this chapter keeps them apart:</p>
+          <p>These programs are <strong>clients</strong>. In their documented default configuration they send your prompts to a provider's service and display the replies; a client you point at a local runtime instead never leaves this machine. Every recipe in this chapter documents the remote route, because none of them installs a local runtime or a model for you. Four separate things are easy to confuse, and this chapter keeps them apart:</p>
           <ul>
             <li><strong>The client</strong> is the program you install. Some clients are open source; that says nothing about the service they call.</li>
-            <li><strong>The model</strong> runs on the provider's computers and is billed per token. Installing an open-source client does not make the model open source, free, private or offline.</li>
+            <li><strong>The model</strong> runs on the provider's computers and is billed per token unless you deliberately add a local runtime. Installing an open-source client does not make the model open source, free, private or offline, and it does not give you a local one.</li>
             <li><strong>The account</strong> is the provider's sign-in, and <strong>API billing</strong> is a separate account at the provider's developers' site. A chat subscription normally does not pay for API use, and an API key does not give you the chat app.</li>
-            <li><strong>Offline installation</strong> is only the download. Every prompt, edit review and command in this chapter still needs a network connection unless you deliberately run a local model instead.</li>
+            <li><strong>Offline installation</strong> is only the download. As documented here, every prompt still needs a network connection; only a separately installed local runtime changes that.</li>
           </ul>
         </div>
-        <p>Nothing here needs an AI account. Installing a client does not sign you in, and Sensible works exactly the same whether you install one or not. The last paragraph of each entry says what was tried on Debian Testing, and what was not.</p>
+        <p><strong>Installing</strong> nothing here needs an AI account: no recipe signs you in, and Sensible works exactly the same whether you install a client or not. <strong>Using</strong> the documented, cloud-backed setups does need one — either provider sign-in or an API account with a key, and usually both paid. The last paragraph of each entry says what was tried on Debian Testing, and what was not.</p>
       </section>
       <section id="choose"><h2>Choosing a client</h2>
         <p>These tools overlap. Pick the one that matches your task; installing all of them costs disk space, creates several update paths and multiplies the places a prompt can be stored.</p>
@@ -50,7 +50,7 @@
           <tr><td>ask a one-off question, script the answer, or pipe text through a model</td><td><a href="#llm-cli">LLM</a></td><td>it does not edit your files unless you ask it to, and it is the only entry with a Debian package</td></tr>
           <tr><td>work on code inside an existing OpenAI plan</td><td><a href="#codex">Codex CLI</a> or the <a href="#chatgpt-desktop">ChatGPT desktop app</a></td><td>both call OpenAI; the desktop app is a preview, the CLI is open source</td></tr>
           <tr><td>pair-program with a diff-first workflow you drive yourself</td><td><a href="#aider">Aider</a></td><td>it is a Python tool and the fiddliest install on this list</td></tr>
-          <tr><td>use Anthropic's models from a terminal or desktop</td><td><a href="#claude-code">Claude Code</a> or the <a href="#claude-desktop">Claude desktop app</a></td><td>both need a paid Anthropic plan, not a free one</td></tr>
+          <tr><td>use Anthropic's models from a terminal or desktop</td><td><a href="#claude-code">Claude Code</a> or the <a href="#claude-desktop">Claude desktop app</a></td><td>desktop Chat works on the free plan; Claude Code and the app's Cowork tab need a paid plan or a Console account</td></tr>
           <tr><td>keep everything on this machine</td><td>nothing on this list</td><td>local inference needs a separately chosen runtime and model with its own licence and disk cost</td></tr>
         </tbody></table></div>
         <p>All of the terminal clients assume a modern terminal emulator. The terminals in this image work, although upstream names others as best supported. For editing files by hand, see <a href="applications.html#neovim">Neovim</a> or <a href="applications.html#kate">Kate</a>.</p>
@@ -117,7 +117,7 @@ sudo apt install ./chatgpt_arm64.deb</code></pre>
           <p><strong>Launch:</strong> open <strong>ChatGPT</strong> from the application menu on GNOME or KDE, or run <code>chatgpt</code> in a terminal, then sign in with your ChatGPT account. Sign-in and billing are the vendor's; Sensible has no account and nothing is preconfigured.</p>
           <p><strong>Known limits from the vendor:</strong> no Computer Use on Linux, and native Wayland is experimental. Under Wayland the app uses XWayland when available; <code>chatgpt --ozone-platform=wayland</code> forces native Wayland, where window behaviour may be incomplete.</p>
           <p><strong>Updates:</strong> APT, through the repository the package registered. Run <code>sudo apt update</code> and then <code>sudo apt install --only-upgrade chatgpt</code>, or let your normal system updates bring it forward.</p>
-          <p><strong>Remove:</strong> <code>sudo apt remove chatgpt</code> removes the program and its menu entry, but leaves the OpenAI repository entry, its keyring, the AppArmor profile and <code>/etc/default/chatgpt</code> behind. Delete those too if you do not want OpenAI's repository active: remove the repository entry and its key together, never one without the other, or every later <code>apt update</code> fails.</p>
+          <p><strong>Remove:</strong> <code>sudo apt remove chatgpt</code> removes the program and its menu entry, but leaves the OpenAI repository entry, its keyring, the AppArmor profile and <code>/etc/default/chatgpt</code> behind. Delete those too if you do not want OpenAI's repository active. Only one of those two leftovers can break APT: a configured source whose signing key has been deleted makes every later <code>apt update</code> fail, while an unused key file on its own is harmless. Remove the repository entry first, then the key.</p>
           <p><strong>Sensible validation:</strong> on 2026-10-02 the download installed and removed cleanly on Debian Testing (package <code>chatgpt</code> 26.930.21537, roughly 1.5 GiB installed, dependencies resolved from Debian Testing alone). On 2026-10-03 its GNOME application-menu entry launched the installed app and the app initialized before being closed. KDE launch and the sign-in flow were not tested. <a href="https://developers.openai.com/codex/linux/linux-app">Vendor Linux page</a></p>
         </article>
         <article id="claude-desktop" data-packages="gnupg"><h3>Claude desktop app</h3>
@@ -138,35 +138,41 @@ sudo apt update
 sudo apt install claude-desktop</code></pre>
           <p>The expected fingerprint is <code>31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE</code>. If that line is missing, stop: a wrong key makes every later <code>apt update</code> fail with <code>NO_PUBKEY BAA929FF1A7ECACE</code>. The vendor also documents downloading the <code>.deb</code> straight from the repository, which carries the same key; installing it that way still registers the repository for later updates.</p>
           <p><strong>Try first:</strong> the browser. <a href="https://claude.ai/download">Claude in a browser</a> needs no repository, no key and no extra packages, and on KDE it avoids the keyring problem described below.</p>
-          <p><strong>Launch:</strong> open <strong>Claude</strong> from the application menu, or run <code>claude-desktop</code>, then sign in with a claude.ai subscription or your organization's SSO. The desktop app does not accept a Console API key; use <a href="#claude-code">Claude Code</a> for API-key authentication.</p>
+          <p><strong>Launch:</strong> open <strong>Claude</strong> from the application menu, or run <code>claude-desktop</code>, then sign in with your claude.ai account or your organization's SSO. A free account is enough for Chat; the Cowork tab needs a paid plan. The desktop app does not accept a Console API key; use <a href="#claude-code">Claude Code</a> for API-key authentication.</p>
           <div class="callout warn">
-            <div class="callout-title">KDE: two keyrings conflict</div>
-            <p>The app stores your sign-in in your desktop keyring. On this KDE image that is KWallet, and GNOME Keyring is also installed: with both present the app can warn that your sign-in will not be saved even though KWallet works. Removing the extra keyring fixes it:</p>
-            <pre><code># KDE image only, and only if the app complains about a missing keyring
-sudo apt remove gnome-keyring</code></pre>
-            <p>Do this on the KDE image only. On the GNOME image, keep GNOME Keyring — it is what stores your saved passwords.</p>
+            <div class="callout-title">KDE: a documented keyring caveat Sensible has not tested</div>
+            <p>Anthropic documents that the desktop app stores your sign-in in your desktop keyring, and that when KDE Plasma and GNOME Keyring are both installed it can report that your sign-in will not be saved even though KDE Wallet works. <strong>Sensible has not reproduced this on the KDE image</strong>, because KDE launch and sign-in were not tested here, so treat it as something the vendor warns about rather than a confirmed Sensible fault.</p>
+            <p>If you hit it, do not remove a system credential service on this image's say-so. Removing GNOME Keyring affects other applications that may use it, and Sensible has not tested the result. Follow the vendor's own troubleshooting for the message you see, use the browser route above while you sort it out, and only then consider a keyring change you understand.</p>
           </div>
-          <p><strong>Not in the Linux beta:</strong> Computer Use and voice dictation. Cowork, the tab for longer agent tasks, runs inside a virtual machine the app hosts with QEMU and KVM, so it needs hardware virtualization enabled in firmware, the <code>qemu-system-x86</code>, <code>ovmf</code> and <code>virtiofsd</code> packages, and your account in the <code>kvm</code> group (<code>sudo usermod -aG kvm "$USER"</code>, then log out and back in). Chat does not need any of that.</p>
+          <p><strong>Not in the Linux beta:</strong> Computer Use and voice dictation. Cowork, the tab for longer agent tasks, runs inside a virtual machine the app hosts with QEMU and KVM, so it needs hardware virtualization enabled in firmware, an unlocked <code>/dev/kvm</code>, your account in the <code>kvm</code> group (<code>sudo usermod -aG kvm "$USER"</code>, then log out and back in), and the emulation packages for your own architecture — <code>qemu-system-x86</code> and <code>ovmf</code> on x86_64, <code>qemu-system-arm</code> and <code>qemu-efi-aarch64</code> on ARM64, plus <code>virtiofsd</code> on either. Check which you have with <code>dpkg --print-architecture</code> before installing anything. Chat needs none of this. Cowork also needs a paid plan, unlike Chat.</p>
           <p><strong>Updates:</strong> APT. The app does not update itself on Linux, so new versions arrive with your normal <code>sudo apt update &amp;&amp; sudo apt upgrade</code>, or through your desktop's software updater.</p>
           <p><strong>Remove:</strong> <code>sudo apt remove claude-desktop</code> removes the app and any repository entry and key that its package registered. This recipe created <code>/etc/apt/sources.list.d/claude-desktop.list</code> before installing the package, so check whether it remains and remove it yourself if it does: <code>sudo rm /etc/apt/sources.list.d/claude-desktop.list</code>. Remove <code>/usr/share/keyrings/claude-desktop-archive-keyring.asc</code> too only when no remaining Anthropic repository entry uses it. Run <code>sudo apt update</code> afterward to confirm the repository configuration is healthy.</p>
           <p><strong>Sensible validation:</strong> on 2026-10-02 the key fingerprint verified, and the repository served <code>claude-desktop</code> 2.9939.4 for amd64 with dependencies resolving on Debian Testing (roughly 560 MiB installed, recommended packages include the QEMU set and a keyring). On 2026-10-03 its GNOME application-menu entry launched the installed app and the app initialized before being closed. KDE launch, package removal and the sign-in flow were not tested. <a href="https://code.claude.com/docs/en/desktop-linux">Vendor Linux guide</a></p>
         </article>
       </section>
       <section id="cli"><h2>Terminal clients</h2>
-        <p>Each entry below gives the official route, a first task, who updates the installed copy and how to remove it. Three of the installers download a script from the internet and run it. Read the command before you paste it, and never run one with <code>sudo</code>.</p>
+        <p>Each entry below gives the official route, a first task, who updates the installed copy and how to remove it. Three of the installers are shell scripts fetched from the internet, so each one is shown in three steps: download the script to a file, read it, then run that file. Piping a download straight into a shell starts executing it before the transfer has even finished, so a truncated or substituted download runs partly — which is why <a href="terminal-tools.html#network">Terminal tools &amp; recipes</a> advises against the pipe form. Never run any of these with <code>sudo</code>: each installs files into your own home directory.</p>
         <article id="opencode"><h3>OpenCode</h3>
           <p><strong>What it is:</strong> an open-source coding agent for the terminal, with the same engine also offered as a desktop app and IDE extension. It uses any provider you configure.</p>
           <p><strong>Why considered:</strong> the first Sensible candidate for an open-source terminal agent, and the most flexible about which model provider answers.</p>
           <p><strong>Better fit when:</strong> you want one agent that can switch between providers, or you already use a subscription rather than a paid API key.</p>
-          <p><strong>Install:</strong> the vendor's script installs a single binary into <code>~/.opencode/bin/</code> and adds that directory to your <code>PATH</code> in <code>~/.bashrc</code>. Official alternatives are <code>npm install -g opencode-ai</code>, Homebrew and the GitHub releases, if you prefer a package manager.</p>
-          <pre><code>curl -fsSL https://opencode.ai/install | bash
+          <p><strong>Install:</strong> the vendor's script installs a single binary into <code>~/.opencode/bin/</code> and adds that directory to your <code>PATH</code> in <code>~/.bashrc</code>. Official alternatives are <code>npm install -g opencode-ai</code>, Homebrew and the GitHub releases, if you prefer a package manager. <code>~/Downloads</code> in the recipe below is just a convenient place to keep the file you read; any directory you can write to works.</p>
+          <pre><code># 1. Download the installer to a file instead of piping it into a shell
+curl --fail --location --output ~/Downloads/opencode-install.sh \
+  https://opencode.ai/install
+
+# 2. Read it before running it; press q to leave the viewer
+less ~/Downloads/opencode-install.sh
+
+# 3. Run the file you just read, as your own user
+bash ~/Downloads/opencode-install.sh
 
 # Open a new terminal afterwards, or reload your shell configuration
 source ~/.bashrc
 opencode --version</code></pre>
           <p><strong>Launch and first task:</strong> change into a project directory, run <code>opencode</code>, then describe a small task. <kbd>Tab</kbd> switches between plan mode, which cannot change files, and build mode. <code>/init</code> writes an <code>AGENTS.md</code> description of the project, which upstream recommends committing to Git.</p>
           <p><strong>Accounts and keys:</strong> <code>/connect</code> starts sign-in. OpenCode's own curated model service needs billing details and an API key, which is API billing rather than a chat subscription; other providers can use their own keys. Whichever you choose, the token is written to <code>~/.local/share/opencode/auth.json</code>, a plain file in your home directory — not to the desktop keyring.</p>
-          <p><strong>Updates:</strong> the installer is the update owner — run it again to upgrade. Nothing in Debian supplies or verifies this binary.</p>
+          <p><strong>Updates:</strong> the installer is the update owner — download and run it again to upgrade. Nothing in Debian supplies or verifies this binary.</p>
           <p><strong>Remove:</strong> run <code>opencode uninstall</code>, which lists what it will delete and asks for confirmation; upstream documents it as the uninstall path. Then remove the two <code>opencode</code> lines the installer added to <code>~/.bashrc</code>, and delete <code>~/.local/share/opencode/</code> if you want the credentials, logs and stored sessions gone as well. <code>~/.cache/opencode/</code> holds downloaded provider packages and can be deleted too.</p>
           <p><strong>Sensible validation:</strong> the script installed and ran on Debian Testing on 2026-10-02 (version 1.18.34, roughly 180 MiB in <code>~/.opencode/</code>). No provider was configured and no session was run. <a href="https://opencode.ai/docs/">Upstream introduction</a></p>
         </article>
@@ -187,21 +193,29 @@ pipx install llm
           <p><strong>Local data:</strong> prompts, answers, keys and preferences live under <code>~/.config/io.datasette.llm/</code>. <code>llm logs off</code> stops prompt logging, <code>llm keys path</code> shows the key file, and <code>llm logs status</code> reports the current setting.</p>
           <p><strong>Updates:</strong> APT for the package, <code>pipx upgrade llm</code> for the isolated copy. Each has exactly one owner; do not mix them on the same account.</p>
           <p><strong>Remove:</strong> <code>sudo apt remove llm</code>, or <code>pipx uninstall llm</code>. Both leave <code>~/.config/io.datasette.llm/</code> behind, which is where prompts and keys are stored — remove it deliberately if you want them gone.</p>
-          <p><strong>Sensible validation:</strong> both routes were installed and version-checked on Debian Testing on 2026-10-02 (Debian 0.36-1; <code>pipx</code> 0.36 with system Python 3.14.7 unchanged). No model was called, because that needs your key and your credits. <a href="https://llm.datasette.io/en/stable/setup.html">Upstream setup</a></p>
+          <p><strong>Sensible validation:</strong> both routes were installed and version-checked on Debian Testing on 2026-10-02 (Debian 0.36-1; <code>pipx</code> 0.36 with system Python 3.14.7 unchanged). No prompt was sent: Sensible configured neither a cloud provider nor one of the local-model plugins, so neither route was exercised. <a href="https://llm.datasette.io/en/stable/setup.html">Upstream setup</a></p>
         </article>
         <article id="codex"><h3>Codex CLI</h3>
           <p><strong>What it is:</strong> OpenAI's open-source terminal agent. It inspects a repository, edits files and runs the tools already on your machine, and it also runs non-interactively for scripts and CI.</p>
           <p><strong>Why considered:</strong> the terminal counterpart of a ChatGPT plan, and distinct from the hosted Codex service.</p>
           <p><strong>Better fit when:</strong> you want one agent from a single vendor, or you need <code>codex exec</code> in a repeatable pipeline.</p>
           <p><strong>Install:</strong> the official standalone installer keeps a launcher in <code>~/.local/bin/</code> and its releases under <code>~/.codex/</code>, and adds <code>~/.local/bin</code> to your <code>PATH</code> in <code>~/.profile</code>. An npm install and Homebrew are also documented.</p>
-          <pre><code>curl -fsSL https://chatgpt.com/codex/install.sh | sh
+          <pre><code># 1. Download the installer to a file instead of piping it into a shell
+curl --fail --location --output ~/Downloads/codex-install.sh \
+  https://chatgpt.com/codex/install.sh
+
+# 2. Read it before running it; press q to leave the viewer
+less ~/Downloads/codex-install.sh
+
+# 3. Run the file you just read, as your own user
+sh ~/Downloads/codex-install.sh
 
 # Open a new terminal afterwards, or reload the profile
 source ~/.profile
 codex --version</code></pre>
           <p><strong>Launch and first task:</strong> run <code>codex</code> in a project directory and choose a sign-in method on first use, then ask it to explain the project before it changes anything. <code>/init</code> writes project instructions, <code>/permissions</code> sets what it may touch without asking, and <code>/review</code> reports problems in changes without modifying your working tree.</p>
           <p><strong>Accounts and keys:</strong> signing in with a ChatGPT plan is subscription access; an API key is separate billing. Choose deliberately, because the two behave differently. Either way the credential is cached locally: in plaintext at <code>~/.codex/auth.json</code>, unless you set <code>cli_auth_credentials_store</code> to <code>keyring</code> in <code>config.toml</code>. Use <code>printenv OPENAI_API_KEY | codex login --with-api-key</code> rather than typing a key as an argument.</p>
-          <p><strong>Updates:</strong> run the same install command again. That is the only documented update path for the standalone install.</p>
+          <p><strong>Updates:</strong> download and run the same install script again. That is the only documented update path for the standalone install.</p>
           <p><strong>Remove:</strong> run <code>codex logout</code> first, so the stored credential is cleared while the client can still act on it, and check <code>codex login status</code> afterwards. Then delete <code>~/.codex/</code>, the <code>~/.local/bin/codex</code> symlink, and the <code>PATH</code> line the installer added to <code>~/.profile</code>. <code>rm -f</code> is safe on the symlink because it is not a directory.</p>
           <p><strong>Sensible validation:</strong> the installer ran and <code>codex --version</code> reported 0.160.0 on Debian Testing on 2026-10-02, with roughly 430 MiB under <code>~/.codex/</code>. Sign-in and a real session were not tested. <a href="https://learn.chatgpt.com/docs/codex/cli">Upstream CLI page</a></p>
         </article>
@@ -209,7 +223,15 @@ codex --version</code></pre>
           <p><strong>What it is:</strong> Google's current agent-first terminal client, written in Go. It is the successor to Gemini CLI, and it is what the Gemini CLI command name now leads to.</p>
           <p><strong>Before you install:</strong> Google replaced Gemini CLI for consumer accounts on 2026-06-18. Gemini CLI remains documented only for enterprise and paid Gemini API-key use; if that is your situation, the old <code>gemini</code> command is still installed from <code>npm install -g @google/gemini-cli</code> and removed with <code>npm uninstall -g @google/gemini-cli</code>. For everyone else it stops serving requests. Sensible read those two commands and did not run them.</p>
           <p><strong>Install:</strong> the official script places a single binary at <code>~/.local/bin/agy</code> and does not edit your shell configuration. <code>--skip-aliases</code> also stops it removing any leftover <code>agy</code> shell alias, and <code>--skip-path</code> stops it touching your profile.</p>
-          <pre><code>curl -fsSL https://antigravity.google/cli/install.sh | bash
+          <pre><code># 1. Download the installer to a file instead of piping it into a shell
+curl --fail --location --output ~/Downloads/antigravity-install.sh \
+  https://antigravity.google/cli/install.sh
+
+# 2. Read it before running it; press q to leave the viewer
+less ~/Downloads/antigravity-install.sh
+
+# 3. Run the file you just read, as your own user
+bash ~/Downloads/antigravity-install.sh
 
 # If the command is not found, add it for future terminals
 echo 'export PATH="$HOME/.local/bin:$PATH"' &gt;&gt; ~/.bashrc
@@ -217,7 +239,7 @@ source ~/.bashrc
 agy --version</code></pre>
           <p><strong>Launch and first task:</strong> run <code>agy</code> in a project directory. Sign-in opens your browser, or it reuses a session from your desktop keyring. <code>/permissions</code> and <code>/diff</code> are the two commands to know before letting it change anything.</p>
           <p><strong>Accounts and keys:</strong> browser sign-in is the normal route. A Gemini API key is API billing, needs <code>GEMINI_API_KEY</code> exported in the shell plus a <code>modelProvider</code> setting, and is meant for headless machines.</p>
-          <p><strong>Updates:</strong> the installer is the update owner; run it again. <code>/logout</code> clears the stored session from your keyring.</p>
+          <p><strong>Updates:</strong> the installer is the update owner; download and run it again. <code>/logout</code> clears the stored session from your keyring.</p>
           <p><strong>Remove:</strong> delete <code>~/.local/bin/agy</code> and, if you added the <code>PATH</code> line yourself, the matching line in <code>~/.bashrc</code>. Configuration lives under <code>~/.gemini/</code> and is not removed for you.</p>
           <p><strong>Sensible validation:</strong> the script installed and <code>agy --version</code> reported 1.2.15 on Debian Testing on 2026-10-02 (roughly 200 MiB). Sign-in was not tested. <a href="https://antigravity.google/docs/cli/install">Upstream install page</a></p>
         </article>
@@ -263,7 +285,7 @@ echo "deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude
 sudo apt update
 sudo apt install claude-code
 claude --version</code></pre>
-          <p>The expected fingerprint is <code>31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE</code>. The native alternative, <code>curl -fsSL https://claude.ai/install.sh | bash</code>, installs under <code>~/.local/</code> and self-updates; <code>claude doctor</code> reports install health and whether auto-updates ran.</p>
+          <p>The expected fingerprint is <code>31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE</code>. The native alternative downloads <code>https://claude.ai/install.sh</code> — follow the same download, read, then run steps as the terminal clients above rather than piping it — and installs under <code>~/.local/</code>, self-updating; <code>claude doctor</code> reports install health and whether auto-updates ran.</p>
           <p><strong>Launch and first task:</strong> run <code>claude</code> in a project directory and complete sign-in in the browser it opens. Ask it to read a file before it writes one, and treat every proposed command as a command you would run yourself.</p>
           <p><strong>Updates:</strong> APT for the APT route (<code>sudo apt upgrade claude-code</code>), or the client's own updater for the native route.</p>
           <p><strong>Remove:</strong> <code>sudo apt remove claude-code</code>, and then delete the repository line and the key file yourself — APT does not remove them, and a leftover <code>deb</code> line pointing at a missing key makes every later <code>apt update</code> fail.</p>
@@ -291,11 +313,11 @@ grep -r . /etc/apt/sources.list.d/ | less
 # Review what an optional client left in your home directory
 ls -a ~/ | grep -E "opencode|codex|gemini|pipx|local"
 ls -a ~/.local/share/opencode/ ~/.codex/ ~/.config/io.datasette.llm/ 2&gt;/dev/null</code></pre>
-        <p>Deleting a keyring entry or a configuration directory is a permanent deletion, so look at the contents first. Keep the ordering in mind: remove the repository line and its key together, never one without the other.</p>
+        <p>Deleting a keyring entry or a configuration directory is a permanent deletion, so look at the contents first. Keep the ordering in mind: remove a repository entry before its key: a source left configured without its key is what breaks APT, not an unused key.</p>
         <p>Flatpak and the browsers in <a href="applications.html#flatpak">Flatpak basics</a> offer a different route for some desktop software. Neither is a way to install the terminal clients in this chapter, and no AI client is available as a Flatpak that Sensible has validated.</p>
       </section>
       <section id="limits"><h2>What Sensible has checked</h2>
-        <p>Upstream facts in this chapter were re-read on <strong>2026-10-02</strong>. Vendor documentation, supported distributions, install routes and licensing change; re-check the linked vendor page before relying on a recipe months from now.</p>
+        <p>Upstream facts in this chapter were re-read on <strong>2026-10-03</strong>, and the install, version and removal checks below were run on 2026-10-02 unless the entry says otherwise. Vendor documentation, supported distributions, install routes and licensing change; re-check the linked vendor page before relying on a recipe months from now.</p>
         <div class="table-container"><table><thead><tr><th scope="col">Entry</th><th scope="col">What was tried</th></tr></thead><tbody>
           <tr><td>ChatGPT desktop app</td><td>downloaded, installed and removed on Debian Testing; GNOME menu launch checked, but KDE launch and sign-in flow not tested</td></tr>
           <tr><td>Claude desktop app</td><td>key and package resolved on Debian Testing; GNOME menu launch checked, but KDE launch, package removal and sign-in flow not tested</td></tr>
