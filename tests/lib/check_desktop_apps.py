@@ -739,6 +739,48 @@ esac
         self.assertNotIn("Fausto-Korpsvart", manual)
         self.assertNotIn("good-old-shell", manual)
 
+    def test_manual_ai_chapter_documents_optional_clients(self):
+        chapter = REPO / "manual/ai-tools.html"
+        self.assertTrue(chapter.is_file(), "manual/ai-tools.html is missing")
+        manual = chapter.read_text()
+        # Nothing may be presented as preinstalled, and no credential may appear.
+        self.assertIn("Sensible ships no AI client, no provider account and no model", manual)
+        self.assertIn("Nothing here needs an AI account", manual)
+        self.assertNotIn("sk-", manual)
+        # Client, model, subscription and API billing must stay distinguished.
+        self.assertIn("does not make the model open source, free, private or offline", manual)
+        self.assertIn("A subscription does not normally include API credit", manual)
+        # Untested work is stated in plain language, not a status label.
+        self.assertNotIn("partially checked", manual)
+        self.assertIn("Sensible read those two commands and did not run them.", manual)
+        self.assertIn("GNOME menu launch checked, but KDE launch and sign-in flow not tested", manual)
+        self.assertIn("GNOME menu launch checked, but KDE launch, package removal and sign-in flow not tested", manual)
+        self.assertIn("No AI account was created and no sign-in was completed", manual)
+        # Safety, permissions and untrusted repositories are taught, not assumed.
+        self.assertIn("Run it as yourself, never as root.", manual)
+        self.assertIn("<code>sudo opencode</code> or <code>sudo claude</code>", manual)
+        self.assertIn("AGENTS.md", manual)
+        # Recipes stay inside Debian's package and Python policy.
+        self.assertIn("Do not use <code>sudo pip install</code>", manual)
+        self.assertIn("sudo apt install gnupg", manual)
+        self.assertIn("31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE", manual)
+        self.assertNotIn('id="chatgpt-desktop" data-packages="gnupg"', manual)
+        # Update ownership and leftover state are named, not implied.
+        self.assertIn("Update owner", manual)
+        self.assertIn("sudo apt remove claude-code", manual)
+        self.assertIn("removal left exactly the repository file and key behind", manual)
+        self.assertIn("chatgpt.sources", manual)
+        self.assertIn("sudo apt remove claude-desktop", manual)
+        self.assertIn("sudo rm /etc/apt/sources.list.d/claude-desktop.list", manual)
+        self.assertNotIn("sudo apt purge claude-desktop", manual)
+        self.assertNotIn("\nq\n", manual)
+        # The retired Gemini CLI consumer route is recorded with its date.
+        self.assertIn("2026-06-18", manual)
+        # Claude Desktop is documented from its current official Linux beta guide.
+        self.assertNotIn("unavailable on Linux", manual)
+        self.assertIn("https://code.claude.com/docs/en/desktop-linux", manual)
+        self.assertIn("https://developers.openai.com/codex/linux/linux-app", manual)
+
     def test_firewall_both_editions_and_failure(self):
         script = self.hook("0300-ufw.hook.chroot")
         log = self.root / "calls"

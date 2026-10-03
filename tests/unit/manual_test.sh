@@ -19,9 +19,11 @@ line_count() { wc -l < "$1" | tr -d '[:space:]'; }
 t_section "Manual source and offline integrity"
 assert_file_exists "manual/index.html exists" "${REPO_ROOT}/manual/index.html"
 assert_file_exists "manual/manual.css exists" "${REPO_ROOT}/manual/manual.css"
+assert_file_exists "manual/ai-tools.html exists" "${REPO_ROOT}/manual/ai-tools.html"
 
 manual_html="$(<"${REPO_ROOT}/manual/index.html")"
 manual_css="$(<"${REPO_ROOT}/manual/manual.css")"
+ai_html="$(<"${REPO_ROOT}/manual/ai-tools.html")"
 
 assert_contains "HTML has document language" "${manual_html}" '<html lang="en">'
 assert_contains "HTML has viewport meta tag" "${manual_html}" '<meta name="viewport"'
@@ -29,6 +31,24 @@ assert_contains "HTML has skip link" "${manual_html}" 'class="skip-link"'
 assert_contains "HTML contains main element with id" "${manual_html}" '<main id="main"'
 assert_contains "HTML contains navigation landmark" "${manual_html}" '<nav'
 assert_contains "HTML contains footer" "${manual_html}" '<footer'
+
+# The optional AI chapter must stay a readable, offline, do-it-yourself chapter.
+assert_contains "AI chapter has document language" "${ai_html}" '<html lang="en">'
+assert_contains "AI chapter marks itself as the current page" "${ai_html}" \
+    'href="ai-tools.html" aria-current="page"'
+assert_contains "AI chapter states no client is preinstalled" "${ai_html}" \
+    'Sensible ships no AI client'
+assert_contains "AI chapter explains shell variables before recipes" "${ai_html}" \
+    '<code>$USER</code> is your login name'
+assert_contains "AI chapter states the KDE launch limit" "${ai_html}" \
+    'KDE launch and sign-in flow not tested'
+assert_not_contains "AI chapter uses no status shorthand" "${ai_html}" \
+    'partially checked'
+assert_not_contains "AI chapter adds no credential" "${ai_html}" "sk-"
+assert_not_contains "AI chapter never runs an installer as root" "${ai_html}" "sudo sh"
+assert_not_contains "AI chapter never pip-installs as root" "${ai_html}" "sudo pip install llm"
+assert_not_contains "AI chapter does not claim nothing was staged" "${ai_html}" \
+    'nothing here has been staged onto an image'
 
 # Required assets are self-contained; optional outbound support links are allowed.
 assert_not_contains "No external http:// assets in CSS" "${manual_css}" "url(http://"
@@ -289,7 +309,7 @@ if python3 "${REPO_ROOT}/tests/lib/check_manual.py" "${MNT}/usr/share/sensible/m
 else
     t_fail "staged manual links and app coverage" "chapter validation failed"
 fi
-for chapter in applications.html terminal-tools.html; do
+for chapter in applications.html terminal-tools.html ai-tools.html; do
     mv "${MNT}/usr/share/sensible/manual/${chapter}" "${TMP_DIR}/${chapter}"
     rc=0
     require_manual_payload "$MNT" >/dev/null 2>&1 || rc=$?
