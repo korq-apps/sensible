@@ -671,12 +671,19 @@ planned; standalone biometric tools are implemented, with usage tracked in
 
 - [ ] [Curated AI manual](AI_TOOLS.md): tool-selection rationale, safe usage,
   official optional installation/update/removal recipes, and current Linux
-  support for Claude Code, Claude Desktop and ChatGPT desktop.
+  support for Claude Code, Claude Desktop and ChatGPT desktop. The chapter ships
+  as `manual/ai-tools.html` with navigation, staging, payload checks and offline
+  tests, and each recipe says what was tried and what was not. **Still open:**
+  #23's acceptance also asks for both editions' launch and removal paths, and KDE
+  launch plus Claude Desktop package removal are untested, so this stays
+  unchecked until a KDE session covers them. The upstream re-verification log is
+  in [AI_TOOLS.md](AI_TOOLS.md).
 - [ ] Evaluate OpenCode as the first open-source CLI candidate and LLM as a
   complement. Decide small preinstalled core versus all-opt-in delivery before
   packaging; keep proprietary clients optional and installation/first login
-  offline. Codex CLI, Gemini CLI and Aider are curated alternatives, not an
-  agreement to bundle every agent.
+  offline. Codex CLI, Antigravity CLI and Aider are curated alternatives, not
+  an agreement to bundle every agent. Gemini CLI left the consumer shortlist on
+  2026-06-18.
 - [ ] Evaluate tmux/tealdeer and an isolated Python-tool installation mechanism;
   reconcile with the existing `gh`/`lazygit` developer-tools scope above.
 - [ ] Evaluate optional local inference separately; no bundled model weights,

@@ -51,6 +51,80 @@ jobs:
       contents: read
 
     steps:
+      # This job needs the same pre-checkout cleanup the ISO build job already
+      # does, for the same reason: the Howdy container also runs as root and
+      # bind-mounts the workspace read-write, so a prior run can leave
+      # root-owned entries here. build-howdy-package.sh hands ownership back on
+      # exit (trap restore_owner EXIT), but a cancelled or killed run skips that
+      # trap. actions/checkout then fails on `git clean -ffdx` with "Permission
+      # denied", decides to recreate the repository, deletes the tree including
+      # .git, and the job surfaces as a checkout failure with no build step ever
+      # running. Clean from inside a one-shot container as root, so no sudoers
+      # rule is needed; keep this step ahead of checkout. Same step, same
+      # privilege model and same guards as the ISO build job below -- if you
+      # change one, change both.
+      - name: Clean live-build leftovers from prior runs
+        if: always()
+        env:
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          if command -v podman >/dev/null 2>&1; then
+            ENGINE=podman
+          elif command -v docker >/dev/null 2>&1; then
+            ENGINE=docker
+          else
+            echo "::error::Neither podman nor docker is available to the runner user; cannot clean root-owned live-build leftovers."
+            exit 1
+          fi
+          echo "==> Cleaning workspace via ${ENGINE} (no sudo required)"
+          "${ENGINE}" run --rm \
+            -v "${WORKSPACE}:/workspace:rw" \
+            alpine:3 \
+            sh -c '
+            set -eu
+            # Stale live-build outputs, regardless of owner: the build wipes
+            # these at the start of every run anyway (see build-stages.sh),
+            # so removing them here only moves the same deletion ahead of
+            # git clean / checkout.
+            rm -rf \
+              /workspace/live/chroot \
+              /workspace/live/.build \
+              /workspace/live/binary \
+              /workspace/live/cache \
+              /workspace/live/local \
+              /workspace/live/binary.modified_timestamps \
+              /workspace/live/chroot.files \
+              /workspace/live/chroot.packages.install \
+              /workspace/live/chroot.packages.live \
+              /workspace/live/sensible-* \
+              /workspace/sensible-*-debian-testing-amd64.iso \
+              /workspace/sensible-*-debian-testing-amd64.iso.sha256
+            # Sweep anything else left owned by host root (uid 0) anywhere
+            # in the workspace -- future live-build output locations
+            # included. Guard: with a rootless/userns engine the workspace
+            # owner maps to container root, and -user 0 would then match
+            # runner-owned files, so the sweep must not run.
+            ws_uid="$(stat -c %u /workspace)"
+            if [ "${ws_uid}" = "0" ]; then
+              echo "==> workspace owner maps to container root (userns engine); skipping root-owned sweep"
+            else
+              echo "==> sweeping host-root-owned leftovers"
+              find /workspace -xdev -depth -user 0 -exec rm -rf -- {} +
+              leftovers="$(find /workspace -xdev -user 0 -print -quit)"
+              if [ -n "${leftovers}" ]; then
+                echo "::error::Root-owned workspace entries remain after cleanup: ${leftovers}"
+                exit 1
+              fi
+            fi
+            for p in /workspace/live/chroot /workspace/live/.build /workspace/live/binary /workspace/live/cache; do
+              if [ -e "${p}" ]; then
+                echo "::error::${p} still exists after cleanup"
+                exit 1
+              fi
+            done
+            echo "==> workspace clean"
+            '
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:

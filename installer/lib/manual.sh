@@ -6,6 +6,7 @@ require_manual_payload() {
     for asset in usr/share/sensible/manual/index.html \
         usr/share/sensible/manual/applications.html \
         usr/share/sensible/manual/terminal-tools.html \
+        usr/share/sensible/manual/ai-tools.html \
         usr/share/sensible/manual/manual.css \
         usr/share/sensible/manual/sensible-manual-autostart.desktop \
         usr/share/applications/sensible-manual.desktop \

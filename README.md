@@ -98,17 +98,22 @@ targeted desktop and installed-system release checks.
 `sensible-manual`. The [local HTML manual](manual/index.html) opens on the
 installed user's first desktop login; failed launches retry next login. It
 needs no internet connection and remains available from the menu afterward.
-Its linked chapters explain [everyday application choices](manual/applications.html)
-and give [terminal-tool recipes](manual/terminal-tools.html), including the
-distinction between finding filenames, searching contents and filtering lists.
+Its linked chapters explain [everyday application choices](manual/applications.html),
+give [terminal-tool recipes](manual/terminal-tools.html), including the
+distinction between finding filenames, searching contents and filtering lists,
+and document [optional AI clients](manual/ai-tools.html) that are never
+preinstalled.
 
 **Curated optional online app:** [Brave Origin](manual/applications.html#brave-origin), the separate `brave-origin` package, with its official one-line installer documented in the manual. It is not preinstalled. Audacious also remains optional/post-install; Flathub is already enabled for adding further apps.
 
-**Not currently offered:** AI CLIs. The [AI tools follow-up plan](docs/AI_TOOLS.md)
-evaluates a small open-source core versus opt-in installation, with proprietary
-clients optional and a dedicated manual chapter. Any approved image artifacts
-will be pinned and verified at build time, never fetched during installation
-or first login.
+**Not currently offered:** AI CLIs. No AI client, account, model or vendor
+repository is part of the image, and no AI account is needed to install or use
+Sensible. The offline manual's [AI tools chapter](manual/ai-tools.html) explains
+how to choose a client, what it sends off this machine, and how to install,
+update or remove an optional one; the [AI tools plan](docs/AI_TOOLS.md) still
+evaluates a small open-source core versus all-opt-in delivery. Any approved
+image artifacts will be pinned and verified at build time, never fetched during
+installation or first login.
 
 **Included, no question asked:** fingerprint login (`fprintd`, dormant without a reader), oh-my-bash for all users with a two-line Powerline prompt, system-wide git defaults, Powerline symbols and JetBrainsMono Nerd Font, `ufw` firewall (deny incoming / allow outgoing, KDE Connect-aware), and printing/scanning (CUPS driverless + `sane-airscan`) — all baked into the image at build time.
 

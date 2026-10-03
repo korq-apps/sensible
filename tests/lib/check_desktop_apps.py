@@ -739,6 +739,119 @@ esac
         self.assertNotIn("Fausto-Korpsvart", manual)
         self.assertNotIn("good-old-shell", manual)
 
+    def test_manual_ai_chapter_documents_optional_clients(self):
+        chapter = REPO / "manual/ai-tools.html"
+        self.assertTrue(chapter.is_file(), "manual/ai-tools.html is missing")
+        manual = chapter.read_text()
+        # Nothing may be presented as preinstalled, and no credential may appear.
+        self.assertIn("Sensible ships no AI client, no provider account and no model", manual)
+        self.assertIn("<strong>Installing</strong> nothing here needs an AI account", manual)
+        self.assertNotIn("Nothing here needs an AI account.", manual)
+        self.assertIn("<strong>Using</strong> the documented, cloud-backed setups does need one", manual)
+        self.assertNotIn("sk-", manual)
+        # Client, model, subscription and API billing must stay distinguished.
+        self.assertIn("does not make the model open source, free, private or offline", manual)
+        self.assertIn("A subscription does not normally include API credit", manual)
+        # Untested work is stated in plain language, not a status label.
+        self.assertNotIn("partially checked", manual)
+        self.assertIn("Sensible read those two commands and did not run them.", manual)
+        self.assertIn("GNOME menu launch checked, but KDE launch and sign-in flow not tested", manual)
+        self.assertIn("GNOME menu launch checked, but KDE launch, package removal and sign-in flow not tested", manual)
+        self.assertIn("No AI account was created and no sign-in was completed", manual)
+        # Safety, permissions and untrusted repositories are taught, not assumed.
+        self.assertIn("Run it as yourself, never as root.", manual)
+        self.assertIn("<code>sudo opencode</code> or <code>sudo claude</code>", manual)
+        self.assertIn("AGENTS.md", manual)
+        # Recipes stay inside Debian's package and Python policy.
+        self.assertIn("Do not use <code>sudo pip install</code>", manual)
+        self.assertIn("sudo apt install gnupg", manual)
+        self.assertIn("31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE", manual)
+        self.assertNotIn('id="chatgpt-desktop" data-packages="gnupg"', manual)
+        # Update ownership and leftover state are named, not implied.
+        self.assertIn("Update owner", manual)
+        self.assertIn("sudo apt remove claude-code", manual)
+        self.assertIn("removal left exactly the repository file and key behind", manual)
+        self.assertIn("chatgpt.sources", manual)
+        self.assertIn("sudo apt remove claude-desktop", manual)
+        self.assertIn("sudo rm /etc/apt/sources.list.d/claude-desktop.list", manual)
+        self.assertNotIn("sudo apt purge claude-desktop", manual)
+        self.assertNotIn("\nq\n", manual)
+        # The retired Gemini CLI consumer route is recorded with its date.
+        self.assertIn("2026-06-18", manual)
+        # Claude Desktop is documented from its current official Linux beta guide.
+        self.assertNotIn("unavailable on Linux", manual)
+        self.assertIn("https://code.claude.com/docs/en/desktop-linux", manual)
+        self.assertIn("https://developers.openai.com/codex/linux/linux-app", manual)
+        # Credential storage is client-specific: never promise a keyring for all.
+        self.assertNotIn("the client stores the session in your desktop keyring", manual)
+        self.assertIn("where the client keeps the resulting token is client-specific", manual)
+        self.assertIn("~/.local/share/opencode/auth.json", manual)
+        self.assertIn("~/.codex/auth.json", manual)
+        self.assertIn("cli_auth_credentials_store", manual)
+        self.assertIn("codex logout", manual)
+        # Both desktop packages must document the ARM64 route, not just amd64.
+        self.assertIn("chatgpt_arm64.deb", manual)
+        self.assertIn("sudo apt install ./chatgpt_arm64.deb", manual)
+        self.assertIn("dpkg --print-architecture", manual)
+        # No recipe may contradict the chapter's own key-hygiene rule.
+        self.assertNotIn("--api-key deepseek", manual)
+        self.assertNotIn("<code>--api-key</code> options", manual)
+        self.assertIn("shell history", manual)
+        # Aider removal must be reproducible, in the order that actually works.
+        self.assertIn('"$(pipx environment --value PIPX_HOME)/venvs/aider-install/bin/uv" tool uninstall aider-chat', manual)
+        self.assertLess(manual.index("bin/uv\" tool uninstall aider-chat"),
+                        manual.index("pipx uninstall aider-install"))
+        self.assertIn("~/.local/share/uv/python/", manual)
+        # Subscription and API-platform accounts stay distinct for Claude Code.
+        self.assertIn("a Console account is Anthropic's API platform", manual)
+        self.assertNotIn("a subscription plan is what pays for it", manual)
+        # OpenCode removal uses the documented command, not manual guesswork.
+        self.assertIn("opencode uninstall", manual)
+        # No installer may be piped into a shell; each is downloaded and read first.
+        self.assertNotIn("| bash", manual)
+        self.assertNotIn("| sh", manual)
+        self.assertNotIn("|bash", manual)
+        for script in ("opencode-install.sh", "codex-install.sh", "antigravity-install.sh"):
+            self.assertIn(script, manual)
+            self.assertLess(manual.index(f"--output ~/Downloads/{script}"),
+                            manual.index(f"less ~/Downloads/{script}"))
+        self.assertIn("Piping a download straight into a shell starts executing it", manual)
+        # Remote use is the documented route, not an intrinsic property.
+        self.assertIn("In their documented default configuration they send your prompts to a provider's service", manual)
+        self.assertIn("none of them installs a local runtime or a model for you", manual)
+        self.assertIn("neither route was exercised", manual)
+        # Desktop Chat is free; only Cowork and Claude Code need a paid plan.
+        self.assertIn("A free account is enough for Chat; the Cowork tab needs a paid plan", manual)
+        # An unused key is harmless; a source without its key is what breaks APT.
+        self.assertIn("Only one of those two leftovers can break APT", manual)
+        self.assertIn("an unused key file on its own is harmless", manual)
+        # The KDE keyring item stays a caveat, never a remediation recipe.
+        self.assertNotIn("sudo apt remove gnome-keyring", manual)
+        self.assertIn("Sensible has not reproduced this on the KDE image", manual)
+        # Cowork packages are architecture-specific.
+        self.assertIn("qemu-system-arm", manual)
+        self.assertIn("qemu-efi-aarch64", manual)
+        # A destructive Git command must never be presented as an undo. It may
+        # still be named, but only in the warning that rules it out.
+        self.assertNotIn("git reset --hard HEAD~1", manual)
+        self.assertNotIn("and <code>git reset --hard HEAD~1</code> undoes", manual)
+        self.assertIn("Avoid <code>git reset --hard</code> as an undo", manual)
+        self.assertIn("<code>/undo</code> reverses Aider's last commit", manual)
+        self.assertIn("git revert HEAD", manual)
+        # A .env file is only safe once Git is told to ignore it.
+        self.assertIn("git check-ignore", manual)
+        self.assertIn("but never <code>.env</code>", manual)
+        self.assertNotIn("an untracked <code>.env</code> file", manual)
+        # The Antigravity recipe owns its single profile change.
+        self.assertIn("antigravity-install.sh --skip-aliases --skip-path", manual)
+        self.assertIn("the one <code>PATH</code> line in <code>~/.bashrc</code>", manual)
+        # Shared uv directories must not be presented as safe Aider cleanup.
+        self.assertIn("Those uv directories are shared, not Aider's alone", manual)
+        self.assertNotIn("Delete those two directories yourself", manual)
+        # The chapter text ships in the image; the clients do not.
+        index = (REPO / "manual/index.html").read_text()
+        self.assertIn("The text ships in the image; the clients do not", index)
+
     def test_firewall_both_editions_and_failure(self):
         script = self.hook("0300-ufw.hook.chroot")
         log = self.root / "calls"
