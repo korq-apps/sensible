@@ -69,7 +69,7 @@ no sign-in, session, price or quota claim was made.
 | Codex CLI | none | `curl -fsSL https://chatgpt.com/codex/install.sh \| sh` → `~/.local/bin/codex` into `~/.codex/`, PATH line in `~/.profile` | install, `codex --version` 0.160.0, ~430 MiB |
 | Antigravity CLI | none | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` → `~/.local/bin/agy`, no profile edit | install, `agy --version` 1.2.15, ~200 MiB |
 | Gemini CLI | none | `npm install -g @google/gemini-cli` (consumer access withdrawn 2026-06-18) | documentation only |
-| Aider | none | `sudo apt install pipx` → `pipx install aider-install` → `aider-install` | install, `aider --version` 0.86.2, system Python unchanged |
+| Aider | none | `sudo apt install pipx` → `pipx install aider-install` → `aider-install` | install, `aider --version` 0.86.2, system Python unchanged; removal order re-run as a non-root user on 2026-10-03 |
 | Claude Code | none | signed APT repo `https://downloads.claude.ai/claude-code/apt/stable`; key fingerprint `31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE` | key fingerprint, `apt install claude-code`, `claude --version` 2.1.285, ~230 MiB, removal left repo file and key behind |
 | ChatGPT desktop | `chatgpt` 26.930.21537 from the `.deb` | `sudo apt install ./chatgpt_amd64.deb`; vendor lists Ubuntu 24.04/26.04, Debian 13, Fedora 43/44, Arch — **not** Debian Testing | download, install (~1.5 GiB), `chatgpt.sources` and keyring registration, `chatgpt --version`, removal left keyring, AppArmor profile, source entry and `/etc/default/chatgpt` behind |
 | Claude Desktop | `claude-desktop` 2.9939.4 from Anthropic's APT repo | official Linux beta; Debian 12+/Ubuntu 22.04+ (Testing meets it, untested upstream) | key fingerprint, dependency resolution on Testing (~560 MiB, recommends QEMU set and a keyring), removal semantics of its `postrm` inspected |
@@ -95,6 +95,21 @@ Findings that changed earlier notes:
   inside a `pipx` environment works and is the documented route.
 - **Codex CLI gained an official standalone Linux installer**; the npm and
   Homebrew routes remain.
+- **Credential storage is client-specific, and two clients default to a plain
+  file.** OpenCode keeps API keys and OAuth tokens in
+  `~/.local/share/opencode/auth.json`; Codex caches login details in plaintext
+  at `~/.codex/auth.json` unless `cli_auth_credentials_store` is set to
+  `keyring`. Antigravity CLI and Anthropic's desktop app document keyring
+  storage. Do not describe a browser sign-in as keyring-protected in general.
+- **The Aider removal route needs its exact commands.** `aider-install` keeps
+  its own `uv` inside the pipx environment, so a bare `uv tool uninstall
+  aider-chat` fails for an ordinary user. The working order is
+  `"$(pipx environment --value PIPX_HOME)/venvs/aider-install/bin/uv" tool
+  uninstall aider-chat` then `pipx uninstall aider-install`; afterwards
+  `~/.local/share/uv/python/` (~112 MiB) and `~/.cache/uv/` (~572 MiB) remain.
+- **ChatGPT publishes an ARM64 package** (`chatgpt_arm64.deb`) and APT refuses
+  the amd64 build on aarch64; the manual documents both downloads instead of
+  implying the amd64 file is universal.
 - The chapter says what was tried. Sign-in, model calls, prices, quotas and
   KDE launch stay untested.
 

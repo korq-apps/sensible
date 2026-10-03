@@ -780,6 +780,31 @@ esac
         self.assertNotIn("unavailable on Linux", manual)
         self.assertIn("https://code.claude.com/docs/en/desktop-linux", manual)
         self.assertIn("https://developers.openai.com/codex/linux/linux-app", manual)
+        # Credential storage is client-specific: never promise a keyring for all.
+        self.assertNotIn("the client stores the session in your desktop keyring", manual)
+        self.assertIn("where the client keeps the resulting token is client-specific", manual)
+        self.assertIn("~/.local/share/opencode/auth.json", manual)
+        self.assertIn("~/.codex/auth.json", manual)
+        self.assertIn("cli_auth_credentials_store", manual)
+        self.assertIn("codex logout", manual)
+        # Both desktop packages must document the ARM64 route, not just amd64.
+        self.assertIn("chatgpt_arm64.deb", manual)
+        self.assertIn("sudo apt install ./chatgpt_arm64.deb", manual)
+        self.assertIn("dpkg --print-architecture", manual)
+        # No recipe may contradict the chapter's own key-hygiene rule.
+        self.assertNotIn("--api-key deepseek", manual)
+        self.assertNotIn("<code>--api-key</code> options", manual)
+        self.assertIn("shell history", manual)
+        # Aider removal must be reproducible, in the order that actually works.
+        self.assertIn('"$(pipx environment --value PIPX_HOME)/venvs/aider-install/bin/uv" tool uninstall aider-chat', manual)
+        self.assertLess(manual.index("bin/uv\" tool uninstall aider-chat"),
+                        manual.index("pipx uninstall aider-install"))
+        self.assertIn("~/.local/share/uv/python/", manual)
+        # Subscription and API-platform accounts stay distinct for Claude Code.
+        self.assertIn("a Console account is Anthropic's API platform", manual)
+        self.assertNotIn("a subscription plan is what pays for it", manual)
+        # OpenCode removal uses the documented command, not manual guesswork.
+        self.assertIn("opencode uninstall", manual)
 
     def test_firewall_both_editions_and_failure(self):
         script = self.hook("0300-ufw.hook.chroot")
