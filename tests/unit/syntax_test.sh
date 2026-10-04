@@ -247,6 +247,37 @@ assert_eq "CI uploads ISO, checksum, torrent and magnet as direct files" 4 "$dir
 assert_eq "CI adds exactly one archived upload: the Howdy-next package directory" 5 "$total_uploads"
 assert_contains "CI builds the Howdy-next package once and hands it to both ISO builds" "$workflow_source" 'name: howdy-next-package'
 assert_contains "ISO jobs wait for the package job" "$workflow_source" 'needs: [tests, package]'
+# Both self-hosted jobs bind-mount the workspace into a root container, so a
+# cancelled run can leave root-owned files that actions/checkout cannot delete.
+# Without a cleanup step ahead of checkout the job dies in the checkout step
+# itself and no build ever runs. Assert the ordering, not just the presence.
+workspace_clean_order() {
+    awk -v job="$1" '
+        $0 ~ "^  " job ":$" { in_job=1; next }
+        in_job && /^  [a-z]/ { in_job=0 }
+        in_job && /- name: Clean live-build leftovers/ { clean=NR }
+        in_job && /- name: Checkout repository/ { checkout=NR }
+        END {
+            if (!clean || !checkout) { print "missing"; exit }
+            print (clean < checkout) ? "before" : "after"
+        }
+    ' "${REPO_ROOT}/.github/workflows/build-iso.yml"
+}
+assert_eq "Howdy package job cleans root-owned leftovers before checkout" "before" "$(workspace_clean_order package)"
+assert_eq "ISO build job cleans root-owned leftovers before checkout" "before" "$(workspace_clean_order build)"
+# The cleanup must escalate through the container engine as root, not sudo, and
+# must refuse to run the root-owned sweep under a userns engine that maps the
+# workspace owner to container root.
+root_sweeps="$(grep -cF -- '-user 0 -exec rm -rf -- {} +' <<< "$workflow_source")"
+assert_eq "both self-hosted jobs sweep host-root-owned leftovers from a container" 2 "$root_sweeps"
+assert_contains "cleanup skips the root-owned sweep on a userns engine" "$workflow_source" \
+    'skipping root-owned sweep'
+assert_contains "cleanup fails closed when root-owned entries remain" "$workflow_source" \
+    'Root-owned workspace entries remain after cleanup'
+host_ownership_checks="$(grep -cF 'find "${WORKSPACE}" -xdev -uid 0 -print -quit' <<< "$workflow_source")"
+assert_eq "both cleanup steps verify real host ownership" 2 "$host_ownership_checks"
+container_cleanups="$(grep -cF 'Neither podman nor docker is available to the runner user' <<< "$workflow_source")"
+assert_eq "both self-hosted jobs fail closed without a container engine" 2 "$container_cleanups"
 assert_contains "container build stages the face-login stack after pins" "$(<"${REPO_ROOT}/live/build-stages.sh")" 'bash /workspace/scripts/stage-biometrics.sh'
 assert_contains "container build prepares the Howdy-next package on the host" "$(<"${REPO_ROOT}/live/build.sh")" 'scripts/build-howdy-package.sh'
 assert_contains "native build stages the face-login stack after pins" "$(<"${REPO_ROOT}/scripts/build-native.sh")" 'scripts/stage-biometrics.sh'

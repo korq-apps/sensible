@@ -121,4 +121,11 @@ if kill -0 "$(<"${WORK}/container.pid")" 2>/dev/null; then
     t_fail "cancellation left container client running"
 else t_ok; fi
 
+t_section "pre-checkout cleanup verifies host ownership in both jobs"
+if python3 "${REPO_ROOT}/tests/lib/check_ci_cleanup.py"; then
+    t_ok
+else
+    t_fail "workspace cleanup ownership guards" "runtime checks failed"
+fi
+
 t_summary
