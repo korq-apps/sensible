@@ -274,6 +274,8 @@ assert_contains "cleanup skips the root-owned sweep on a userns engine" "$workfl
     'skipping root-owned sweep'
 assert_contains "cleanup fails closed when root-owned entries remain" "$workflow_source" \
     'Root-owned workspace entries remain after cleanup'
+host_ownership_checks="$(grep -cF 'find "${WORKSPACE}" -xdev -uid 0 -print -quit' <<< "$workflow_source")"
+assert_eq "both cleanup steps verify real host ownership" 2 "$host_ownership_checks"
 container_cleanups="$(grep -cF 'Neither podman nor docker is available to the runner user' <<< "$workflow_source")"
 assert_eq "both self-hosted jobs fail closed without a container engine" 2 "$container_cleanups"
 assert_contains "container build stages the face-login stack after pins" "$(<"${REPO_ROOT}/live/build-stages.sh")" 'bash /workspace/scripts/stage-biometrics.sh'

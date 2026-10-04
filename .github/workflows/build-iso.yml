@@ -122,8 +122,19 @@ jobs:
                 exit 1
               fi
             done
-            echo "==> workspace clean"
+            echo "==> container cleanup complete"
             '
+          # Container UIDs may be namespaced. Check real host ownership even
+          # when the container skipped its sweep, including .build/biometrics.
+          if ! leftovers="$(find "${WORKSPACE}" -xdev -uid 0 -print -quit)"; then
+            echo "::error::Cannot verify workspace ownership on the host; refusing checkout."
+            exit 1
+          fi
+          if [ -n "${leftovers}" ]; then
+            echo "::error::Host-root-owned workspace entries remain after cleanup: ${leftovers}. Clean them with a rootful engine before retrying."
+            exit 1
+          fi
+          echo "==> workspace clean"
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -255,8 +266,19 @@ jobs:
                 exit 1
               fi
             done
-            echo "==> workspace clean"
+            echo "==> container cleanup complete"
             '
+          # Container UIDs may be namespaced. Check real host ownership even
+          # when the container skipped its sweep, including .build/biometrics.
+          if ! leftovers="$(find "${WORKSPACE}" -xdev -uid 0 -print -quit)"; then
+            echo "::error::Cannot verify workspace ownership on the host; refusing checkout."
+            exit 1
+          fi
+          if [ -n "${leftovers}" ]; then
+            echo "::error::Host-root-owned workspace entries remain after cleanup: ${leftovers}. Clean them with a rootful engine before retrying."
+            exit 1
+          fi
+          echo "==> workspace clean"
 
       - name: Checkout repository
         uses: actions/checkout@v4

@@ -60,10 +60,12 @@ environment, not `sudo pip` or changes to Debian's system Python.
 
 Checked against the vendors' own documentation and, where the tool is a
 downloadable client, installed in a disposable Debian Testing (forky)
-container on x86_64. Removal was exercised only where the table below says so:
-the ChatGPT desktop package, `claude-code` and the Aider route. Every other
-entry was installed and version-checked, not removed. No account, API key or
-paid service was used, so no sign-in, session, price or quota claim was made.
+container on x86_64. The table records each entry's actual checks: Gemini CLI
+was documentation-only; Claude Desktop had its key and dependencies checked
+and its removal script inspected, followed by the GNOME launch below. In that
+round, removal was exercised only for the ChatGPT desktop package, `claude-code` and the
+Aider route. No account, API key or paid service was used, so no sign-in,
+session, price or quota claim was made.
 
 | Entry | Debian Testing package | Verified upstream route | What was exercised |
 | :--- | :--- | :--- | :--- |
@@ -81,6 +83,14 @@ On 2026-10-03, the installed ChatGPT and Claude desktop entries were also
 launched through GNOME's application launcher on a Wayland session. Both
 processes initialized and were then closed; no prompt or sign-in workflow was
 performed. KDE launch remains untested, as does Claude Desktop package removal.
+
+On 2026-10-04, the corrected Aider and LLM `pipx` recipes were run as separate
+fresh non-root users in a disposable Debian Testing container. `pipx ensurepath`
+and the current-shell PATH export made both launchers available immediately
+and in a new interactive Bash shell using Sensible's bashrc. Aider 0.86.2 and
+LLM 0.36 reported their versions; `llm models` listed models without making a
+model call. Aider's documented two-step removal and `pipx uninstall llm` also
+passed. No provider, key or account was configured.
 
 Findings that changed earlier notes:
 

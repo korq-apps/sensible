@@ -188,8 +188,11 @@ llm --version
 # Route B: pipx, isolated from the system Python
 sudo apt install pipx
 pipx install llm
-~/.local/bin/llm --version</code></pre>
-          <p><strong>Launch and first task:</strong> <code>llm plugins</code> lists available models, <code>llm keys set openai</code> stores a key without echoing it, and <code>llm "explain what a tarball is in two sentences"</code> sends your first prompt. Everything runs in the terminal; there is no GUI to open.</p>
+# Add launchers to future terminals and to this terminal
+pipx ensurepath
+export PATH="$HOME/.local/bin:$PATH"
+llm --version</code></pre>
+          <p><strong>Launch and first task:</strong> <code>llm models</code> lists available models, <code>llm plugins</code> lists installed plugins, <code>llm keys set openai</code> stores a key without echoing it, and <code>llm "explain what a tarball is in two sentences"</code> sends your first prompt. Everything runs in the terminal; there is no GUI to open.</p>
           <p><strong>Local data:</strong> prompts, answers, keys and preferences live under <code>~/.config/io.datasette.llm/</code>. <code>llm logs off</code> stops prompt logging, <code>llm keys path</code> shows the key file, and <code>llm logs status</code> reports the current setting.</p>
           <p><strong>Updates:</strong> APT for the package, <code>pipx upgrade llm</code> for the isolated copy. Each has exactly one owner; do not mix them on the same account.</p>
           <p><strong>Remove:</strong> <code>sudo apt remove llm</code>, or <code>pipx uninstall llm</code>. Both leave <code>~/.config/io.datasette.llm/</code> behind, which is where prompts and keys are stored — remove it deliberately if you want them gone.</p>
@@ -251,6 +254,9 @@ agy --version</code></pre>
           <pre><code># Isolated, and Debian's own Python is left alone
 sudo apt install pipx
 pipx install aider-install
+# Add launchers to future terminals and to this terminal
+pipx ensurepath
+export PATH="$HOME/.local/bin:$PATH"
 aider-install
 
 aider --version</code></pre>
