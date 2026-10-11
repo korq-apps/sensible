@@ -1,318 +1,102 @@
-# AI tools and CLI follow-ups
+# AI tools
 
-Status: **manual chapter shipped; no AI client is installed**. Originally
-recorded 2026-09-06; ticket links added 2026-09-10; upstream re-verified
-2026-10-02 and again on 2026-10-03, with the
-[curated manual chapter](#delivered-the-ai-tools-manual-chapter) added
-2026-10-02. No AI client, provider account, model weights or new repository is
-added to any image by this plan. The upstream availability recorded before
-2026-10-02 was a dated starting point; the table and verification log below
-supersede it.
+Sensible ships an [offline AI tools manual](../manual/ai-tools.html) for
+optional, user-installed clients. No AI client, provider account, model weights
+or vendor repository is included in either image.
 
-## Intent and proposed delivery
+This document defines the delivery scope, packaging requirements and remaining
+work. Installation, usage, privacy and removal instructions belong in the manual.
 
-Provide a small, explained selection for both GNOME and KDE, with the same
-terminal capabilities in each edition. Teach users how to choose a tool,
-not just how to install a list of overlapping coding agents.
+## Scope and delivery
 
-Proposed: evaluate OpenCode as the first preinstalled open-source client,
-and LLM as a complementary general-purpose CLI. Other agents and proprietary
-desktop clients remain optional, online, post-install choices. **Whether to
-preinstall this small core or keep all AI tools opt-in is still a user decision.**
-The current image remains unchanged until selection and packaging are approved.
+Offer a small, explained selection for GNOME and KDE, with the same terminal
+capabilities in both editions. OpenCode and LLM are candidates for possible
+inclusion; **whether to preinstall them or keep all AI tools opt-in remains
+undecided**. Other clients remain optional online installations.
 
-An open-source **client** does not make its model or hosted service open source,
-free of charge, private or offline. A terminal application can still send files
-and prompts to a cloud provider. Local inference needs a separately selected
-runtime and model, with their own resource needs and licenses.
+An open-source client does not make its model or hosted service open source,
+free, private or offline. Local inference requires a separately selected runtime
+and model, with their own resource needs and licences.
 
-## Curated shortlist
+## Client selection
 
-These are candidates, not a promise to bundle every tool. Exact redistribution
-licenses and dependency notices must be recorded for the selected versions.
+All of these clients are currently optional. The linked manual entries contain
+the installation instructions and vendor references.
 
-| Tool | Why consider it | Client category and proposed delivery |
-| :--- | :--- | :--- |
-| [OpenCode](https://opencode.ai/docs/) | Terminal coding agent; first candidate requested for Sensible | [Open-source client](https://github.com/anomalyco/opencode); evaluate pinned Linux artifact for the small core |
-| [LLM](https://llm.datasette.io/en/stable/setup.html) | General prompting and command-line workflows beyond editing a repository | [Open-source client](https://github.com/simonw/llm); evaluate as the core's complement, including Python environment and provider-plugin costs |
-| [Codex CLI](https://learn.chatgpt.com/docs/codex/cli) | Repository inspection, edits and command execution from the terminal | [Open-source CLI](https://learn.chatgpt.com/docs/open-source); curated optional alternative, distinct from the desktop app and hosted services |
-| [Antigravity CLI](https://antigravity.google/docs/cli/install) | Google's current agent-first terminal client, and Gemini CLI's successor | Open-source client; optional, installs to `~/.local/bin/agy` |
-| [Aider](https://aider.chat/docs/install.html) | An alternative terminal pair-programming workflow | Open-source client; optional isolated Python installation |
-| [Claude Code](https://code.claude.com/docs/en/installation) | Anthropic's Linux-supported coding CLI | Proprietary: its [license](https://github.com/anthropics/claude-code/blob/main/LICENSE.md) reserves rights and refers to commercial terms; optional official installation, no redistribution assumed |
+| Client | Purpose |
+| :--- | :--- |
+| [OpenCode](../manual/ai-tools.html#opencode) | Coding agent with a choice of model providers; candidate for possible inclusion |
+| [LLM](../manual/ai-tools.html#llm-cli) | General prompting and command-line workflows; candidate to complement a coding agent |
+| [Codex CLI](../manual/ai-tools.html#codex) | OpenAI's terminal agent for repository inspection, edits and command execution |
+| [Antigravity CLI](../manual/ai-tools.html#antigravity) | Google's terminal coding agent; the entry also explains the Gemini CLI migration |
+| [Aider](../manual/ai-tools.html#aider) | Terminal pair programming with Git-based changes |
+| [Claude Code](../manual/ai-tools.html#claude-code) | Anthropic's terminal coding agent |
+| [ChatGPT desktop](../manual/ai-tools.html#chatgpt-desktop) | OpenAI's desktop client for local projects and files |
+| [Claude desktop](../manual/ai-tools.html#claude-desktop) | Anthropic's desktop client for Chat, Cowork and Claude Code |
 
-**Gemini CLI is no longer a consumer candidate.** Google
-[replaced Gemini CLI with Antigravity CLI](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli)
-for Google AI Pro, Ultra and free Gemini Code Assist accounts on 2026-06-18;
-requests from those accounts are no longer served. Gemini CLI remains
-documented only for enterprise and paid Gemini API-key use, installed from
-`npm install -g @google/gemini-cli` and removed with
-`npm uninstall -g @google/gemini-cli`. The manual chapter therefore documents
-Antigravity CLI and mentions Gemini CLI as a migration note, not as an entry.
+## Manual requirements
 
-For image candidates, prefer a suitable Debian Testing package; otherwise
-evaluate a pinned upstream artifact. For optional tools, document the official
-maintained installation route rather than promising that every CLI is an APT
-package. Claude Code offers an official APT repository and the
-`claude-code` package; its executable is `claude`. Python tools need an isolated
-environment, not `sudo pip` or changes to Debian's system Python.
+Each entry should explain its purpose, when another tool is a better fit,
+official installation, launch and a small first task, updates, removal and
+troubleshooting. Include vendor links and a verification date, and distinguish
+documented behaviour from checks performed on Sensible.
 
-## Upstream verification log, 2026-10-02
+Explain permissions, provider traffic, local history, telemetry controls and
+credential storage and removal. Distinguish account sign-in, subscriptions and
+API billing. Avoid fixed prices, quotas or model names that quickly become stale.
 
-Checked against the vendors' own documentation and, where the tool is a
-downloadable client, installed in a disposable Debian Testing (forky)
-container on x86_64. The table records each entry's actual checks: Gemini CLI
-was documentation-only; Claude Desktop had its key and dependencies checked
-and its removal script inspected, followed by the GNOME launch below. In that
-round, removal was exercised only for the ChatGPT desktop package,
-`claude-code` and the Aider route. The 2026-10-04 follow-up below also verified
-`pipx uninstall llm` as a fresh non-root user; Debian-package removal of LLM was
-not recorded. No account, API key or paid service was used, so no sign-in,
-session, price or quota claim was made.
+Examples should explain shell variables before using them, use home-relative
+paths where appropriate, and keep credentials out of commands and logs.
+Installation and cleanup instructions must account for shared settings,
+repositories and files used by other applications.
 
-| Entry | Debian Testing package | Verified upstream route | What was exercised |
-| :--- | :--- | :--- | :--- |
-| OpenCode | none | `curl -fsSL https://opencode.ai/install \| bash` → `~/.opencode/bin/`, PATH line added to `~/.bashrc` | install, `opencode --version` 1.18.34, ~180 MiB |
-| LLM | `llm` 0.36-1 (46 packages) | `sudo apt install llm`, or `pipx install llm` for the newer upstream release | both routes, `llm --version`, system Python 3.14.7 unchanged; `pipx uninstall llm` passed as a fresh non-root user on 2026-10-04 |
-| Codex CLI | none | `curl -fsSL https://chatgpt.com/codex/install.sh \| sh` → `~/.local/bin/codex` into `~/.codex/`, PATH line in `~/.profile` | install, `codex --version` 0.160.0, ~430 MiB |
-| Antigravity CLI | none | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` → `~/.local/bin/agy`, no profile edit | install, `agy --version` 1.2.15, ~200 MiB |
-| Gemini CLI | none | `npm install -g @google/gemini-cli` (consumer access withdrawn 2026-06-18) | documentation only |
-| Aider | none | `sudo apt install pipx` → `pipx install aider-install` → `aider-install` | install, `aider --version` 0.86.2, system Python unchanged; removal order re-run as a non-root user on 2026-10-03 |
-| Claude Code | none | signed APT repo `https://downloads.claude.ai/claude-code/apt/stable`; key fingerprint `31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE` | key fingerprint, `apt install claude-code`, `claude --version` 2.1.285, ~230 MiB, removal left repo file and key behind |
-| ChatGPT desktop | `chatgpt` 26.930.21537 from the `.deb` | `sudo apt install ./chatgpt_amd64.deb`; vendor lists Ubuntu 24.04/26.04, Debian 13, Fedora 43/44, Arch — **not** Debian Testing | download, install (~1.5 GiB), `chatgpt.sources` and keyring registration, `chatgpt --version`, removal left keyring, AppArmor profile, source entry and `/etc/default/chatgpt` behind |
-| Claude Desktop | `claude-desktop` 2.9939.4 from Anthropic's APT repo | official Linux beta; Debian 12+/Ubuntu 22.04+ (Testing meets it, untested upstream) | key fingerprint, dependency resolution on Testing (~560 MiB, recommends QEMU set and a keyring), removal semantics of its `postrm` inspected |
+## Validation status
 
-On 2026-10-03, the installed ChatGPT and Claude desktop entries were also
-launched through GNOME's application launcher on a Wayland session. Both
-processes initialized and were then closed; no prompt or sign-in workflow was
-performed. KDE launch remains untested, as does Claude Desktop package removal.
+The manual's [validation summary](../manual/ai-tools.html#limits) records each
+client's install, version, launch and removal checks. These checks used Debian
+Testing; they do not establish support for every client feature.
 
-On 2026-10-04, the corrected Aider and LLM `pipx` recipes were run as separate
-fresh non-root users in a disposable Debian Testing container. `pipx ensurepath`
-and the current-shell PATH export made both launchers available immediately
-and in a new interactive Bash shell using Sensible's bashrc. Aider 0.86.2 and
-LLM 0.36 reported their versions; `llm models` listed models without making a
-model call. Aider's documented two-step removal and `pipx uninstall llm` also
-passed. No provider, key or account was configured.
+Both desktop clients were launched in GNOME. KDE launch and Claude Desktop
+package removal remain untested. Sign-in, model calls, telemetry controls and
+credential cleanup after a signed-in session have not been exercised. Package
+removal alone does not establish that credentials or local data were cleared.
 
-On 2026-10-11, credential removal and data-flow guidance was rechecked against
-vendor documentation only:
-[Antigravity logout](https://antigravity.google/docs/cli/install#logging-out),
-[its data-use statement](https://github.com/google-antigravity/antigravity-cli#terms-of-service--data-use)
-and [settings walkthrough](https://codelabs.developers.google.com/antigravity-cli-hands-on),
-[Claude Code credential storage](https://code.claude.com/docs/en/authentication#credential-management),
-[configuration cleanup](https://code.claude.com/docs/en/installation#remove-configuration-files)
-and [model context](https://code.claude.com/docs/en/how-claude-code-works#the-context-window).
-The manual now puts logout before uninstalling, names leftover credentials and
-configuration in both removal entries and the summary table, explains the
-Antigravity telemetry opt-out, and includes file contents and command output in
-off-machine data flow. No sign-in, credential removal or telemetry setting was
-exercised in this follow-up. Both desktop entries and the removal table
-explicitly mark saved-sign-in and local-data cleanup as unverified; package
-removal is not evidence that credentials or user data were cleared.
+## Requirements for including a client in the image
 
-Findings that changed earlier notes:
+- Prefer a suitable Debian Testing package. Otherwise pin the version, source
+  and checksum, validate package identity and architecture, and retain licences
+  and dependency notices.
+- Fetch approved artifacts at build time and include their runtime dependencies.
+  Installation and first login must work offline, without floating installers
+  or background downloads. Cloud-backed functionality is not an offline promise.
+- Define one update owner and a supported security-update path for installed
+  systems. A root-owned binary must not silently self-update or require running
+  the agent as root.
+- Include no credentials, session history or personal provider configuration.
+  Sign-in is a user choice; normal use of Sensible must not require an AI account.
+- Evaluate project-scoped permissions and approval prompts. Explain risks from
+  commands, untrusted repository instructions, plugins and MCP servers; do not
+  enable unrestricted access or install plugins automatically.
+- Add no model weights, inference daemons, login autostart or firewall exceptions
+  by default. Local inference is a separate opt-in decision.
+- Test artifact and dependency failures, both desktop editions, fresh-user
+  settings, offline boot, updates, removal and preservation of user changes.
+  Measure image size and installed footprint. Keep CI fixtures free of paid
+  accounts and secrets, and distinguish them from live-session checks.
 
-- **Claude Desktop now has an official Linux beta.** The earlier "unavailable on
-  Linux" statement is obsolete. The chapter records the current status and the
-  requirements that were resolved on Debian Testing; two further items are
-  recorded as unvalidated vendor caveats rather than as Sensible findings,
-  because KDE launch and sign-in were not tested here: the two-keyring warning
-  on the KDE image and Cowork's KVM requirement. Do not present an unofficial
-  wrapper as the official client, and do not turn either caveat into a
-  remediation recipe until it has been reproduced on the KDE image.
-- **The ChatGPT desktop `.deb` registers a repository** at
-  `/etc/apt/sources.list.d/chatgpt.sources` with a keyring, an AppArmor profile
-  and `/etc/default/chatgpt`; `apt remove` leaves all of them behind. The two
-  Anthropic recipes also need `sudo apt install gnupg` first, because they show
-  a `gpg --show-keys` fingerprint check and the images do not ship `gnupg`.
-- **`pipx install aider-chat` fails on Debian Testing** because Aider's pinned
-  `numpy==1.24.3` has no build for the system Python 3.14. `aider-install`
-  inside a `pipx` environment works and is the documented route.
-- **Codex CLI gained an official standalone Linux installer**; the npm and
-  Homebrew routes remain.
-- **Credential storage is client-specific.** OpenCode keeps API keys and
-  OAuth tokens in `~/.local/share/opencode/auth.json`; Codex caches login details
-  in plaintext at `~/.codex/auth.json` unless `cli_auth_credentials_store` is set
-  to `keyring`. Claude Code uses `~/.claude/.credentials.json` on Linux (or the
-  configured `CLAUDE_CONFIG_DIR`), with user-only file permissions. Antigravity
-  CLI and Anthropic's desktop app document keyring storage. Do not describe a
-  browser sign-in as keyring-protected in general.
-- **The Aider removal route needs its exact commands.** `aider-install` keeps
-  its own `uv` inside the pipx environment, so a bare `uv tool uninstall
-  aider-chat` fails for an ordinary user. The working order is
-  `"$(pipx environment --value PIPX_HOME)/venvs/aider-install/bin/uv" tool
-  uninstall aider-chat` then `pipx uninstall aider-install`; afterwards
-  `~/.local/share/uv/python/` (~112 MiB) and `~/.cache/uv/` (~572 MiB) remain.
-- **ChatGPT publishes an ARM64 package** (`chatgpt_arm64.deb`) and APT refuses
-  the amd64 build on aarch64; the manual documents both downloads instead of
-  implying the amd64 file is universal.
-- **Anthropic plan requirements differ per surface, checked 2026-10-03.**
-  Claude Desktop Chat is available on the free claude.ai plan
-  ([support](https://support.claude.com/en/articles/10065433-install-claude-desktop)),
-  while Cowork "is available to paid Claude plans (Pro, Max, Team, Enterprise)
-  only" ([support](https://support.claude.com/en/articles/13345190-get-started-with-claude-cowork))
-  and Claude Code "requires a Pro, Max, Team, Enterprise, or Console account.
-  The free claude.ai plan does not include Claude Code access"
-  ([docs](https://code.claude.com/docs/en/setup)). A subscription "doesn't
-  include access to the Claude API or Console"
-  ([support](https://support.claude.com/en/articles/9876003-i-have-a-paid-claude-subscription-pro-max-team-or-enterprise-plans-why-do-i-have-to-pay-separately-to-use-the-claude-api-and-console)).
-  The chapter must not describe the desktop app as paid-only.
-- **Installers are downloaded and read, never piped into a shell.** Four recipes
-  fetch a shell script; each now downloads to `~/Downloads/`, is inspected with
-  `less`, and only then run, matching the advice in the terminal chapter. A
-  `curl | bash` pipeline starts executing before the transfer completes.
-- The chapter says what was tried. Sign-in, model calls, prices, quotas and
-  KDE launch stay untested.
+## Remaining work
 
-## Delivered so far: the AI tools manual chapter
+- [Complete manual acceptance (#23)](https://github.com/korq-apps/sensible/issues/23):
+  validate both desktop clients on KDE and the Claude Desktop removal path,
+  then update the manual with the results.
+- [Decide delivery and candidate packaging (#22)](https://github.com/korq-apps/sensible/issues/22):
+  choose preinstallation or all-opt-in delivery, then evaluate OpenCode and LLM
+  against the requirements above.
+- Use the [shared optional-app catalog (#24)](https://github.com/korq-apps/sensible/issues/24)
+  for any automated optional installation. Add a reviewed adapter when needed;
+  clients without a suitable adapter can retain a manual recipe.
+- Evaluate local inference separately: runtime and model licences, CPU/GPU
+  support, memory and disk needs, download size, updates and removal. Any service
+  must remain opt-in and local-only by default.
 
-`manual/ai-tools.html` ships the chapter that this plan used to specify. The
-chapter is complete; #23 itself stays open until the untested KDE launch and
-Claude Desktop removal paths are exercised, as recorded in [PLAN.md](PLAN.md). It
-covers a selection guide, permissions and untrusted code, accounts/keys/billing,
-the two desktop clients and the six terminal clients, an update-owner and
-leftover-state table, and a dated statement of what Sensible did and did not
-verify. Navigation, offline staging and the installer payload gate include it:
-`scripts/stage-manual.sh`, `installer/lib/manual.sh`,
-`tests/lib/check_manual.py` (chapter set plus cross-chapter navigation) and
-`tests/unit/manual_test.sh`. The chapter is offline: no AI client, account,
-model or vendor repository is part of an image. Each recipe says what was
-tried, such as an install, a version check or a GNOME menu launch, and what
-was not, including sign-in, model calls and KDE.
-
-The chapter deliberately does not add any package to a live list, so
-`tests/lib/check_manual.py`'s default-package coverage is unchanged, and its
-`data-packages="gnupg"` markers document a package the recipes may install on
-demand rather than one the image ships.
-
-## Desktop installation guidance
-
-The researched starting point for the desktop section, retained for provenance.
-The current upstream position and what was exercised are in the verification
-log above and in the chapter itself:
-
-- **ChatGPT desktop:** OpenAI documents an official Linux preview with a `.deb`.
-  Debian 13 is listed as supported; Sensible's Debian Testing base is not.
-  Document downloading from the [official Linux page](https://developers.openai.com/codex/linux/linux-app),
-  installing the downloaded package with APT, and signing in afterward.
-  Explain that installation also configures OpenAI's signed update repository.
-  Test GNOME/KDE launch, authentication, updates and removal before marking this
-  a tested Sensible recipe. The preview does not provide Linux Computer Use;
-  native Wayland is experimental. Offer the browser as a fallback.
-- **Claude Desktop:** an official [Linux beta](https://code.claude.com/docs/en/desktop-linux)
-  now exists and is installed from Anthropic's signed APT repository, so the
-  earlier "unavailable on Linux" note is obsolete. It requires Debian 12+ or
-  Ubuntu 22.04+ on x86_64 or ARM64, Testing meets that but is not officially
-  tested. Two items stay untested caveats, not Sensible findings: Cowork's
-  hardware-virtualization requirement, and the vendor's warning about a second
-  keyring on the KDE image. Desktop Chat needs no paid plan, while Cowork and
-  Claude Code do. Recommend Claude in the browser as the simpler route. Do not silently substitute an unofficial Linux
-  repackaging; that would require a separate provenance, licensing,
-  credential-handling and update review.
-- **Optional does not mean preconfigured:** these clients, their accounts and
-  their vendor repositories are not part of the base image. Repository setup
-  and downloads require an explicit post-install user action.
-
-Each curated entry must explain why it was selected, when another tool is a
-better fit, official installation steps, the launch command, one small usage
-example, update/removal steps and troubleshooting. Say what was tried and
-what was not, rather than assigning a status label. Keep links and a
-verification date; do not hardcode subscription prices, quotas or model names
-that quickly age.
-
-Manual examples should use `~/` for home paths and explain any variables before
-using them. Never put a real API key in a command, screenshot or example log.
-Clarify account sign-in versus API-key billing: a chat subscription must not be
-presented as automatically paying for arbitrary third-party API use.
-
-## Packaging, privacy and acceptance requirements
-
-- Keep installation and first login offline. Fetch approved image artifacts
-  only at build time; pin version, source URL and checksum, validate package
-  identity/architecture and retain licenses. Never run a floating upstream
-  installer from the ISO or during first login.
-- Resolve the complete runtime closure. Check that launch, help/version and a
-  useful offline diagnostic work without downloading dependencies or models.
-  Cloud-backed functionality is not an offline acceptance promise.
-- Define one update owner per installation. A root-owned pinned binary must
-  not silently self-update or instruct the user to run its agent as root.
-  Provide a supported security-update path before bundling, including for
-  already installed systems; a future ISO alone is insufficient.
-- Do not bake in credentials, session history, provider selections or personal
-  configuration. Sign-in happens only when the user chooses to use the tool.
-  Document provider traffic, local history, telemetry controls and key removal.
-- Use project-scoped permissions and meaningful approval prompts; no default
-  unrestricted/auto-approve mode. OpenCode's [upstream permission defaults](https://opencode.ai/docs/permissions/)
-  allow most operations, so safe Sensible defaults require explicit evaluation,
-  not an assumption that installing an agent also sandboxes it.
-- Teach Git checkpoints, diff review and testing. Explain risks from commands,
-  untrusted repository instructions and third-party plugins/MCP servers. No
-  automatic plugin installation, privileged agent execution or broad home access.
-- No model weights, background model downloads, inference daemons, login
-  autostart or new firewall exceptions by default. Do not require an AI account
-  to install or use Sensible normally.
-- Test missing/corrupt artifacts, wrong versions/architecture, dependency
-  failures and clear diagnostics. CI uses fixtures without paid accounts or
-  secrets; separately record user-authorized live-service/session checks.
-- Measure image size, build time and installed footprint. Test both editions,
-  fresh-user settings, offline boot, update/removal and preservation of user
-  overrides. Update current-state documentation only when evidence exists.
-
-## Other command-line follow-ups
-
-Keep the existing tools and their manual explanations. In particular, `jq`,
-`ripgrep`, `fd-find`, `fzf`, `bat`, `eza` and `zoxide` are already included.
-
-- Evaluate [tmux](https://github.com/tmux/tmux/wiki) for persistent terminal
-  sessions and split panes, with beginner recipes for attach/detach. Explain
-  that sessions do not survive a reboot.
-- Evaluate [tealdeer](https://tealdeer-rs.github.io/tealdeer/intro.html) (`tldr`)
-  for short command examples. If included, verify whether a licensed, pinned
-  page cache can be staged so first use works offline; explain cache refreshes.
-- Evaluate [uv's isolated tool environments](https://docs.astral.sh/uv/guides/tools/)
-  if the selected Python AI clients justify it. Choose one supported approach
-  rather than adding multiple installers by default.
-- Reuse the existing `gh` and `lazygit` developer-tools follow-up in
-  [PLAN.md](PLAN.md); do not duplicate it or silently move Docker into the base.
-
-## Proposed follow-up slices
-
-The first three slices now have GitHub issues, linked below and grouped in
-the [prioritization index (#28)](https://github.com/korq-apps/sensible/issues/28).
-Local inference remains a later unticketed evaluation, not an approved default.
-These scopes do not replace the existing release evidence requirements.
-The [reconciled priority queue](PLAN.md#reconciled-priorities) sets the
-cross-project order: further unattended automation is parked and user-facing
-features take priority. Manual curation need not wait for a VM harness or the
-optional-app tool, but automated optional AI installation must use the
-[shared catalog (#24)](https://github.com/korq-apps/sensible/issues/24) rather than invent a second
-installer. Its initial source adapters may not fit every AI CLI; add a reviewed
-adapter or keep an official manual recipe instead of allowing arbitrary scripts.
-The separate [editor follow-up (#26)](https://github.com/korq-apps/sensible/issues/26)
-includes both Vim and Neovim without overriding
-Debian's editor selection, with LazyVim configuration opt-in. It is not a
-prerequisite for this AI scope and does not imply selecting an AI tool's editor
-on the user's behalf.
-
-1. **[Curated AI manual and optional client recipes (#23)](https://github.com/korq-apps/sensible/issues/23). Chapter shipped 2026-10-02; still open.** The AI
-   chapter and navigation ship as `manual/ai-tools.html`, covering the
-   shortlist, privacy/account distinctions and the current Linux desktop
-   options. Manual staging, the payload check and the offline tests include the
-   new chapter. Optional installation itself is online. **Not yet met:** the
-   acceptance list asks for both editions' launch and removal paths "where
-   available", and GNOME launch is the only session evidence so far. KDE launch
-   for both desktop clients and Claude Desktop package removal still need a KDE
-   session, so #23 stays open rather than being called complete.
-2. **[AI delivery decision and candidate packaging (#22)](https://github.com/korq-apps/sensible/issues/22).** Resolve the preinstall/opt-in decision,
-   then package OpenCode and evaluate LLM against the requirements above.
-   Include rationale, safe usage examples, update support and both-edition
-   acceptance. Defer a candidate rather than waive an unmet packaging gate.
-3. **[CLI usability (#25)](https://github.com/korq-apps/sensible/issues/25) and [developer-tool catalog (#24)](https://github.com/korq-apps/sensible/issues/24).** Evaluate tmux/tealdeer and the
-   chosen Python tool mechanism; reconcile with the existing `gh`/`lazygit`
-   plan. Provide examples and offline behavior tests for each accepted addition.
-4. **Optional local inference.** Separately evaluate
-   [llama.cpp](https://github.com/ggml-org/llama.cpp) and
-   [Ollama](https://docs.ollama.com/linux). Select a runtime and model only after
-   CPU/GPU, RAM/disk, licensing, download size, updates and removal checks.
-   Any service must remain opt-in and local-only by default. Do not describe
-   open weights as necessarily open-source software or promise laptop performance.
+The [project plan](PLAN.md) tracks priorities and other command-line tools.
