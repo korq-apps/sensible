@@ -63,14 +63,16 @@ downloadable client, installed in a disposable Debian Testing (forky)
 container on x86_64. The table records each entry's actual checks: Gemini CLI
 was documentation-only; Claude Desktop had its key and dependencies checked
 and its removal script inspected, followed by the GNOME launch below. In that
-round, removal was exercised only for the ChatGPT desktop package, `claude-code` and the
-Aider route. No account, API key or paid service was used, so no sign-in,
+round, removal was exercised only for the ChatGPT desktop package,
+`claude-code` and the Aider route. The 2026-10-04 follow-up below also verified
+`pipx uninstall llm` as a fresh non-root user; Debian-package removal of LLM was
+not recorded. No account, API key or paid service was used, so no sign-in,
 session, price or quota claim was made.
 
 | Entry | Debian Testing package | Verified upstream route | What was exercised |
 | :--- | :--- | :--- | :--- |
 | OpenCode | none | `curl -fsSL https://opencode.ai/install \| bash` → `~/.opencode/bin/`, PATH line added to `~/.bashrc` | install, `opencode --version` 1.18.34, ~180 MiB |
-| LLM | `llm` 0.36-1 (46 packages) | `sudo apt install llm`, or `pipx install llm` for the newer upstream release | both routes, `llm --version`, system Python 3.14.7 unchanged |
+| LLM | `llm` 0.36-1 (46 packages) | `sudo apt install llm`, or `pipx install llm` for the newer upstream release | both routes, `llm --version`, system Python 3.14.7 unchanged; `pipx uninstall llm` passed as a fresh non-root user on 2026-10-04 |
 | Codex CLI | none | `curl -fsSL https://chatgpt.com/codex/install.sh \| sh` → `~/.local/bin/codex` into `~/.codex/`, PATH line in `~/.profile` | install, `codex --version` 0.160.0, ~430 MiB |
 | Antigravity CLI | none | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` → `~/.local/bin/agy`, no profile edit | install, `agy --version` 1.2.15, ~200 MiB |
 | Gemini CLI | none | `npm install -g @google/gemini-cli` (consumer access withdrawn 2026-06-18) | documentation only |
@@ -104,7 +106,9 @@ The manual now puts logout before uninstalling, names leftover credentials and
 configuration in both removal entries and the summary table, explains the
 Antigravity telemetry opt-out, and includes file contents and command output in
 off-machine data flow. No sign-in, credential removal or telemetry setting was
-exercised in this follow-up.
+exercised in this follow-up. Both desktop entries and the removal table
+explicitly mark saved-sign-in and local-data cleanup as unverified; package
+removal is not evidence that credentials or user data were cleared.
 
 Findings that changed earlier notes:
 

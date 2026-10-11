@@ -842,9 +842,8 @@ esac
         self.assertIn("git check-ignore", manual)
         self.assertIn("but never <code>.env</code>", manual)
         self.assertNotIn("an untracked <code>.env</code> file", manual)
-        # The Antigravity recipe owns its single profile change.
+        # Antigravity leaves aliases and PATH edits to the documented recipe.
         self.assertIn("antigravity-install.sh --skip-aliases --skip-path", manual)
-        self.assertIn("the one <code>PATH</code> line in <code>~/.bashrc</code>", manual)
         # Shared uv directories must not be presented as safe Aider cleanup.
         self.assertIn("Those uv directories are shared, not Aider's alone", manual)
         self.assertNotIn("Delete those two directories yourself", manual)
