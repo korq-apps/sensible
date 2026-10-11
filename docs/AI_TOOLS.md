@@ -92,6 +92,20 @@ LLM 0.36 reported their versions; `llm models` listed models without making a
 model call. Aider's documented two-step removal and `pipx uninstall llm` also
 passed. No provider, key or account was configured.
 
+On 2026-10-11, credential removal and data-flow guidance was rechecked against
+vendor documentation only:
+[Antigravity logout](https://antigravity.google/docs/cli/install#logging-out),
+[its data-use statement](https://github.com/google-antigravity/antigravity-cli#terms-of-service--data-use)
+and [settings walkthrough](https://codelabs.developers.google.com/antigravity-cli-hands-on),
+[Claude Code credential storage](https://code.claude.com/docs/en/authentication#credential-management),
+[configuration cleanup](https://code.claude.com/docs/en/installation#remove-configuration-files)
+and [model context](https://code.claude.com/docs/en/how-claude-code-works#the-context-window).
+The manual now puts logout before uninstalling, names leftover credentials and
+configuration in both removal entries and the summary table, explains the
+Antigravity telemetry opt-out, and includes file contents and command output in
+off-machine data flow. No sign-in, credential removal or telemetry setting was
+exercised in this follow-up.
+
 Findings that changed earlier notes:
 
 - **Claude Desktop now has an official Linux beta.** The earlier "unavailable on
@@ -112,12 +126,13 @@ Findings that changed earlier notes:
   inside a `pipx` environment works and is the documented route.
 - **Codex CLI gained an official standalone Linux installer**; the npm and
   Homebrew routes remain.
-- **Credential storage is client-specific, and two clients default to a plain
-  file.** OpenCode keeps API keys and OAuth tokens in
-  `~/.local/share/opencode/auth.json`; Codex caches login details in plaintext
-  at `~/.codex/auth.json` unless `cli_auth_credentials_store` is set to
-  `keyring`. Antigravity CLI and Anthropic's desktop app document keyring
-  storage. Do not describe a browser sign-in as keyring-protected in general.
+- **Credential storage is client-specific.** OpenCode keeps API keys and
+  OAuth tokens in `~/.local/share/opencode/auth.json`; Codex caches login details
+  in plaintext at `~/.codex/auth.json` unless `cli_auth_credentials_store` is set
+  to `keyring`. Claude Code uses `~/.claude/.credentials.json` on Linux (or the
+  configured `CLAUDE_CONFIG_DIR`), with user-only file permissions. Antigravity
+  CLI and Anthropic's desktop app document keyring storage. Do not describe a
+  browser sign-in as keyring-protected in general.
 - **The Aider removal route needs its exact commands.** `aider-install` keeps
   its own `uv` inside the pipx environment, so a bare `uv tool uninstall
   aider-chat` fails for an ordinary user. The working order is
