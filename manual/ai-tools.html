@@ -126,19 +126,19 @@ sudo apt install ./chatgpt_arm64.deb</code></pre>
           <p><strong>What it is:</strong> Anthropic's desktop app for Chat, Cowork and Claude Code, now in a Linux beta with an official APT repository. Earlier Sensible notes said no official Linux build existed; that is out of date, so verify the current vendor page before installing.</p>
           <p><strong>Requirements:</strong> a Debian-based distribution on Ubuntu 22.04+ or Debian 12+, x86_64 or ARM64. Other Debian-based distributions such as Debian Testing meet those requirements but are not officially tested. Only Debian-based distributions are supported today. The repository publishes no other architecture: if <code>dpkg --print-architecture</code> prints anything other than <code>amd64</code> or <code>arm64</code>, stop rather than looking for another build.</p>
           <p><strong>Before you install:</strong> the repository is trusted through a signing key, and APT will only use it if you first fetch that key yourself. Download it, then read the fingerprint before registering the repository. <code>gpg</code> is not part of this image, so install it first; the file itself is only read by APT, and <code>gpg</code> is used here purely to display who signed it.</p>
-          <pre><code>sudo apt install gnupg
-sudo install -d -m 0755 /usr/share/keyrings
+          <pre><code># Download and display the key; this block does not register the repository.
+sudo apt install gnupg &amp;&amp;
+sudo install -d -m 0755 /usr/share/keyrings &amp;&amp;
 sudo curl -fsSL https://downloads.claude.ai/claude-desktop/key.asc \
-  -o /usr/share/keyrings/claude-desktop-archive-keyring.asc
-
-# Compare the printed fingerprint with the one below, then continue
-gpg --show-keys /usr/share/keyrings/claude-desktop-archive-keyring.asc
-
+  -o /usr/share/keyrings/claude-desktop-archive-keyring.asc &amp;&amp;
+gpg --show-keys /usr/share/keyrings/claude-desktop-archive-keyring.asc</code></pre>
+          <p><strong>Stop and compare before continuing.</strong> The expected primary-key fingerprint is <code>31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE</code>. Run the next block only if the displayed fingerprint matches exactly, ignoring spaces. If a command failed, the fingerprint is missing or different, or another primary key is listed, do not register the repository; check Anthropic's current Linux guide first.</p>
+          <pre><code># Run only after checking the fingerprint above.
 echo "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc] https://downloads.claude.ai/claude-desktop/apt/stable stable main" \
-  | sudo tee /etc/apt/sources.list.d/claude-desktop.list
-sudo apt update
+  | sudo tee /etc/apt/sources.list.d/claude-desktop.list &amp;&amp;
+sudo apt update &amp;&amp;
 sudo apt install claude-desktop</code></pre>
-          <p>The expected fingerprint is <code>31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE</code>. If that line is missing, stop: a wrong key makes every later <code>apt update</code> fail with <code>NO_PUBKEY BAA929FF1A7ECACE</code>. The vendor also documents downloading the <code>.deb</code> straight from the repository, which carries the same key; installing it that way still registers the repository for later updates.</p>
+          <p>The vendor also documents downloading the <code>.deb</code> straight from the repository, which carries the same key; installing it that way still registers the repository for later updates.</p>
           <p><strong>Try first:</strong> the browser. <a href="https://claude.ai/download">Claude in a browser</a> needs no repository, no key and no extra packages, and on KDE it avoids the keyring problem described below.</p>
           <p><strong>Launch:</strong> open <strong>Claude</strong> from the application menu, or run <code>claude-desktop</code>, then sign in with your claude.ai account or your organization's SSO. A free account is enough for Chat; the Cowork tab needs a paid plan. The desktop app does not accept a Console API key; use <a href="#claude-code">Claude Code</a> for API-key authentication.</p>
           <div class="callout warn">
@@ -181,7 +181,7 @@ opencode --version</code></pre>
         </article>
         <article id="llm-cli"><h3>LLM</h3>
           <p><strong>What it is:</strong> a command-line front end to language models, from the author of Datasette. It answers prompts, keeps a local log of them, and can be extended with plugins for more providers.</p>
-          <p><strong>Why considered:</strong> the complementary tool to a coding agent: it prompts and pipes text, and it does not edit your project unless you ask it to. It is the only entry here Debian packages, and it needs no JavaScript runtime.</p>
+          <p><strong>Why considered:</strong> the complementary tool to a coding agent: it prompts and pipes text, and it does not edit your project unless you ask it to. It is the only entry here that Debian packages, and it needs no JavaScript runtime.</p>
           <p><strong>Better fit when:</strong> you want to script a model call, summarise text or translate output in a pipeline, rather than have an agent change files.</p>
           <p><strong>Install:</strong> use the Debian package, which APT updates and removes for you, or <code>pipx</code> for the newest upstream release in an isolated environment that leaves Debian's Python alone. Do not use <code>sudo pip install</code>: Debian's Python is managed by APT and belongs to the system.</p>
           <pre><code># Route A: Debian package (simplest, updated with the rest of the system)
@@ -303,23 +303,23 @@ pipx uninstall aider-install</code></pre>
           <p><strong>Accounts and billing:</strong> it accepts a Pro, Max, Team or Enterprise account, or a Console account. The first four are paid Claude plans, so your subscription covers the CLI; a Console account is Anthropic's API platform and is metered per token instead, which is API billing rather than a subscription. The free claude.ai plan does not include Claude Code. A third-party provider such as Amazon Bedrock or Google Cloud's Agent Platform is a further route with that provider's own API billing.</p>
           <p><strong>Better fit when:</strong> you already have an Anthropic subscription and want the same agent in the terminal as in the desktop app.</p>
           <p><strong>Install:</strong> choose the update behaviour you want first. The APT route below is recommended because the client's own background updater does not apply to it and APT keeps one update path; the native installer updates itself in the background, which is convenient but means the client, not APT, decides when it changes.</p>
-          <pre><code># The key file is used by APT; gpg only reads it to show the fingerprint
-sudo apt install gnupg
-sudo install -d -m 0755 /etc/apt/keyrings
+          <pre><code># Download and display the key; this block does not register the repository.
+sudo apt install gnupg &amp;&amp;
+sudo install -d -m 0755 /etc/apt/keyrings &amp;&amp;
 sudo curl -fsSL https://downloads.claude.ai/keys/claude-code.asc \
-  -o /etc/apt/keyrings/claude-code.asc
-gpg --show-keys /etc/apt/keyrings/claude-code.asc
-
-# Then register the signed repository and install
+  -o /etc/apt/keyrings/claude-code.asc &amp;&amp;
+gpg --show-keys /etc/apt/keyrings/claude-code.asc</code></pre>
+          <p><strong>Stop and compare before continuing.</strong> The expected primary-key fingerprint is <code>31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE</code>. Run the next block only if the displayed fingerprint matches exactly, ignoring spaces. If a command failed, the fingerprint is missing or different, or another primary key is listed, do not register the repository; check Anthropic's current installation guide first.</p>
+          <pre><code># Run only after checking the fingerprint above.
 echo "deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" \
-  | sudo tee /etc/apt/sources.list.d/claude-code.list
-sudo apt update
-sudo apt install claude-code
+  | sudo tee /etc/apt/sources.list.d/claude-code.list &amp;&amp;
+sudo apt update &amp;&amp;
+sudo apt install claude-code &amp;&amp;
 claude --version</code></pre>
-          <p>The expected fingerprint is <code>31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE</code>. The native alternative downloads <code>https://claude.ai/install.sh</code> — follow the same download, read, then run steps as the terminal clients above rather than piping it — and installs under <code>~/.local/</code>, self-updating; <code>claude doctor</code> reports install health and whether auto-updates ran.</p>
+          <p>The native alternative downloads <code>https://claude.ai/install.sh</code> — follow the same download, read, then run steps as the terminal clients above rather than piping it — and installs under <code>~/.local/</code>, self-updating; <code>claude doctor</code> reports install health and whether auto-updates ran.</p>
           <p><strong>Launch and first task:</strong> run <code>claude</code> in a project directory and complete sign-in in the browser it opens. Ask it to read a file before it writes one, and treat every proposed command as a command you would run yourself.</p>
           <p><strong>Local data:</strong> on Linux, login credentials are stored in <code>~/.claude/.credentials.json</code> with permissions restricted to your user. If you set <code>CLAUDE_CONFIG_DIR</code>, the credential file is in that directory instead. Settings and session history also remain in your home directory after uninstalling the package. See <a href="https://code.claude.com/docs/en/authentication#credential-management">credential storage</a> and <a href="https://code.claude.com/docs/en/installation#remove-configuration-files">configuration cleanup</a>.</p>
-          <p><strong>Updates:</strong> APT for the APT route (<code>sudo apt upgrade claude-code</code>), or the client's own updater for the native route.</p>
+          <p><strong>Updates:</strong> APT for the APT route (<code>sudo apt update &amp;&amp; sudo apt install --only-upgrade claude-code</code>), or the client's own updater for the native route.</p>
           <p><strong>Remove:</strong> run <code>claude</code> and enter <code>/logout</code> while the client is still installed, then run <code>sudo apt remove claude-code</code>. Delete <code>/etc/apt/sources.list.d/claude-code.list</code> before <code>/etc/apt/keyrings/claude-code.asc</code>, and run <code>sudo apt update</code> to check the remaining sources. APT does not remove these files or your per-user data.</p>
           <p>For complete local cleanup, close Claude clients and inspect <code>~/.claude/</code> and <code>~/.claude.json</code> (or your custom configuration location). Delete them only if you also want their settings and session history removed. Claude Desktop and IDE integrations share this state, so preserve it if you still use those clients. Inspect project-level <code>.claude/</code> and <code>.mcp.json</code> separately; they may be shared project configuration.</p>
           <p><strong>Sensible validation:</strong> the APT route installed and <code>claude --version</code> printed 2.1.285 on Debian Testing on 2026-10-02 (roughly 230 MiB installed), and, in that no-account check, removal left exactly the repository file and key behind. Credential logout and removal after a signed-in session were not tested. <a href="https://code.claude.com/docs/en/installation">Upstream installation</a></p>
