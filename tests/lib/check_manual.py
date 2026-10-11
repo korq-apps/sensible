@@ -5,12 +5,23 @@ import re
 import sys
 from urllib.parse import unquote, urlsplit
 
+# The shipped offline manual. Every chapter is a required asset and must link to
+# the others, so navigation cannot silently lose a page.
+CHAPTERS = (
+    "index.html",
+    "applications.html",
+    "terminal-tools.html",
+    "ai-tools.html",
+)
+
 
 class Page(HTMLParser):
     def __init__(self, path):
         super().__init__()
+        self.path = path.resolve()
         self.ids = set()
         self.links = []
+        self.chapters = set()
         self.packages = set()
         self.feed(path.read_text(encoding="utf-8"))
 
@@ -23,11 +34,19 @@ class Page(HTMLParser):
         for key in ("href", "src"):
             if key in attrs:
                 self.links.append((tag, attrs[key]))
+        if tag == "a" and "nav-link" in attrs.get("class", "").split():
+            url = urlsplit(attrs["href"])
+            if not url.scheme and not url.netloc and url.path.endswith(".html"):
+                self.chapters.add((self.path.parent / url.path).resolve())
 
 
 def check(manual, repo):
     pages = {path.resolve(): Page(path) for path in manual.glob("*.html")}
-    assert len(pages) >= 3, "missing manual chapters"
+    missing = {name for name in CHAPTERS if not (manual / name).is_file()}
+    assert not missing, f"missing manual chapters: {sorted(missing)}"
+    assert len(pages) == len(CHAPTERS), (
+        f"unexpected manual chapters: {sorted(path.name for path in pages)}"
+    )
     for path, page in pages.items():
         for tag, link in page.links:
             url = urlsplit(link)
@@ -41,6 +60,15 @@ def check(manual, repo):
                 assert target in pages and unquote(url.fragment) in pages[target].ids, (
                     f"broken anchor in {path.name}: {link}"
                 )
+
+    # Every chapter must be reachable from every other chapter's sidebar.
+    for path, page in pages.items():
+        for other in pages.values():
+            if other is page:
+                continue
+            assert other.path in page.chapters, (
+                f"{path.name} does not link to chapter {other.path.name}"
+            )
 
     # Cover the baked default-app section plus each edition's application list.
     # Do not treat inactive helper edits or hardware/boot dependencies as shipped apps.

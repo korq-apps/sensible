@@ -486,11 +486,12 @@ both ISO builds pass and GNOME has positive user smoke feedback. Targeted
 readability/accessibility, reset/persistence and session edge cases remain in
 the desktop profile acceptance checklist.
 
-**Later, not implemented:** the [AI tools plan](AI_TOOLS.md) evaluates a small
+**Later, not installed:** the [AI tools plan](AI_TOOLS.md) evaluates a small
 open-source CLI core versus all-opt-in delivery, with proprietary clients kept
-optional. No AI tools or installer checkboxes are currently added. Approved
-image artifacts would be pinned and verified at build time; optional online
-recipes and desktop-client support require separate validation.
+optional. No AI tools or installer checkboxes are currently added. The offline
+manual ships an optional AI chapter (`manual/ai-tools.html`) documenting
+user-installed clients only; approved image artifacts would be pinned and
+verified at build time, and desktop-client support requires separate validation.
 
 **Planned (post-install catalog):** Developer tools — `docker.io`, `docker-compose` (the v2 rewrite in Testing), `lazygit`, `gh`. Developer tools deliberately do **not** add the user to the `docker` group — membership is root-equivalent, so the default is `sudo docker` (a user can opt in later, knowing the tradeoff).
 

@@ -1,167 +1,102 @@
-# AI tools and CLI follow-ups
+# AI tools
 
-Status: **planned, not implemented**. Originally recorded 2026-09-06; ticket
-links added 2026-09-10. No AI client, provider account, model weights or new
-repository is added by this plan.
-Upstream availability below was checked on 2026-09-06; installation recipes
-must be rechecked and tested when their implementation lands.
+Sensible ships an [offline AI tools manual](../manual/ai-tools.html) for
+optional, user-installed clients. No AI client, provider account, model weights
+or vendor repository is included in either image.
 
-## Intent and proposed delivery
+This document defines the delivery scope, packaging requirements and remaining
+work. Installation, usage, privacy and removal instructions belong in the manual.
 
-Provide a small, explained selection for both GNOME and KDE, with the same
-terminal capabilities in each edition. Teach users how to choose a tool,
-not just how to install a list of overlapping coding agents.
+## Scope and delivery
 
-Proposed: evaluate OpenCode as the first preinstalled open-source client,
-and LLM as a complementary general-purpose CLI. Other agents and proprietary
-desktop clients remain optional, online, post-install choices. **Whether to
-preinstall this small core or keep all AI tools opt-in is still a user decision.**
-The current image remains unchanged until selection and packaging are approved.
+Offer a small, explained selection for GNOME and KDE, with the same terminal
+capabilities in both editions. OpenCode and LLM are candidates for possible
+inclusion; **whether to preinstall them or keep all AI tools opt-in remains
+undecided**. Other clients remain optional online installations.
 
-An open-source **client** does not make its model or hosted service open source,
-free of charge, private or offline. A terminal application can still send files
-and prompts to a cloud provider. Local inference needs a separately selected
-runtime and model, with their own resource needs and licenses.
+An open-source client does not make its model or hosted service open source,
+free, private or offline. Local inference requires a separately selected runtime
+and model, with their own resource needs and licences.
 
-## Curated shortlist
+## Client selection
 
-These are candidates, not a promise to bundle every tool. Exact redistribution
-licenses and dependency notices must be recorded for the selected versions.
+All of these clients are currently optional. The linked manual entries contain
+the installation instructions and vendor references.
 
-| Tool | Why consider it | Client category and proposed delivery |
-| :--- | :--- | :--- |
-| [OpenCode](https://opencode.ai/docs/) | Terminal coding agent; first candidate requested for Sensible | [Open-source client](https://github.com/anomalyco/opencode); evaluate pinned Linux artifact for the small core |
-| [LLM](https://llm.datasette.io/en/stable/setup.html) | General prompting and command-line workflows beyond editing a repository | [Open-source client](https://github.com/simonw/llm); evaluate as the core's complement, including Python environment and provider-plugin costs |
-| [Codex CLI](https://learn.chatgpt.com/docs/codex/cli) | Repository inspection, edits and command execution from the terminal | [Open-source CLI](https://learn.chatgpt.com/docs/open-source); curated optional alternative, distinct from the desktop app and hosted services |
-| [Gemini CLI](https://geminicli.com/docs/get-started/installation/) | Another provider-oriented terminal agent | [Open-source client](https://github.com/google-gemini/gemini-cli); optional, with a compatible maintained Node.js runtime |
-| [Aider](https://aider.chat/docs/install.html) | An alternative terminal pair-programming workflow | Open-source client; optional isolated Python installation |
-| [Claude Code](https://code.claude.com/docs/en/installation) | Anthropic's Linux-supported coding CLI | Proprietary: its [license](https://github.com/anthropics/claude-code/blob/main/LICENSE.md) reserves rights and refers to commercial terms; optional official installation, no redistribution assumed |
+| Client | Purpose |
+| :--- | :--- |
+| [OpenCode](../manual/ai-tools.html#opencode) | Coding agent with a choice of model providers; candidate for possible inclusion |
+| [LLM](../manual/ai-tools.html#llm-cli) | General prompting and command-line workflows; candidate to complement a coding agent |
+| [Codex CLI](../manual/ai-tools.html#codex) | OpenAI's terminal agent for repository inspection, edits and command execution |
+| [Antigravity CLI](../manual/ai-tools.html#antigravity) | Google's terminal coding agent; the entry also explains the Gemini CLI migration |
+| [Aider](../manual/ai-tools.html#aider) | Terminal pair programming with Git-based changes |
+| [Claude Code](../manual/ai-tools.html#claude-code) | Anthropic's terminal coding agent |
+| [ChatGPT desktop](../manual/ai-tools.html#chatgpt-desktop) | OpenAI's desktop client for local projects and files |
+| [Claude desktop](../manual/ai-tools.html#claude-desktop) | Anthropic's desktop client for Chat, Cowork and Claude Code |
 
-For image candidates, prefer a suitable Debian Testing package; otherwise
-evaluate a pinned upstream artifact. For optional tools, document the official
-maintained installation route rather than promising that every CLI is an APT
-package. Claude Code currently offers an official APT repository and the
-`claude-code` package; its executable is `claude`. Python tools need an isolated
-environment, not `sudo pip` or changes to Debian's system Python.
+## Manual requirements
 
-## Desktop installation guidance
+Each entry should explain its purpose, when another tool is a better fit,
+official installation, launch and a small first task, updates, removal and
+troubleshooting. Include vendor links and a verification date, and distinguish
+documented behaviour from checks performed on Sensible.
 
-Create a dedicated **AI tools** manual chapter, with separate desktop and CLI
-sections. The following is the researched starting point, not completed
-Sensible compatibility testing:
+Explain permissions, provider traffic, local history, telemetry controls and
+credential storage and removal. Distinguish account sign-in, subscriptions and
+API billing. Avoid fixed prices, quotas or model names that quickly become stale.
 
-- **ChatGPT desktop:** OpenAI documents an official Linux preview with a `.deb`.
-  Debian 13 is listed as supported; Sensible's Debian Testing base is not.
-  Document downloading from the [official Linux page](https://learn.chatgpt.com/docs/linux/linux-app),
-  installing the downloaded package with APT, and signing in afterward.
-  Explain that installation also configures OpenAI's signed update repository.
-  Test GNOME/KDE launch, authentication, updates and removal before marking this
-  a tested Sensible recipe. The preview does not provide Linux Computer Use;
-  native Wayland is experimental. Offer the browser as a fallback.
-- **Claude Desktop:** the [official desktop guide](https://code.claude.com/docs/en/desktop-quickstart)
-  currently says it is unavailable on Linux. Recommend Claude in the browser,
-  or Claude Code for terminal work. Explain optional browser shortcuts without
-  presenting them as native Desktop/Cowork/MCP equivalents. Do not silently
-  substitute an unofficial Linux repackaging; that would require a separate
-  provenance, licensing, credential-handling and update review.
-- **Optional does not mean preconfigured:** these clients, their accounts and
-  their vendor repositories are not part of the base image. Repository setup
-  and downloads require an explicit post-install user action.
+Examples should explain shell variables before using them, use home-relative
+paths where appropriate, and keep credentials out of commands and logs.
+Installation and cleanup instructions must account for shared settings,
+repositories and files used by other applications.
 
-Each curated entry must explain why it was selected, when another tool is a
-better fit, official installation steps, the launch command, one small usage
-example, update/removal steps and troubleshooting. Mark entries as included,
-optional/tested, or candidate/unvalidated. Keep links and a verification date;
-do not hardcode subscription prices, quotas or model names that quickly age.
+## Validation status
 
-Manual examples should use `~/` for home paths and explain any variables before
-using them. Never put a real API key in a command, screenshot or example log.
-Clarify account sign-in versus API-key billing: a chat subscription must not be
-presented as automatically paying for arbitrary third-party API use.
+The manual's [validation summary](../manual/ai-tools.html#limits) records each
+client's install, version, launch and removal checks. These checks used Debian
+Testing; they do not establish support for every client feature.
 
-## Packaging, privacy and acceptance requirements
+Both desktop clients were launched in GNOME. KDE launch and Claude Desktop
+package removal remain untested. Sign-in, model calls, telemetry controls and
+credential cleanup after a signed-in session have not been exercised. Package
+removal alone does not establish that credentials or local data were cleared.
 
-- Keep installation and first login offline. Fetch approved image artifacts
-  only at build time; pin version, source URL and checksum, validate package
-  identity/architecture and retain licenses. Never run a floating upstream
-  installer from the ISO or during first login.
-- Resolve the complete runtime closure. Check that launch, help/version and a
-  useful offline diagnostic work without downloading dependencies or models.
-  Cloud-backed functionality is not an offline acceptance promise.
-- Define one update owner per installation. A root-owned pinned binary must
-  not silently self-update or instruct the user to run its agent as root.
-  Provide a supported security-update path before bundling, including for
-  already installed systems; a future ISO alone is insufficient.
-- Do not bake in credentials, session history, provider selections or personal
-  configuration. Sign-in happens only when the user chooses to use the tool.
-  Document provider traffic, local history, telemetry controls and key removal.
-- Use project-scoped permissions and meaningful approval prompts; no default
-  unrestricted/auto-approve mode. OpenCode's [upstream permission defaults](https://opencode.ai/docs/permissions/)
-  allow most operations, so safe Sensible defaults require explicit evaluation,
-  not an assumption that installing an agent also sandboxes it.
-- Teach Git checkpoints, diff review and testing. Explain risks from commands,
-  untrusted repository instructions and third-party plugins/MCP servers. No
-  automatic plugin installation, privileged agent execution or broad home access.
-- No model weights, background model downloads, inference daemons, login
-  autostart or new firewall exceptions by default. Do not require an AI account
-  to install or use Sensible normally.
-- Test missing/corrupt artifacts, wrong versions/architecture, dependency
-  failures and clear diagnostics. CI uses fixtures without paid accounts or
-  secrets; separately record user-authorized live-service/session checks.
-- Measure image size, build time and installed footprint. Test both editions,
-  fresh-user settings, offline boot, update/removal and preservation of user
-  overrides. Update current-state documentation only when evidence exists.
+## Requirements for including a client in the image
 
-## Other command-line follow-ups
+- Prefer a suitable Debian Testing package. Otherwise pin the version, source
+  and checksum, validate package identity and architecture, and retain licences
+  and dependency notices.
+- Fetch approved artifacts at build time and include their runtime dependencies.
+  Installation and first login must work offline, without floating installers
+  or background downloads. Cloud-backed functionality is not an offline promise.
+- Define one update owner and a supported security-update path for installed
+  systems. A root-owned binary must not silently self-update or require running
+  the agent as root.
+- Include no credentials, session history or personal provider configuration.
+  Sign-in is a user choice; normal use of Sensible must not require an AI account.
+- Evaluate project-scoped permissions and approval prompts. Explain risks from
+  commands, untrusted repository instructions, plugins and MCP servers; do not
+  enable unrestricted access or install plugins automatically.
+- Add no model weights, inference daemons, login autostart or firewall exceptions
+  by default. Local inference is a separate opt-in decision.
+- Test artifact and dependency failures, both desktop editions, fresh-user
+  settings, offline boot, updates, removal and preservation of user changes.
+  Measure image size and installed footprint. Keep CI fixtures free of paid
+  accounts and secrets, and distinguish them from live-session checks.
 
-Keep the existing tools and their manual explanations. In particular, `jq`,
-`ripgrep`, `fd-find`, `fzf`, `bat`, `eza` and `zoxide` are already included.
+## Remaining work
 
-- Evaluate [tmux](https://github.com/tmux/tmux/wiki) for persistent terminal
-  sessions and split panes, with beginner recipes for attach/detach. Explain
-  that sessions do not survive a reboot.
-- Evaluate [tealdeer](https://tealdeer-rs.github.io/tealdeer/intro.html) (`tldr`)
-  for short command examples. If included, verify whether a licensed, pinned
-  page cache can be staged so first use works offline; explain cache refreshes.
-- Evaluate [uv's isolated tool environments](https://docs.astral.sh/uv/guides/tools/)
-  if the selected Python AI clients justify it. Choose one supported approach
-  rather than adding multiple installers by default.
-- Reuse the existing `gh` and `lazygit` developer-tools follow-up in
-  [PLAN.md](PLAN.md); do not duplicate it or silently move Docker into the base.
+- [Complete manual acceptance (#23)](https://github.com/korq-apps/sensible/issues/23):
+  validate both desktop clients on KDE and the Claude Desktop removal path,
+  then update the manual with the results.
+- [Decide delivery and candidate packaging (#22)](https://github.com/korq-apps/sensible/issues/22):
+  choose preinstallation or all-opt-in delivery, then evaluate OpenCode and LLM
+  against the requirements above.
+- Use the [shared optional-app catalog (#24)](https://github.com/korq-apps/sensible/issues/24)
+  for any automated optional installation. Add a reviewed adapter when needed;
+  clients without a suitable adapter can retain a manual recipe.
+- Evaluate local inference separately: runtime and model licences, CPU/GPU
+  support, memory and disk needs, download size, updates and removal. Any service
+  must remain opt-in and local-only by default.
 
-## Proposed follow-up slices
-
-The first three slices now have GitHub issues, linked below and grouped in
-the [prioritization index (#28)](https://github.com/korq-apps/sensible/issues/28).
-Local inference remains a later unticketed evaluation, not an approved default.
-These scopes do not replace the existing release evidence requirements.
-The [reconciled priority queue](PLAN.md#reconciled-priorities) sets the
-cross-project order: further unattended automation is parked and user-facing
-features take priority. Manual curation need not wait for a VM harness or the
-optional-app tool, but automated optional AI installation must use the
-[shared catalog (#24)](https://github.com/korq-apps/sensible/issues/24) rather than invent a second
-installer. Its initial source adapters may not fit every AI CLI; add a reviewed
-adapter or keep an official manual recipe instead of allowing arbitrary scripts.
-The separate [editor follow-up (#26)](https://github.com/korq-apps/sensible/issues/26)
-includes both Vim and Neovim without overriding
-Debian's editor selection, with LazyVim configuration opt-in. It is not a
-prerequisite for this AI scope and does not imply selecting an AI tool's editor
-on the user's behalf.
-
-1. **[Curated AI manual and optional client recipes (#23)](https://github.com/korq-apps/sensible/issues/23).** Add the AI chapter and
-   navigation; cover the shortlist, privacy/account distinctions and verified
-   Linux desktop options. Update manual staging, payload checks and tests so
-   the new chapter is available offline. Optional installation itself is online.
-2. **[AI delivery decision and candidate packaging (#22)](https://github.com/korq-apps/sensible/issues/22).** Resolve the preinstall/opt-in decision,
-   then package OpenCode and evaluate LLM against the requirements above.
-   Include rationale, safe usage examples, update support and both-edition
-   acceptance. Defer a candidate rather than waive an unmet packaging gate.
-3. **[CLI usability (#25)](https://github.com/korq-apps/sensible/issues/25) and [developer-tool catalog (#24)](https://github.com/korq-apps/sensible/issues/24).** Evaluate tmux/tealdeer and the
-   chosen Python tool mechanism; reconcile with the existing `gh`/`lazygit`
-   plan. Provide examples and offline behavior tests for each accepted addition.
-4. **Optional local inference.** Separately evaluate
-   [llama.cpp](https://github.com/ggml-org/llama.cpp) and
-   [Ollama](https://docs.ollama.com/linux). Select a runtime and model only after
-   CPU/GPU, RAM/disk, licensing, download size, updates and removal checks.
-   Any service must remain opt-in and local-only by default. Do not describe
-   open weights as necessarily open-source software or promise laptop performance.
+The [project plan](PLAN.md) tracks priorities and other command-line tools.
